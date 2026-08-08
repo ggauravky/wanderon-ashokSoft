@@ -1,0 +1,24 @@
+# Root GitIgnore for Monorepo (Frontend & Backend)
+
+# Node Dependencies
+**/node_modules/
+
+# Build & Dist Outputs
+**/dist/
+**/dist-ssr/
+**/build/
+
+# Environment Files & Secrets
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Logs
+**/logs/
+**/*.log
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
