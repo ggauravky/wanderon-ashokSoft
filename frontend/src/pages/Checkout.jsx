@@ -11,7 +11,7 @@ import { UPCOMING_TRIPS } from '../constants/mockData';
 const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, addBooking } = useAuth();
+  const { user, addBooking, recordInfluencerCommission } = useAuth();
 
   // Fallback to trip 1 if no state passed
   const initialData = location.state || {
@@ -49,6 +49,7 @@ const Checkout = () => {
   const [couponCode, setCouponCode] = useState('');
   const [discount, setDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
+  const [appliedCodeName, setAppliedCodeName] = useState('');
   const [couponError, setCouponError] = useState('');
 
   // Payment Options
@@ -70,18 +71,26 @@ const Checkout = () => {
       const disc = Math.round(calculateSubtotal() * 0.1);
       setDiscount(disc);
       setAppliedCoupon('WANDER10 (10% OFF)');
+      setAppliedCodeName('WANDER10');
       setCouponCode('');
     } else if (code === 'SUMMER500') {
       setDiscount(500);
       setAppliedCoupon('SUMMER500 (₹500 OFF)');
+      setAppliedCodeName('SUMMER500');
       setCouponCode('');
-    } else if (code === 'EARLYBIRD15') {
+    } else if (code === 'EARLYBIRD15' || code === 'GAURAV15') {
       const disc = Math.round(calculateSubtotal() * 0.15);
       setDiscount(disc);
-      setAppliedCoupon('EARLYBIRD15 (15% OFF)');
+      setAppliedCoupon(`${code} (15% Creator Discount)`);
+      setAppliedCodeName(code);
+      setCouponCode('');
+    } else if (code === 'EXPLOREWITHGAURAV') {
+      setDiscount(1000);
+      setAppliedCoupon('EXPLOREWITHGAURAV (₹1,000 Creator OFF)');
+      setAppliedCodeName('EXPLOREWITHGAURAV');
       setCouponCode('');
     } else {
-      setCouponError('Invalid coupon. Try WANDER10, SUMMER500, or EARLYBIRD15');
+      setCouponError('Invalid code. Try WANDER10, SUMMER500, GAURAV15, or EXPLOREWITHGAURAV');
     }
   };
 
@@ -129,6 +138,11 @@ const Checkout = () => {
       },
       coTravelers: coTravelers
     };
+
+    // If an influencer coupon was applied, credit commission
+    if (appliedCodeName && recordInfluencerCommission) {
+      recordInfluencerCommission(appliedCodeName, finalTotal, leadName, initialData.tripTitle);
+    }
 
     try {
       const booking = await addBooking(bookingData);
@@ -523,7 +537,7 @@ const Checkout = () => {
                     type="text"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value)}
-                    placeholder="Try WANDER10"
+                    placeholder="Try GAURAV15 or WANDER10"
                     className="w-full px-3 py-2 bg-brand-light border border-gray-200 rounded-xl text-xs font-bold uppercase focus:outline-none focus:border-brand-emerald"
                   />
                   <button
@@ -538,7 +552,7 @@ const Checkout = () => {
                 {appliedCoupon && (
                   <div className="mt-2 flex items-center justify-between bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-200">
                     <span>Tag Applied: {appliedCoupon}</span>
-                    <button onClick={() => { setDiscount(0); setAppliedCoupon(''); }} className="text-emerald-900 hover:text-red-600">
+                    <button onClick={() => { setDiscount(0); setAppliedCoupon(''); setAppliedCodeName(''); }} className="text-emerald-900 hover:text-red-600">
                       <X size={14} />
                     </button>
                   </div>

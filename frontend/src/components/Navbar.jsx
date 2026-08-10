@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Search, User, ChevronDown, LogOut, Compass, Calendar, Sparkles, ShieldCheck } from 'lucide-react';
+import { Menu, X, Search, User, ChevronDown, LogOut, Compass, Calendar, Sparkles, ShieldCheck, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,6 +16,10 @@ const Navbar = () => {
   const isAdmin = 
     isAuthenticated && 
     (user?.role === 'admin' || user?.email?.toLowerCase() === 'gaurav99@gmail.com');
+
+  const isInfluencer = 
+    isAuthenticated && 
+    (user?.role === 'influencer' || user?.role === 'admin' || user?.email?.toLowerCase() === 'influencer@wanderluxe.in');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -40,6 +44,7 @@ const Navbar = () => {
     { name: 'Weekend Trips', path: '/weekend-trips' },
     { name: 'Backpacking', path: '/community-trips' },
     { name: 'Custom Trip', path: '/custom-trip' },
+    { name: 'Influencer Portal', path: '/influencer/login' },
     { name: 'Contact', path: '/contact' },
   ];
 
@@ -68,13 +73,13 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden lg:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-7">
             {navLinks.map((link) => (
               <Link
                 key={link.name}
                 to={link.path}
                 className={`text-sm font-medium transition-colors hover:text-brand-emerald ${
-                  isScrolled ? 'text-brand-navy' : 'text-white/90'
+                  link.name === 'Influencer Portal' ? 'text-brand-emerald font-bold' : isScrolled ? 'text-brand-navy' : 'text-white/90'
                 }`}
               >
                 {link.name}
@@ -146,6 +151,15 @@ const Navbar = () => {
                         )}
                       </Link>
 
+                      <Link
+                        to="/influencer/login"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-emerald text-white hover:bg-brand-teal transition-colors my-1"
+                      >
+                        <Sparkles size={16} />
+                        Influencer Portal
+                      </Link>
+
                       {isAdmin && (
                         <Link
                           to="/admin"
@@ -153,7 +167,7 @@ const Navbar = () => {
                           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-navy text-white hover:bg-brand-emerald transition-colors my-1"
                         >
                           <ShieldCheck size={16} className="text-brand-emerald" />
-                          Admin Control Panel
+                          Admin Panel
                         </Link>
                       )}
 
@@ -248,10 +262,18 @@ const Navbar = () => {
                     <User size={18} className="text-brand-emerald" /> My Bookings & Profile
                   </Link>
 
+                  <Link
+                    to="/influencer/login"
+                    className="flex items-center gap-2 text-brand-emerald font-extrabold py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Sparkles size={18} /> Influencer Portal
+                  </Link>
+
                   {isAdmin && (
                     <Link
                       to="/admin"
-                      className="flex items-center gap-2 text-brand-emerald font-extrabold py-2"
+                      className="flex items-center gap-2 text-brand-navy font-extrabold py-2"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       <ShieldCheck size={18} /> Admin Control Panel

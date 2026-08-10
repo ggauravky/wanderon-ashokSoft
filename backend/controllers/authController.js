@@ -1,12 +1,17 @@
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'gaurav@999';
+const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
+const INFLUENCER_PASSWORD = process.env.INFLUENCER_PASSWORD || 'influencer123';
+
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, phone, address } = req.body;
+    const { name, email, password, phone, address, role } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please provide name, email, and password' });
@@ -20,7 +25,8 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email address' });
     }
 
-    const isAdminEmail = cleanEmail === 'gaurav99@gmail.com';
+    const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
+    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL || role === 'influencer';
 
     // Create user in MongoDB Atlas
     const user = await User.create({
@@ -30,7 +36,7 @@ export const registerUser = async (req, res) => {
       phone: phone || '8542036499',
       address: address || 'Lucknow, UP, India',
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-      role: isAdminEmail ? 'admin' : 'user'
+      role: isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'
     });
 
     if (user) {
@@ -66,21 +72,35 @@ export const loginUser = async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const isAdminEmail = cleanEmail === 'gaurav99@gmail.com';
+    const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
+    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
 
     // Find user by email
     let user = await User.findOne({ email: cleanEmail });
 
     // Auto-create admin account if logging in with official admin credentials for first time
-    if (!user && isAdminEmail && (password === 'gaurav@99' || password === 'password123')) {
+    if (!user && isAdminEmail && (password === ADMIN_PASSWORD || password === 'gaurav@99' || password === 'password123')) {
       user = await User.create({
         name: 'Gaurav Kumar Yadav (Admin)',
-        email: 'gaurav99@gmail.com',
+        email: cleanEmail,
         password: password,
         phone: '8542036499',
         address: 'Lucknow, UP, India',
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
         role: 'admin'
+      });
+    }
+
+    // Auto-create influencer account if logging in with influencer credentials for first time
+    if (!user && isInfluencerEmail && (password === INFLUENCER_PASSWORD || password === 'influencer123' || password === 'gaurav123')) {
+      user = await User.create({
+        name: 'Gaurav Kumar Yadav (Influencer)',
+        email: cleanEmail,
+        password: password,
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
+        role: 'influencer'
       });
     }
 
@@ -93,7 +113,7 @@ export const loginUser = async (req, res) => {
         phone: user.phone,
         address: user.address,
         avatar: user.avatar,
-        role: user.role || (isAdminEmail ? 'admin' : 'user'),
+        role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'),
         bookedTrips: user.bookedTrips,
         token: generateToken(user._id)
       });
@@ -113,10 +133,12 @@ export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     if (user) {
-      const isAdminEmail = user.email.toLowerCase() === 'gaurav99@gmail.com';
+      const cleanEmail = user.email.toLowerCase();
+      const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
+      const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
       res.json({
         ...user._doc,
-        role: user.role || (isAdminEmail ? 'admin' : 'user')
+        role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user')
       });
     } else {
       res.status(404).json({ message: 'User not found' });

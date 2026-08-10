@@ -15,6 +15,9 @@ import About from './pages/About';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminRoute from './components/AdminRoute';
+import InfluencerDashboard from './pages/InfluencerDashboard';
+import InfluencerLogin from './pages/InfluencerLogin';
+import InfluencerRoute from './components/InfluencerRoute';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 function App() {
@@ -34,6 +37,12 @@ function App() {
               <AdminRoute>
                 <AdminDashboard />
               </AdminRoute>
+            } />
+            <Route path="influencer/login" element={<InfluencerLogin />} />
+            <Route path="influencer" element={
+              <InfluencerRoute>
+                <InfluencerDashboard />
+              </InfluencerRoute>
             } />
             <Route path="destinations" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />

@@ -2,9 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const DEFAULT_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
-
-const AdminRoute = ({ children }) => {
+const InfluencerRoute = ({ children }) => {
   const { user, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
@@ -16,15 +14,15 @@ const AdminRoute = ({ children }) => {
     );
   }
 
-  const isAdmin = 
+  const isInfluencerOrAdmin = 
     isAuthenticated && 
-    (user?.role === 'admin' || user?.email?.toLowerCase() === DEFAULT_ADMIN_EMAIL || user?.email?.toLowerCase() === 'gaurav99@gmail.com');
+    (user?.role === 'influencer' || user?.role === 'admin' || user?.email?.toLowerCase() === 'influencer@wanderluxe.in');
 
-  if (!isAdmin) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+  if (!isInfluencerOrAdmin) {
+    return <Navigate to="/influencer/login" state={{ from: location }} replace />;
   }
 
   return children;
 };
 
-export default AdminRoute;
+export default InfluencerRoute;
