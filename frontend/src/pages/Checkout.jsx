@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   ShieldCheck, Calendar, Users, MapPin, CheckCircle2, Ticket, 
-  CreditCard, QrCode, Tag, ArrowRight, Printer, Sparkles, AlertCircle, X, Info
+  CreditCard, QrCode, Tag, ArrowRight, Printer, Sparkles, AlertCircle, X, Info, UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -25,7 +25,7 @@ const Checkout = () => {
     travelersCount: 1,
     perPersonPrice: UPCOMING_TRIPS[0].price,
     totalAmount: UPCOMING_TRIPS[0].price,
-    pickupPoint: UPCOMING_TRIPS[0].pickupPoints[0]
+    pickupPoint: UPCOMING_TRIPS[0].pickupPoints?.[0] || 'Guwahati Airport (10:00 AM)'
   };
 
   const [leadName, setLeadName] = useState(user?.name || 'Gaurav Kumar Yadav');
@@ -35,6 +35,16 @@ const Checkout = () => {
   const [gender, setGender] = useState('Male');
   const [pickup, setPickup] = useState(initialData.pickupPoint);
   
+  // Co-Travelers List State
+  const [coTravelers, setCoTravelers] = useState(
+    Array.from({ length: Math.max(0, initialData.travelersCount - 1) }, (_, i) => ({
+      id: i + 1,
+      name: '',
+      age: '',
+      gender: 'Male'
+    }))
+  );
+
   // Coupon engine
   const [couponCode, setCouponCode] = useState('');
   const [discount, setDiscount] = useState(0);
@@ -44,6 +54,7 @@ const Checkout = () => {
   // Payment Options
   const [paymentOption, setPaymentOption] = useState('full');
   const [paymentMethod, setPaymentMethod] = useState('upi');
+  const [selectedEmiMonths, setSelectedEmiMonths] = useState(6);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [completedBooking, setCompletedBooking] = useState(null);
@@ -64,14 +75,29 @@ const Checkout = () => {
       setDiscount(500);
       setAppliedCoupon('SUMMER500 (₹500 OFF)');
       setCouponCode('');
+    } else if (code === 'EARLYBIRD15') {
+      const disc = Math.round(calculateSubtotal() * 0.15);
+      setDiscount(disc);
+      setAppliedCoupon('EARLYBIRD15 (15% OFF)');
+      setCouponCode('');
     } else {
-      setCouponError('Invalid coupon code. Try WANDER10 or SUMMER500');
+      setCouponError('Invalid coupon. Try WANDER10, SUMMER500, or EARLYBIRD15');
     }
   };
 
   const subtotal = calculateSubtotal();
   const finalTotal = Math.max(0, subtotal - discount);
-  const payableAmount = paymentOption === 'advance' ? Math.round(finalTotal * 0.2) : finalTotal;
+  const payableAmount = paymentOption === 'advance' 
+    ? Math.round(finalTotal * 0.2) 
+    : paymentOption === 'emi' 
+    ? Math.round(finalTotal / selectedEmiMonths) 
+    : finalTotal;
+
+  const handleCoTravelerChange = (index, field, value) => {
+    const updated = [...coTravelers];
+    updated[index][field] = value;
+    setCoTravelers(updated);
+  };
 
   const handleConfirmPayment = async () => {
     if (!leadName || !leadEmail || !leadPhone) {
@@ -92,7 +118,7 @@ const Checkout = () => {
       occupancy: initialData.occupancy,
       totalAmount: finalTotal,
       paidAmount: payableAmount,
-      paymentStatus: paymentOption === 'advance' ? '20% Advance Paid' : 'Paid in Full',
+      paymentStatus: paymentOption === 'advance' ? '20% Advance Paid' : paymentOption === 'emi' ? `EMI (${selectedEmiMonths} Mo)` : 'Paid in Full',
       pickupPoint: pickup,
       leadTraveler: {
         name: leadName,
@@ -100,11 +126,11 @@ const Checkout = () => {
         phone: leadPhone,
         age,
         gender
-      }
+      },
+      coTravelers: coTravelers
     };
 
     try {
-      // await async addBooking to prevent Promise crash
       const booking = await addBooking(bookingData);
       setCompletedBooking(booking || {
         id: 'WL-' + Math.floor(100000 + Math.random() * 900000),
@@ -293,6 +319,46 @@ const Checkout = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Co-Travelers Section if multiple travelers */}
+              {coTravelers.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-gray-100 space-y-4">
+                  <h3 className="text-sm font-bold text-brand-navy flex items-center gap-2">
+                    <UserPlus size={16} className="text-brand-emerald" /> Co-Travelers Information ({coTravelers.length})
+                  </h3>
+
+                  {coTravelers.map((co, index) => (
+                    <div key={co.id} className="p-4 bg-brand-light rounded-2xl border border-gray-200 space-y-3">
+                      <span className="text-xs font-bold text-gray-500 uppercase">Passenger #{index + 2}</span>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          value={co.name}
+                          onChange={(e) => handleCoTravelerChange(index, 'name', e.target.value)}
+                          placeholder={`Passenger ${index + 2} Full Name`}
+                          className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium"
+                        />
+                        <input
+                          type="number"
+                          value={co.age}
+                          onChange={(e) => handleCoTravelerChange(index, 'age', e.target.value)}
+                          placeholder="Age"
+                          className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium"
+                        />
+                        <select
+                          value={co.gender}
+                          onChange={(e) => handleCoTravelerChange(index, 'gender', e.target.value)}
+                          className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium"
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Step 2: Pickup Point */}
@@ -327,7 +393,7 @@ const Checkout = () => {
                 Select Payment Option (Test Sandbox)
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
                 <button
                   onClick={() => setPaymentOption('full')}
                   className={`p-4 rounded-2xl border text-left transition-all ${
@@ -335,8 +401,8 @@ const Checkout = () => {
                   }`}
                 >
                   <span className="text-xs font-bold uppercase tracking-wider block opacity-70">Option 1</span>
-                  <span className="text-lg font-extrabold block">Pay 100% Full</span>
-                  <span className="text-xs opacity-80">Instant confirmation & zero pending balance</span>
+                  <span className="text-base font-extrabold block">Pay 100% Full</span>
+                  <span className="text-[11px] opacity-80">Instant confirmation</span>
                 </button>
 
                 <button
@@ -346,10 +412,41 @@ const Checkout = () => {
                   }`}
                 >
                   <span className="text-xs font-bold uppercase tracking-wider block opacity-70">Option 2</span>
-                  <span className="text-lg font-extrabold block">Pay 20% Reserve Advance</span>
-                  <span className="text-xs opacity-80">Pay ₹{Math.round(finalTotal * 0.2).toLocaleString()} now, rest on arrival</span>
+                  <span className="text-base font-extrabold block">Pay 20% Reserve</span>
+                  <span className="text-[11px] opacity-80">Pay ₹{Math.round(finalTotal * 0.2).toLocaleString()} now</span>
+                </button>
+
+                <button
+                  onClick={() => setPaymentOption('emi')}
+                  className={`p-4 rounded-2xl border text-left transition-all ${
+                    paymentOption === 'emi' ? 'border-brand-emerald bg-brand-navy text-white shadow-md' : 'border-gray-200 text-gray-700 bg-white'
+                  }`}
+                >
+                  <span className="text-xs font-bold uppercase tracking-wider block opacity-70">Option 3</span>
+                  <span className="text-base font-extrabold block">No-Cost EMI</span>
+                  <span className="text-[11px] opacity-80">From ₹{Math.round(finalTotal / 6).toLocaleString()}/mo</span>
                 </button>
               </div>
+
+              {/* EMI Months Selection */}
+              {paymentOption === 'emi' && (
+                <div className="mb-6 p-4 bg-brand-light rounded-2xl border border-gray-200 space-y-3">
+                  <label className="block text-xs font-bold uppercase text-brand-navy">Choose No-Cost EMI Tenure</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[3, 6, 9].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setSelectedEmiMonths(m)}
+                        className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
+                          selectedEmiMonths === m ? 'bg-brand-emerald text-white border-brand-emerald' : 'bg-white text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        {m} Months (₹{Math.round(finalTotal / m).toLocaleString()}/mo)
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Payment Methods */}
               <div className="space-y-3 pt-4 border-t border-gray-100">

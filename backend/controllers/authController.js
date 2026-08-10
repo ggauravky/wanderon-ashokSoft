@@ -12,20 +12,25 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Please provide name, email, and password' });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+
     // Check if user already exists
-    const userExists = await User.findOne({ email: email.toLowerCase() });
+    const userExists = await User.findOne({ email: cleanEmail });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists with this email address' });
     }
 
+    const isAdminEmail = cleanEmail === 'gaurav99@gmail.com';
+
     // Create user in MongoDB Atlas
     const user = await User.create({
       name,
-      email: email.toLowerCase(),
+      email: cleanEmail,
       password,
-      phone: phone || '+91 8542036499',
+      phone: phone || '8542036499',
       address: address || 'Lucknow, UP, India',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
+      role: isAdminEmail ? 'admin' : 'user'
     });
 
     if (user) {
@@ -60,8 +65,24 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Please enter both email and password' });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+    const isAdminEmail = cleanEmail === 'gaurav99@gmail.com';
+
     // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase() });
+    let user = await User.findOne({ email: cleanEmail });
+
+    // Auto-create admin account if logging in with official admin credentials for first time
+    if (!user && isAdminEmail && (password === 'gaurav@99' || password === 'password123')) {
+      user = await User.create({
+        name: 'Gaurav Kumar Yadav (Admin)',
+        email: 'gaurav99@gmail.com',
+        password: password,
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+        role: 'admin'
+      });
+    }
 
     // Check password
     if (user && (await user.matchPassword(password))) {
@@ -72,7 +93,7 @@ export const loginUser = async (req, res) => {
         phone: user.phone,
         address: user.address,
         avatar: user.avatar,
-        role: user.role,
+        role: user.role || (isAdminEmail ? 'admin' : 'user'),
         bookedTrips: user.bookedTrips,
         token: generateToken(user._id)
       });
@@ -92,7 +113,11 @@ export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
     if (user) {
-      res.json(user);
+      const isAdminEmail = user.email.toLowerCase() === 'gaurav99@gmail.com';
+      res.json({
+        ...user._doc,
+        role: user.role || (isAdminEmail ? 'admin' : 'user')
+      });
     } else {
       res.status(404).json({ message: 'User not found' });
     }

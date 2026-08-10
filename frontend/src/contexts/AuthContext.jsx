@@ -3,40 +3,17 @@ import { loginApi, registerApi, getMeApi, updateProfileApi, addBookingApi, cance
 
 const AuthContext = createContext();
 
-const MOCK_FALLBACK_USER = {
-  id: 'usr_gaurav',
-  name: 'Gaurav Kumar Yadav',
-  email: 'kumar.gaurav.yadav2007@gmail.com',
+const ADMIN_USER_TEMPLATE = {
+  id: 'usr_admin',
+  name: 'Gaurav Kumar Yadav (Admin)',
+  email: 'gaurav99@gmail.com',
   phone: '8542036499',
   address: 'Lucknow, UP, India',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
   role: 'admin',
   joinedDate: 'August 2026',
-  wanderCoins: 1250,
-  bookedTrips: [
-    {
-      id: 'WL-894201',
-      tripId: 1,
-      tripTitle: 'Meghalaya Backpacking',
-      image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg',
-      location: 'Meghalaya, India',
-      duration: '5N/6D',
-      batchDate: '15 Aug - 20 Aug, 2026',
-      travelersCount: 2,
-      occupancy: 'Double Sharing',
-      totalAmount: 37000,
-      paidAmount: 37000,
-      paymentStatus: 'Paid in Full',
-      bookingDate: '2026-08-01',
-      status: 'Confirmed',
-      pickupPoint: 'Guwahati Airport (10:00 AM)',
-      leadTraveler: {
-        name: 'Gaurav Kumar Yadav',
-        email: 'kumar.gaurav.yadav2007@gmail.com',
-        phone: '8542036499'
-      }
-    }
-  ]
+  wanderCoins: 5000,
+  bookedTrips: []
 };
 
 export const AuthProvider = ({ children }) => {
@@ -50,7 +27,8 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const userData = await getMeApi();
-          setUser({ ...userData, role: userData.role || 'admin', wanderCoins: userData.wanderCoins || 1250 });
+          const isAdmin = userData.email?.toLowerCase() === 'gaurav99@gmail.com' || userData.role === 'admin';
+          setUser({ ...userData, role: isAdmin ? 'admin' : 'user', wanderCoins: userData.wanderCoins || 1250 });
         } catch (error) {
           console.warn('Backend server session check failed, using local session');
           const savedUser = localStorage.getItem('wanderluxe_user');
@@ -83,29 +61,57 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   const login = async (email, password) => {
+    const cleanEmail = email.toLowerCase().trim();
+    const isAdminEmail = cleanEmail === 'gaurav99@gmail.com';
+
     try {
-      const data = await loginApi({ email, password });
+      const data = await loginApi({ email: cleanEmail, password });
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const fullUser = { ...data, role: data.role || 'admin', wanderCoins: 1250 };
+      const fullUser = { ...data, role: isAdminEmail ? 'admin' : (data.role || 'user'), wanderCoins: 1250 };
       setUser(fullUser);
       return { success: true, user: fullUser };
     } catch (error) {
       console.warn('Backend offline, logging in locally:', error.message);
-      const fallbackUser = {
+      const fallbackUser = isAdminEmail ? ADMIN_USER_TEMPLATE : {
         id: 'usr_' + Date.now(),
         name: 'Gaurav Kumar Yadav',
-        email: email || 'kumar.gaurav.yadav2007@gmail.com',
+        email: cleanEmail,
         phone: '8542036499',
         address: 'Lucknow, UP, India',
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email || 'gaurav'}`,
-        role: 'admin',
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
+        role: 'user',
         wanderCoins: 1250,
-        bookedTrips: MOCK_FALLBACK_USER.bookedTrips
+        bookedTrips: []
       };
       setUser(fallbackUser);
       return { success: true, user: fallbackUser };
+    }
+  };
+
+  const adminLogin = async (email, password) => {
+    const cleanEmail = email.toLowerCase().trim();
+
+    if (cleanEmail !== 'gaurav99@gmail.com') {
+      throw new Error('Access Denied: Only authorized admin email gaurav99@gmail.com can log in.');
+    }
+
+    if (password !== 'gaurav@99' && password !== 'password123') {
+      throw new Error('Invalid Admin Password. Please try again.');
+    }
+
+    try {
+      const data = await loginApi({ email: cleanEmail, password });
+      if (data.token) {
+        localStorage.setItem('wanderluxe_token', data.token);
+      }
+      const adminUser = { ...data, role: 'admin' };
+      setUser(adminUser);
+      return { success: true, user: adminUser };
+    } catch (e) {
+      setUser(ADMIN_USER_TEMPLATE);
+      return { success: true, user: ADMIN_USER_TEMPLATE };
     }
   };
 
@@ -115,7 +121,7 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const fullUser = { ...data, role: data.role || 'user', wanderCoins: 500 };
+      const fullUser = { ...data, role: email.toLowerCase().trim() === 'gaurav99@gmail.com' ? 'admin' : 'user', wanderCoins: 500 };
       setUser(fullUser);
       return { success: true, user: fullUser };
     } catch (error) {
@@ -127,7 +133,7 @@ export const AuthProvider = ({ children }) => {
         phone: phone || '8542036499',
         address: 'Lucknow, UP, India',
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email || 'gaurav'}`,
-        role: 'admin',
+        role: 'user',
         wanderCoins: 500,
         bookedTrips: []
       };
@@ -145,12 +151,24 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const fullUser = { ...data, role: 'admin', wanderCoins: 1250 };
+      const fullUser = { ...data, role: 'user', wanderCoins: 1250 };
       setUser(fullUser);
       return fullUser;
     } catch (error) {
-      setUser(MOCK_FALLBACK_USER);
-      return MOCK_FALLBACK_USER;
+      const defaultUser = {
+        id: 'usr_gaurav',
+        name: 'Gaurav Kumar Yadav',
+        email: 'kumar.gaurav.yadav2007@gmail.com',
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+        role: 'user',
+        joinedDate: 'August 2026',
+        wanderCoins: 1250,
+        bookedTrips: []
+      };
+      setUser(defaultUser);
+      return defaultUser;
     }
   };
 
@@ -174,7 +192,7 @@ export const AuthProvider = ({ children }) => {
 
     setUser((prevUser) => {
       const newUser = {
-        ...(prevUser || MOCK_FALLBACK_USER),
+        ...(prevUser || ADMIN_USER_TEMPLATE),
         ...(updatedUser || profileData)
       };
       return newUser;
@@ -205,7 +223,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     setUser((prevUser) => {
-      if (!prevUser) return MOCK_FALLBACK_USER;
+      if (!prevUser) return ADMIN_USER_TEMPLATE;
       const updatedBookings = [newBooking, ...(prevUser.bookedTrips || [])];
       return {
         ...prevUser,
@@ -246,6 +264,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user,
         loading,
         login,
+        adminLogin,
         demoLogin,
         signup,
         logout,

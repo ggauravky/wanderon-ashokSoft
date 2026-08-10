@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Clock, Star, Calendar, Users, ShieldCheck, Check, X, 
   ChevronDown, ChevronUp, Share2, Heart, Info, ArrowRight, Compass,
-  Sparkles, Camera, PhoneCall, HelpCircle
+  Sparkles, Camera, PhoneCall, HelpCircle, MessageSquare
 } from 'lucide-react';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 
@@ -25,13 +25,14 @@ const TripDetails = () => {
 
   // Pricing calculations based on occupancy
   const getPerPersonPrice = () => {
-    if (occupancy === 'Single Supplement') return trip.price + 5000;
+    if (occupancy === 'Single Sharing') return trip.price + 3500;
     if (occupancy === 'Triple Sharing') return trip.price - 1500;
     return trip.price;
   };
 
   const perPersonPrice = getPerPersonPrice();
   const totalPrice = perPersonPrice * travelers;
+  const monthlyEmi = Math.round(totalPrice / 6);
 
   const handleProceedToBook = () => {
     navigate('/checkout', {
@@ -46,9 +47,14 @@ const TripDetails = () => {
         travelersCount: travelers,
         perPersonPrice: perPersonPrice,
         totalAmount: totalPrice,
-        pickupPoint: trip.pickupPoints[0]
+        pickupPoint: trip.pickupPoints?.[0] || 'Airport / Railway Station'
       }
     });
+  };
+
+  const openWhatsAppEnquiry = () => {
+    const message = encodeURIComponent(`Hi WanderLuxe Captain! I'm interested in booking ${trip.title} (${selectedBatch.dates}). Can you please share details?`);
+    window.open(`https://wa.me/918542036499?text=${message}`, '_blank');
   };
 
   return (
@@ -70,7 +76,7 @@ const TripDetails = () => {
               <X size={24} />
             </button>
             <img 
-              src={trip.gallery[lightboxIndex] || trip.image} 
+              src={trip.gallery?.[lightboxIndex] || trip.image} 
               alt="Full view" 
               className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
             />
@@ -116,8 +122,11 @@ const TripDetails = () => {
             >
               <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
             </button>
-            <button className="p-3 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
-              <Share2 size={20} />
+            <button 
+              onClick={openWhatsAppEnquiry}
+              className="p-3 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition-all flex items-center gap-2 text-xs font-bold px-4"
+            >
+              <MessageSquare size={18} /> Chat Captain
             </button>
           </div>
         </div>
@@ -186,7 +195,7 @@ const TripDetails = () => {
           <div className="lg:col-span-2 space-y-10">
             {/* Sticky Navigation Tabs */}
             <div className="sticky top-20 z-30 bg-white/90 backdrop-blur-md rounded-2xl p-2 border border-gray-200/80 shadow-md flex items-center justify-between gap-1 overflow-x-auto">
-              {['overview', 'itinerary', 'inclusions', 'batches', 'reviews'].map((tab) => (
+              {['overview', 'itinerary', 'inclusions', 'batches'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -335,6 +344,12 @@ const TripDetails = () => {
                 </span>
               </div>
 
+              {/* No-Cost EMI Badge */}
+              <div className="bg-brand-emerald/10 border border-brand-emerald/30 p-3 rounded-2xl flex items-center justify-between text-xs font-bold text-brand-navy">
+                <span>Or Easy EMI from</span>
+                <span className="text-brand-emerald font-extrabold">₹{monthlyEmi.toLocaleString()}/mo (6 mos)</span>
+              </div>
+
               {/* Step 1: Select Batch */}
               <div>
                 <label className="block text-xs font-bold text-brand-navy uppercase tracking-wider mb-2 flex items-center justify-between">
@@ -369,18 +384,25 @@ const TripDetails = () => {
                 <label className="block text-xs font-bold text-brand-navy uppercase tracking-wider mb-2">
                   2. Choose Occupancy Option
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {['Double Sharing', 'Triple Sharing', 'Single Supplement'].map((type) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { type: 'Double Sharing', label: 'Double', tag: 'Standard' },
+                    { type: 'Triple Sharing', label: 'Triple', tag: '-₹1.5k' },
+                    { type: 'Single Sharing', label: 'Single', tag: '+₹3.5k' }
+                  ].map((item) => (
                     <button
-                      key={type}
-                      onClick={() => setOccupancy(type)}
-                      className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
-                        occupancy === type
+                      key={item.type}
+                      onClick={() => setOccupancy(item.type)}
+                      className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all flex flex-col items-center justify-center ${
+                        occupancy === item.type
                           ? 'border-brand-emerald bg-brand-navy text-white shadow-md'
                           : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      {type}
+                      <span>{item.label}</span>
+                      <span className={`text-[10px] mt-0.5 ${occupancy === item.type ? 'text-brand-emerald' : 'text-gray-400'}`}>
+                        {item.tag}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -428,20 +450,29 @@ const TripDetails = () => {
                 </div>
               </div>
 
-              {/* Book Button */}
-              <button
-                onClick={handleProceedToBook}
-                className="w-full py-4 bg-brand-emerald text-white rounded-2xl font-extrabold text-base hover:bg-brand-teal transition-all shadow-xl shadow-brand-emerald/20 flex items-center justify-center gap-2 group"
-              >
-                Proceed to Book <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-              </button>
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <button
+                  onClick={handleProceedToBook}
+                  className="w-full py-4 bg-brand-emerald text-white rounded-2xl font-extrabold text-base hover:bg-brand-teal transition-all shadow-xl shadow-brand-emerald/20 flex items-center justify-center gap-2 group"
+                >
+                  Proceed to Book <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+
+                <button
+                  onClick={openWhatsAppEnquiry}
+                  className="w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl font-extrabold text-xs hover:bg-emerald-100 transition-all flex items-center justify-center gap-2"
+                >
+                  <MessageSquare size={16} /> Chat Captain on WhatsApp
+                </button>
+              </div>
 
               <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500 font-semibold pt-2">
                 <span className="flex items-center gap-1">
                   <ShieldCheck size={14} className="text-brand-emerald" /> 100% Refundable
                 </span>
                 <span className="flex items-center gap-1">
-                  <HelpCircle size={14} className="text-brand-emerald" /> Instant Vouchers
+                  <HelpCircle size={14} className="text-brand-emerald" /> Instant E-Vouchers
                 </span>
               </div>
             </div>

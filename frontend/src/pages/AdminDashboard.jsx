@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
-  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X
+  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 import { getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, deleteCouponApi, getAdminUsersApi, updateUserRoleApi } from '../services/api';
 
 const AdminDashboard = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('analytics');
 
   // Stats Data
@@ -39,8 +43,8 @@ const AdminDashboard = () => {
 
   // Users State
   const [usersList, setUsersList] = useState([
-    { id: 'u1', name: 'Gaurav Kumar Yadav', email: 'kumar.gaurav.yadav2007@gmail.com', phone: '8542036499', role: 'admin', bookingsCount: 3, joined: '2026-08-01' },
-    { id: 'u2', name: 'Sarah Jenkins', email: 'sarah.j@gmail.com', phone: '+91 9876543210', role: 'user', bookingsCount: 1, joined: '2026-08-02' },
+    { id: 'u1', name: 'Gaurav Kumar Yadav (Admin)', email: 'gaurav99@gmail.com', phone: '8542036499', role: 'admin', bookingsCount: 3, joined: '2026-08-01' },
+    { id: 'u2', name: 'Gaurav Kumar Yadav', email: 'kumar.gaurav.yadav2007@gmail.com', phone: '8542036499', role: 'user', bookingsCount: 1, joined: '2026-08-02' },
     { id: 'u3', name: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', phone: '+91 8765432109', role: 'user', bookingsCount: 2, joined: '2026-08-04' },
     { id: 'u4', name: 'Ananya Roy', email: 'ananya.roy@wanderluxe.in', phone: '+91 7654321098', role: 'admin', bookingsCount: 5, joined: '2026-07-15' }
   ]);
@@ -82,6 +86,11 @@ const AdminDashboard = () => {
     };
     loadAdminData();
   }, []);
+
+  const handleAdminLogout = () => {
+    logout();
+    navigate('/admin/login');
+  };
 
   // Coupon Handlers
   const handleAddCoupon = async (e) => {
@@ -387,25 +396,33 @@ const AdminDashboard = () => {
         {/* Header Admin Banner */}
         <div className="bg-brand-navy text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
           <div className="relative z-10">
-            <span className="bg-brand-emerald/20 text-brand-emerald border border-brand-emerald/30 text-xs font-extrabold px-3 py-1 rounded-full inline-block mb-2">
-              Master Admin Control Panel
-            </span>
-            <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Management</h1>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="bg-brand-emerald/20 text-brand-emerald border border-brand-emerald/30 text-xs font-extrabold px-3 py-1 rounded-full inline-block">
+                Master Admin Portal
+              </span>
+              <span className="text-xs text-white/60 font-mono">
+                Admin: {user?.email || 'gaurav99@gmail.com'}
+              </span>
+            </div>
+            <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Control Panel</h1>
             <p className="text-white/70 text-xs md:text-sm font-medium mt-1">
               Real-time sales revenue, trip CRUD, coupon engine, and user role administration.
             </p>
           </div>
 
           <div className="flex items-center gap-3 relative z-10">
-            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-xs text-right">
-              <span className="text-white/60 block text-[10px] uppercase font-bold">Total Revenue</span>
-              <span className="text-brand-emerald font-extrabold text-base">₹{(stats.totalRevenue).toLocaleString()}</span>
-            </div>
             <button
               onClick={() => setShowTripModal(true)}
               className="px-5 py-3 bg-brand-emerald text-white text-xs font-extrabold rounded-2xl hover:bg-brand-teal transition-all shadow-lg flex items-center gap-2"
             >
               <Plus size={16} /> Add Package
+            </button>
+            <button
+              onClick={handleAdminLogout}
+              className="px-4 py-3 bg-white/10 text-white hover:bg-red-600 border border-white/20 transition-all text-xs font-extrabold rounded-2xl flex items-center gap-1.5"
+              title="Admin Sign Out"
+            >
+              <LogOut size={16} /> Exit Admin
             </button>
           </div>
         </div>
@@ -480,7 +497,7 @@ const AdminDashboard = () => {
                   <p className="text-xs text-gray-500 font-medium">Sales performance across active departures.</p>
                 </div>
                 <span className="text-xs font-bold text-brand-emerald bg-brand-emerald/10 px-3 py-1 rounded-full">
-                  Live Data
+                  Live System Data
                 </span>
               </div>
 
