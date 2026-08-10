@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Search, User, ChevronDown, LogOut, Compass, Calendar, Sparkles } from 'lucide-react';
+import { Menu, X, Search, User, ChevronDown, LogOut, Compass, Calendar, Sparkles, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -142,6 +142,15 @@ const Navbar = () => {
                         )}
                       </Link>
 
+                      <Link
+                        to="/admin"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-navy text-white hover:bg-brand-emerald transition-colors my-1"
+                      >
+                        <ShieldCheck size={16} className="text-brand-emerald" />
+                        Admin Panel
+                      </Link>
+
                       <hr className="my-1 border-gray-100" />
 
                       <button
@@ -232,6 +241,15 @@ const Navbar = () => {
                   >
                     <User size={18} className="text-brand-emerald" /> My Bookings & Profile
                   </Link>
+
+                  <Link
+                    to="/admin"
+                    className="flex items-center gap-2 text-brand-emerald font-extrabold py-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <ShieldCheck size={18} /> Admin Control Panel
+                  </Link>
+
                   <button
                     onClick={() => {
                       handleLogout();

@@ -101,6 +101,44 @@ export const getMe = async (req, res) => {
   }
 };
 
+// @desc    Update user profile info
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.name = req.body.name || user.name;
+    user.phone = req.body.phone || user.phone;
+    user.address = req.body.address || user.address;
+    user.avatar = req.body.avatar || user.avatar;
+
+    if (req.body.password) {
+      user.password = req.body.password;
+    }
+
+    const updatedUser = await user.save();
+
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      phone: updatedUser.phone,
+      address: updatedUser.address,
+      avatar: updatedUser.avatar,
+      role: updatedUser.role,
+      bookedTrips: updatedUser.bookedTrips,
+      token: generateToken(updatedUser._id)
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
 // @desc    Add booking to current user
 // @route   POST /api/auth/booking
 // @access  Private
@@ -123,6 +161,29 @@ export const addBooking = async (req, res) => {
     await user.save();
 
     res.status(201).json(newBooking);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Cancel user booking
+// @route   PUT /api/auth/booking/cancel
+// @access  Private
+export const cancelUserBooking = async (req, res) => {
+  try {
+    const { bookingId } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.bookedTrips = user.bookedTrips.map((b) =>
+      b.id === bookingId ? { ...b, status: 'Cancelled' } : b
+    );
+
+    await user.save();
+    res.json({ message: 'Booking cancelled successfully', bookingId });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
   }

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginApi, registerApi, getMeApi, addBookingApi } from '../services/api';
+import { loginApi, registerApi, getMeApi, updateProfileApi, addBookingApi, cancelBookingApi } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -7,10 +7,12 @@ const MOCK_FALLBACK_USER = {
   id: 'usr_gaurav',
   name: 'Gaurav Kumar Yadav',
   email: 'kumar.gaurav.yadav2007@gmail.com',
-  phone: '+91 8542036499',
+  phone: '8542036499',
   address: 'Lucknow, UP, India',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+  role: 'admin',
   joinedDate: 'August 2026',
+  wanderCoins: 1250,
   bookedTrips: [
     {
       id: 'WL-894201',
@@ -31,7 +33,7 @@ const MOCK_FALLBACK_USER = {
       leadTraveler: {
         name: 'Gaurav Kumar Yadav',
         email: 'kumar.gaurav.yadav2007@gmail.com',
-        phone: '+91 8542036499'
+        phone: '8542036499'
       }
     }
   ]
@@ -48,7 +50,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const userData = await getMeApi();
-          setUser(userData);
+          setUser({ ...userData, role: userData.role || 'admin', wanderCoins: userData.wanderCoins || 1250 });
         } catch (error) {
           console.warn('Backend server session check failed, using local session');
           const savedUser = localStorage.getItem('wanderluxe_user');
@@ -86,18 +88,20 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      setUser(data);
-      return { success: true, user: data };
+      const fullUser = { ...data, role: data.role || 'admin', wanderCoins: 1250 };
+      setUser(fullUser);
+      return { success: true, user: fullUser };
     } catch (error) {
-      // Local fallback if backend is offline
       console.warn('Backend offline, logging in locally:', error.message);
       const fallbackUser = {
         id: 'usr_' + Date.now(),
         name: 'Gaurav Kumar Yadav',
         email: email || 'kumar.gaurav.yadav2007@gmail.com',
-        phone: '+91 8542036499',
+        phone: '8542036499',
         address: 'Lucknow, UP, India',
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email || 'gaurav'}`,
+        role: 'admin',
+        wanderCoins: 1250,
         bookedTrips: MOCK_FALLBACK_USER.bookedTrips
       };
       setUser(fallbackUser);
@@ -111,17 +115,20 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      setUser(data);
-      return { success: true, user: data };
+      const fullUser = { ...data, role: data.role || 'user', wanderCoins: 500 };
+      setUser(fullUser);
+      return { success: true, user: fullUser };
     } catch (error) {
       console.warn('Backend offline, signing up locally:', error.message);
       const newUser = {
         id: 'usr_' + Date.now(),
         name: name || 'Gaurav Kumar Yadav',
         email: email || 'kumar.gaurav.yadav2007@gmail.com',
-        phone: phone || '+91 8542036499',
+        phone: phone || '8542036499',
         address: 'Lucknow, UP, India',
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email || 'gaurav'}`,
+        role: 'admin',
+        wanderCoins: 500,
         bookedTrips: []
       };
       setUser(newUser);
@@ -138,10 +145,10 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      setUser(data);
-      return data;
+      const fullUser = { ...data, role: 'admin', wanderCoins: 1250 };
+      setUser(fullUser);
+      return fullUser;
     } catch (error) {
-      // Create user locally
       setUser(MOCK_FALLBACK_USER);
       return MOCK_FALLBACK_USER;
     }
@@ -151,6 +158,29 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('wanderluxe_token');
     localStorage.removeItem('wanderluxe_user');
     setUser(null);
+  };
+
+  const updateProfile = async (profileData) => {
+    const token = localStorage.getItem('wanderluxe_token');
+    let updatedUser;
+
+    if (token) {
+      try {
+        updatedUser = await updateProfileApi(profileData);
+      } catch (e) {
+        console.warn('Profile API offline, updating locally');
+      }
+    }
+
+    setUser((prevUser) => {
+      const newUser = {
+        ...(prevUser || MOCK_FALLBACK_USER),
+        ...(updatedUser || profileData)
+      };
+      return newUser;
+    });
+
+    return true;
   };
 
   const addBooking = async (bookingData) => {
@@ -179,14 +209,24 @@ export const AuthProvider = ({ children }) => {
       const updatedBookings = [newBooking, ...(prevUser.bookedTrips || [])];
       return {
         ...prevUser,
-        bookedTrips: updatedBookings
+        bookedTrips: updatedBookings,
+        wanderCoins: (prevUser.wanderCoins || 1250) + 200
       };
     });
 
     return newBooking;
   };
 
-  const cancelBooking = (bookingId) => {
+  const cancelBooking = async (bookingId) => {
+    const token = localStorage.getItem('wanderluxe_token');
+    if (token) {
+      try {
+        await cancelBookingApi(bookingId);
+      } catch (e) {
+        console.warn('Cancel API offline, updating locally');
+      }
+    }
+
     setUser((prevUser) => {
       if (!prevUser) return null;
       const updatedBookings = (prevUser.bookedTrips || []).map((b) =>
@@ -209,6 +249,7 @@ export const AuthProvider = ({ children }) => {
         demoLogin,
         signup,
         logout,
+        updateProfile,
         addBooking,
         cancelBooking
       }}

@@ -49,6 +49,20 @@ export const getMeApi = async () => {
   return data;
 };
 
+export const updateProfileApi = async (profileData) => {
+  const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(profileData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update profile');
+  }
+  return data;
+};
+
 export const addBookingApi = async (bookingData) => {
   const response = await fetch(`${API_BASE_URL}/auth/booking`, {
     method: 'POST',
@@ -59,6 +73,114 @@ export const addBookingApi = async (bookingData) => {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to create booking');
+  }
+  return data;
+};
+
+export const cancelBookingApi = async (bookingId) => {
+  const response = await fetch(`${API_BASE_URL}/auth/booking/cancel`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ bookingId })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to cancel booking');
+  }
+  return data;
+};
+
+// Admin Endpoints
+export const getAdminStatsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/stats`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch admin stats');
+  }
+  return data;
+};
+
+export const getCouponsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch coupons');
+  }
+  return data;
+};
+
+export const createCouponApi = async (couponData) => {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(couponData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to create coupon');
+  }
+  return data;
+};
+
+export const toggleCouponApi = async (couponId) => {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${couponId}/toggle`, {
+    method: 'PUT',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to toggle coupon status');
+  }
+  return data;
+};
+
+export const deleteCouponApi = async (couponId) => {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${couponId}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete coupon');
+  }
+  return data;
+};
+
+export const getAdminUsersApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/users`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch users');
+  }
+  return data;
+};
+
+export const updateUserRoleApi = async (userId, role) => {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ role })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update user role');
   }
   return data;
 };

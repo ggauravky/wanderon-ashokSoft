@@ -12,6 +12,7 @@ import Destinations from './pages/Destinations';
 import Contact from './pages/Contact';
 import Blog from './pages/Blog';
 import About from './pages/About';
+import AdminDashboard from './pages/AdminDashboard';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
             <Route path="trip/:id" element={<TripDetails />} />
             <Route path="checkout" element={<Checkout />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="admin" element={<AdminDashboard />} />
             <Route path="destinations" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
             <Route path="international" element={<Destinations />} />
