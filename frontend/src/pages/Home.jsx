@@ -10,6 +10,8 @@ import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 
 import TripCard from '../components/TripCard';
+import SEOHead from '../components/SEOHead';
+import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS } from '../constants/mockData';
 
 const Home = () => {
@@ -24,20 +26,28 @@ const Home = () => {
   };
 
   const instagramPhotos = [
-    { id: 1, image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg', location: 'Meghalaya', handle: '@wanderer_gaurav' },
-    { id: 2, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=600', location: 'Spiti Valley', handle: '@rohit_travels' },
+    { id: 1, image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg', location: 'Meghalaya', handle: '@wanderer_gaurav' },    { id: 2, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=600', location: 'Spiti Valley', handle: '@rohit_travels' },
     { id: 3, image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&q=80&w=600', location: 'Bali, Indonesia', handle: '@ananya_diaries' },
     { id: 4, image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&q=80&w=600', location: 'Ladakh', handle: '@wanderluxe_official' }
   ];
 
+  const organizationSchemas = [getOrganizationSchema(), getTravelAgencySchema()];
+
   return (
     <div className="w-full">
+      <SEOHead
+        title="WanderLuxe | Luxury Group Travel, Backpacking Expeditions & Custom Trips"
+        description="Book premium group trips and backpacking expeditions across Meghalaya, Spiti Valley, Kashmir, Bali, and Ladakh with verified trip captains and 0% No-Cost EMI."
+        canonical="/"
+        jsonLd={organizationSchemas}
+      />
+
       {/* Hero Section */}
       <section className="relative h-screen min-h-[650px] flex items-center justify-center pt-20">
         <div className="absolute inset-0 z-0 bg-brand-navy">
           <img 
             src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=2021&auto=format&fit=crop" 
-            alt="Travel background" 
+            alt="WanderLuxe luxury group travel landscape background" 
             className="w-full h-full object-cover opacity-60"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/70 via-brand-navy/30 to-brand-light"></div>
@@ -197,7 +207,7 @@ const Home = () => {
       {/* Featured Destinations */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-extrabold text-brand-navy mb-10 text-center">Trending Destinations</h2>
+          <h2 className="text-3xl font-extrabold text-brand-navy mb-10 text-center">Trending Travel Destinations</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 md:gap-6">
             {DESTINATIONS.map(dest => (
               <motion.div 
@@ -206,7 +216,7 @@ const Home = () => {
                 onClick={() => navigate('/destinations')}
                 className="relative rounded-2xl overflow-hidden aspect-[4/5] group cursor-pointer shadow-md"
               >
-                <img src={dest.image} alt={dest.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                <img src={dest.image} alt={`${dest.name} travel tour package destination`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-transparent to-transparent flex flex-col justify-end p-4">
                   <h3 className="text-white font-extrabold text-lg leading-tight">{dest.name}</h3>
                   <p className="text-white/80 text-xs font-semibold">{dest.count} Active Packages</p>
@@ -222,7 +232,7 @@ const Home = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16 max-w-2xl mx-auto">
             <span className="text-xs font-extrabold uppercase tracking-wider text-brand-emerald">The WanderLuxe Standard</span>
-            <h2 className="text-3xl font-extrabold text-brand-navy mt-1 mb-4">Why Choose WanderLuxe?</h2>
+            <h2 className="text-3xl font-extrabold text-brand-navy mt-1 mb-4">Why Choose WanderLuxe Travels?</h2>
             <p className="text-gray-500 font-medium">We're committed to providing the most seamless, premium, and memorable travel experiences.</p>
           </div>
           
@@ -275,7 +285,7 @@ const Home = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {instagramPhotos.map((photo) => (
               <div key={photo.id} className="relative rounded-2xl overflow-hidden aspect-square group shadow-md cursor-pointer">
-                <img src={photo.image} alt={photo.location} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <img src={photo.image} alt={`Community photo from ${photo.location}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-4 text-white">
                   <span className="text-xs font-extrabold">{photo.handle}</span>
                   <span className="text-xs font-semibold flex items-center gap-1">
@@ -320,7 +330,7 @@ const Home = () => {
                   <div className="flex items-center gap-4">
                     <img src={testimonial.avatar} alt={testimonial.name} className="w-12 h-12 rounded-full object-cover border-2 border-brand-emerald" />
                     <div>
-                      <h4 className="text-white font-bold text-sm">{testimonial.name}</h4>
+                      <h3 className="text-white font-bold text-sm">{testimonial.name}</h3>
                       <p className="text-white/50 text-xs">{testimonial.role}</p>
                     </div>
                   </div>

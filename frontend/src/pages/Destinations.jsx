@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { Search, Filter, SlidersHorizontal, MapPin, Compass, Heart } from 'lucide-react';
+import { Search, Filter, SlidersHorizontal, MapPin, Compass, Heart, HelpCircle, Sun, CloudRain, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import TripCard from '../components/TripCard';
+import SEOHead from '../components/SEOHead';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 
 const Destinations = () => {
@@ -20,6 +23,23 @@ const Destinations = () => {
   });
 
   const categories = ['All', 'Domestic', 'International', 'Backpacking', 'Weekend Trips', 'Beach'];
+
+  const destinationFaqs = [
+    {
+      q: 'What is the best time to visit Meghalaya and Spiti Valley?',
+      a: 'Meghalaya is best visited between October and May for crystal-clear natural pools, while Spiti Valley is ideal from June to September for summer circuit road trips.'
+    },
+    {
+      q: 'Are WanderLuxe group trips suitable for solo travelers?',
+      a: 'Yes! Over 60% of our community members travel solo. Our certified trip captains ensure a safe, inclusive, and friendly environment for all passengers.'
+    },
+    {
+      q: 'What inclusions are provided in WanderLuxe tour packages?',
+      a: 'All tour packages include boutique accommodation, private transfers, daily breakfast, entry permits, experienced trip captains, and emergency first-aid support.'
+    }
+  ];
+
+  const faqJsonLd = getFAQSchema(destinationFaqs);
 
   const toggleWishlist = (tripId) => {
     let updated;
@@ -68,7 +88,16 @@ const Destinations = () => {
 
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-24">
+      <SEOHead
+        title="Top Travel Destinations & Group Tour Packages 2026 | WanderLuxe"
+        description="Explore top tour packages for Meghalaya, Spiti Valley, Kashmir, Bali, and Ladakh. Compare prices, itineraries, best times to visit, and traveler reviews."
+        canonical="/destinations"
+        jsonLd={faqJsonLd}
+      />
+
       <div className="container mx-auto px-4 md:px-8">
+        <Breadcrumbs items={[{ name: 'Destinations', path: '/destinations' }]} />
+
         {/* Page Banner */}
         <div className="bg-brand-navy rounded-3xl p-8 md:p-12 text-white mb-10 relative overflow-hidden shadow-2xl">
           <div className="absolute right-0 top-0 w-96 h-96 bg-brand-emerald opacity-20 rounded-full blur-3xl pointer-events-none" />
@@ -186,7 +215,7 @@ const Destinations = () => {
 
         {/* Trips Grid */}
         {filteredTrips.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
             {filteredTrips.map((trip) => {
               const isWishlisted = wishlist.includes(trip.id);
               return (
@@ -204,7 +233,7 @@ const Destinations = () => {
             })}
           </div>
         ) : (
-          <div className="bg-white rounded-3xl p-16 text-center border border-gray-200 max-w-lg mx-auto">
+          <div className="bg-white rounded-3xl p-16 text-center border border-gray-200 max-w-lg mx-auto mb-16">
             <Compass size={48} className="text-gray-300 mx-auto mb-4 animate-bounce" />
             <h3 className="text-xl font-bold text-brand-navy mb-2">No Matching Trips Found</h3>
             <p className="text-gray-500 text-sm mb-6">Try adjusting your search terms or increasing the budget slider filter.</p>
@@ -222,6 +251,49 @@ const Destinations = () => {
             </button>
           </div>
         )}
+
+        {/* Destination SEO Guide & FAQ Section (Destination Blueprint) */}
+        <div className="bg-white rounded-3xl p-8 md:p-12 shadow-sm border border-gray-200/80 space-y-8">
+          <div>
+            <h2 className="text-2xl font-extrabold text-brand-navy mb-3">Destination Planning & Travel Guides</h2>
+            <p className="text-gray-600 text-xs md:text-sm leading-relaxed">
+              Whether you are looking for living root bridges in Meghalaya, winter snow circuits in Spiti Valley, or tropical beaches in Bali, WanderLuxe provides hand-picked itineraries, transparent pricing, and 100% verified trip captains.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-5 bg-brand-light rounded-2xl border border-gray-200 space-y-2">
+              <Sun className="text-brand-emerald" size={24} />
+              <h3 className="text-sm font-extrabold text-brand-navy">Best Season to Visit</h3>
+              <p className="text-xs text-gray-500">October to May is ideal for North-East & South India; June to September for high-altitude Himalayan road trips.</p>
+            </div>
+            <div className="p-5 bg-brand-light rounded-2xl border border-gray-200 space-y-2">
+              <ShieldCheck className="text-brand-emerald" size={24} />
+              <h3 className="text-sm font-extrabold text-brand-navy">Verified Captain Security</h3>
+              <p className="text-xs text-gray-500">Every group departure is led by certified captains trained in high-altitude safety, first aid, & navigation.</p>
+            </div>
+            <div className="p-5 bg-brand-light rounded-2xl border border-gray-200 space-y-2">
+              <HelpCircle className="text-brand-emerald" size={24} />
+              <h3 className="text-sm font-extrabold text-brand-navy">Transparent Pricing</h3>
+              <p className="text-xs text-gray-500">Zero hidden fees. Book with a 20% advance or opt for 0% interest monthly No-Cost EMI plans.</p>
+            </div>
+          </div>
+
+          {/* Frequently Asked Questions */}
+          <div className="pt-6 border-t border-gray-100">
+            <h3 className="text-xl font-extrabold text-brand-navy mb-6 flex items-center gap-2">
+              <HelpCircle size={20} className="text-brand-emerald" /> Frequently Asked Destination Questions
+            </h3>
+            <div className="space-y-4">
+              {destinationFaqs.map((faq, i) => (
+                <div key={i} className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1">
+                  <h4 className="text-sm font-extrabold text-brand-navy">{faq.q}</h4>
+                  <p className="text-xs text-gray-600">{faq.a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

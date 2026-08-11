@@ -6,6 +6,9 @@ import {
   ChevronDown, ChevronUp, Share2, Heart, Info, ArrowRight, Compass,
   Sparkles, Camera, PhoneCall, HelpCircle, MessageSquare
 } from 'lucide-react';
+import SEOHead from '../components/SEOHead';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 
 const TripDetails = () => {
@@ -34,6 +37,25 @@ const TripDetails = () => {
   const totalPrice = perPersonPrice * travelers;
   const monthlyEmi = Math.round(totalPrice / 6);
 
+  const tripFaqs = [
+    {
+      q: `What is included in the ${trip.title} package price?`,
+      a: 'Package includes boutique stay accommodations, private transfers, daily breakfast, certified trip captain guidance, entry passes, and emergency support.'
+    },
+    {
+      q: 'Can I pay a partial advance to confirm my seat?',
+      a: 'Yes, you can reserve your seat with a 20% advance payment during checkout or choose our 0% interest No-Cost EMI option.'
+    },
+    {
+      q: 'What is the cancellation & refund policy for this tour?',
+      a: 'Cancellations made 15 days prior to departure receive 100% full credit refund or free seat rollover to any future departure date.'
+    }
+  ];
+
+  const productSchema = getProductTripSchema(trip);
+  const faqSchema = getFAQSchema(tripFaqs);
+  const combinedSchemas = [productSchema, faqSchema].filter(Boolean);
+
   const handleProceedToBook = () => {
     navigate('/checkout', {
       state: {
@@ -59,6 +81,14 @@ const TripDetails = () => {
 
   return (
     <div className="min-h-screen bg-brand-light pt-20 pb-24">
+      <SEOHead
+        title={`${trip.title} | Itinerary, Dates & Price`}
+        description={`Book ${trip.title} (${trip.duration}). Prices from ₹${trip.price.toLocaleString()}. Includes boutique stays, transfers, certified captain, and 0% EMI.`}
+        canonical={`/trip/${trip.id}`}
+        ogImage={trip.image}
+        jsonLd={combinedSchemas}
+      />
+
       {/* Lightbox Modal */}
       <AnimatePresence>
         {lightboxIndex !== null && (
@@ -77,7 +107,7 @@ const TripDetails = () => {
             </button>
             <img 
               src={trip.gallery?.[lightboxIndex] || trip.image} 
-              alt="Full view" 
+              alt={`${trip.title} full view photo ${lightboxIndex + 1}`} 
               className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
             />
           </motion.div>
@@ -85,11 +115,14 @@ const TripDetails = () => {
       </AnimatePresence>
 
       <div className="container mx-auto px-4 md:px-8">
-        {/* Breadcrumb Navigation */}
-        <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 my-4">
-          <Link to="/" className="hover:text-brand-emerald">Home</Link> / 
-          <Link to="/destinations" className="hover:text-brand-emerald">Destinations</Link> / 
-          <span className="text-brand-navy truncate max-w-[200px] md:max-w-none">{trip.shortTitle || trip.title}</span>
+        {/* Breadcrumbs Navigation */}
+        <div className="my-4">
+          <Breadcrumbs
+            items={[
+              { name: 'Destinations', path: '/destinations' },
+              { name: trip.shortTitle || trip.title, path: `/trip/${trip.id}` }
+            ]}
+          />
         </div>
 
         {/* Header Section */}
@@ -139,7 +172,7 @@ const TripDetails = () => {
           >
             <img 
               src={trip.gallery?.[0] || trip.image} 
-              alt={trip.title} 
+              alt={`${trip.title} hero photograph`} 
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
             />
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
@@ -155,7 +188,7 @@ const TripDetails = () => {
               >
                 <img 
                   src={img} 
-                  alt={`Gallery ${idx}`} 
+                  alt={`${trip.title} gallery view ${idx + 2}`} 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                 />
               </div>
@@ -195,7 +228,7 @@ const TripDetails = () => {
           <div className="lg:col-span-2 space-y-10">
             {/* Sticky Navigation Tabs */}
             <div className="sticky top-20 z-30 bg-white/90 backdrop-blur-md rounded-2xl p-2 border border-gray-200/80 shadow-md flex items-center justify-between gap-1 overflow-x-auto">
-              {['overview', 'itinerary', 'inclusions', 'batches'].map((tab) => (
+              {['overview', 'itinerary', 'inclusions', 'batches', 'faqs'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -322,6 +355,21 @@ const TripDetails = () => {
                     ))}
                   </ul>
                 </div>
+              </div>
+            </section>
+
+            {/* Package FAQs Section */}
+            <section id="faqs" className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-200/80 space-y-4">
+              <h2 className="text-2xl font-bold text-brand-navy flex items-center gap-2">
+                <HelpCircle size={22} className="text-brand-emerald" /> Package FAQs & Policies
+              </h2>
+              <div className="space-y-3 text-xs md:text-sm">
+                {tripFaqs.map((faq, i) => (
+                  <div key={i} className="p-4 bg-brand-light rounded-2xl border border-gray-200">
+                    <h3 className="font-extrabold text-brand-navy mb-1">{faq.q}</h3>
+                    <p className="text-gray-600 font-medium">{faq.a}</p>
+                  </div>
+                ))}
               </div>
             </section>
           </div>

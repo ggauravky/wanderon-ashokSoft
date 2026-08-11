@@ -415,32 +415,8 @@ export const TEAM_MEMBERS = [
     id: 1,
     name: 'Gaurav Kumar Yadav',
     role: 'Founder & Head of Expeditions',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600',
+    image: 'https://kommodo.ai/i/a002dp67vtAEhL4IfgAX',
     bio: 'Passionate mountaineer & travel architect with 8+ years experience leading 150+ group departures across Himalayas & South East Asia.',
     tripsLed: '150+ Expeditions'
-  },
-  {
-    id: 2,
-    name: 'Ananya Roy',
-    role: 'Senior Trip Captain - North East',
-    image: 'https://randomuser.me/api/portraits/women/44.jpg',
-    bio: 'Specialist in Meghalaya, Arunachal Pradesh & Nagaland. Expert in wilderness survival, first aid, and Khasi culture.',
-    tripsLed: '85+ Expeditions'
-  },
-  {
-    id: 3,
-    name: 'Rohan Mehta',
-    role: 'High Altitude Lead Captain',
-    image: 'https://randomuser.me/api/portraits/men/32.jpg',
-    bio: 'Certified mountaineer (HMI Darjeeling). Has summitted Stok Kangri & led 50+ Spiti Valley & Ladakh circuit journeys.',
-    tripsLed: '90+ Expeditions'
-  },
-  {
-    id: 4,
-    name: 'Sneha Kapoor',
-    role: 'International Experience Manager',
-    image: 'https://randomuser.me/api/portraits/women/68.jpg',
-    bio: 'Curates tropical escapes across Bali, Thailand, Vietnam, and Dubai with a focus on sustainable luxury homestays.',
-    tripsLed: '60+ International Trips'
   }
 ];

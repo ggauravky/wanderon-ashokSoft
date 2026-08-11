@@ -18,6 +18,8 @@ import AdminRoute from './components/AdminRoute';
 import InfluencerDashboard from './pages/InfluencerDashboard';
 import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerRoute from './components/InfluencerRoute';
+import CreatorTrip from './pages/CreatorTrip';
+import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 
 function App() {
@@ -44,6 +46,7 @@ function App() {
                 <InfluencerDashboard />
               </InfluencerRoute>
             } />
+            <Route path="creators/:username/:tripSlug" element={<CreatorTrip />} />
             <Route path="destinations" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
             <Route path="international" element={<Destinations />} />
@@ -59,12 +62,7 @@ function App() {
             <Route path="cancellation" element={<PlaceholderPage />} />
             <Route path="faq" element={<PlaceholderPage />} />
             
-            <Route path="*" element={
-              <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-8 pt-24">
-                <h1 className="text-4xl font-extrabold text-brand-navy mb-2">404 - Page Not Found</h1>
-                <p className="text-gray-500 mb-6">The page you are looking for does not exist or has moved.</p>
-              </div>
-            } />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </Router>

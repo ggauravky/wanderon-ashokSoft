@@ -1,0 +1,28 @@
+# WanderLuxe Travel Platform Crawl Directive (Google Search Central Compliant)
+User-agent: *
+Allow: /
+Allow: /destinations
+Allow: /trip/
+Allow: /weekend-trips
+Allow: /community-trips
+Allow: /fixed-departures
+Allow: /custom-trip
+Allow: /contact
+Allow: /blog
+Allow: /about
+Allow: /creators/
+
+# Disallow Private & User State Routes
+Disallow: /admin/
+Disallow: /admin
+Disallow: /checkout/
+Disallow: /checkout
+Disallow: /profile/
+Disallow: /profile
+Disallow: /influencer/
+Disallow: /influencer
+Disallow: /api/
+Disallow: /internal-search/
+
+# XML Sitemap Location
+Sitemap: https://wanderluxe.in/sitemap.xml

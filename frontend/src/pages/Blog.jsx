@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Search, Clock, Calendar, User, ArrowRight, BookOpen, Share2, X, Sparkles, Send, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import SEOHead from '../components/SEOHead';
+import Breadcrumbs from '../components/Breadcrumbs';
+import { getArticleSchema } from '../utils/seoSchemas';
 import { BLOG_POSTS } from '../constants/mockData';
 
 const Blog = () => {
@@ -26,6 +30,7 @@ const Blog = () => {
   });
 
   const featuredPost = BLOG_POSTS[0];
+  const articleSchema = getArticleSchema(selectedArticle || featuredPost);
 
   const handleSubscribe = (e) => {
     e.preventDefault();
@@ -36,6 +41,13 @@ const Blog = () => {
 
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-24">
+      <SEOHead
+        title="Travel Blog, Packing Guides & Itineraries | WanderLuxe"
+        description="Read expert travel guides, high-altitude packing lists, and destination itineraries written by certified WanderLuxe trip captains."
+        canonical="/blog"
+        jsonLd={articleSchema}
+      />
+
       {/* Article Reader Modal */}
       <AnimatePresence>
         {selectedArticle && (
@@ -100,6 +112,21 @@ const Blog = () => {
                 ))}
               </div>
 
+              {/* Contextual Internal Link to Related Package (PDF Section 14) */}
+              <div className="mt-8 p-6 bg-brand-light rounded-2xl border border-brand-emerald/30 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div>
+                  <span className="text-[10px] font-extrabold text-brand-emerald uppercase tracking-wider">Related Expedition Package</span>
+                  <h3 className="text-sm font-extrabold text-brand-navy">Ready to Experience This Destination Live?</h3>
+                  <p className="text-xs text-gray-500 font-medium">Join our next community departure led by certified trip captains.</p>
+                </div>
+                <Link
+                  to="/destinations"
+                  className="px-5 py-2.5 bg-brand-emerald text-white rounded-xl text-xs font-extrabold hover:bg-brand-teal transition-all shrink-0"
+                >
+                  Explore Tour Packages
+                </Link>
+              </div>
+
               <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-between">
                 <button
                   onClick={() => setSelectedArticle(null)}
@@ -117,6 +144,8 @@ const Blog = () => {
       </AnimatePresence>
 
       <div className="container mx-auto px-4 md:px-8">
+        <Breadcrumbs items={[{ name: 'Travel Blog & Guides', path: '/blog' }]} />
+
         {/* Banner */}
         <div className="text-center max-w-3xl mx-auto mb-12">
           <span className="bg-brand-emerald/10 text-brand-emerald text-xs font-extrabold px-3.5 py-1.5 rounded-full inline-block mb-3 border border-brand-emerald/20">
@@ -169,7 +198,7 @@ const Blog = () => {
                     className="w-10 h-10 rounded-full object-cover border-2 border-brand-emerald"
                   />
                   <div>
-                    <h4 className="text-xs font-extrabold text-brand-navy">{featuredPost.author.name}</h4>
+                    <h3 className="text-xs font-extrabold text-brand-navy">{featuredPost.author.name}</h3>
                     <p className="text-[11px] text-gray-400">{featuredPost.author.role}</p>
                   </div>
                 </div>
