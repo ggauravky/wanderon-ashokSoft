@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { 
   ShieldCheck, Calendar, Users, MapPin, CheckCircle2, Ticket, 
@@ -12,6 +12,10 @@ const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, addBooking, recordInfluencerCommission } = useAuth();
+
+  // Parse URL Referral Query Params (?ref=GOA-KR7X9P)
+  const searchParams = new URLSearchParams(location.search);
+  const refCodeFromUrl = searchParams.get('ref') || searchParams.get('coupon') || '';
 
   // Fallback to trip 1 if no state passed
   const initialData = location.state || {
@@ -46,7 +50,7 @@ const Checkout = () => {
   );
 
   // Coupon engine
-  const [couponCode, setCouponCode] = useState('');
+  const [couponCode, setCouponCode] = useState(refCodeFromUrl);
   const [discount, setDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
   const [appliedCodeName, setAppliedCodeName] = useState('');
@@ -62,13 +66,19 @@ const Checkout = () => {
 
   const calculateSubtotal = () => initialData.totalAmount;
 
-  const handleApplyCoupon = (e) => {
-    e.preventDefault();
-    setCouponError('');
-    const code = couponCode.trim().toUpperCase();
+  // Auto apply URL coupon code if present
+  useEffect(() => {
+    if (refCodeFromUrl) {
+      applyCodeLogic(refCodeFromUrl);
+    }
+  }, [refCodeFromUrl]);
+
+  const applyCodeLogic = (codeStr) => {
+    const code = codeStr.trim().toUpperCase();
+    const sub = calculateSubtotal();
 
     if (code === 'WANDER10') {
-      const disc = Math.round(calculateSubtotal() * 0.1);
+      const disc = Math.round(sub * 0.1);
       setDiscount(disc);
       setAppliedCoupon('WANDER10 (10% OFF)');
       setAppliedCodeName('WANDER10');
@@ -78,20 +88,27 @@ const Checkout = () => {
       setAppliedCoupon('SUMMER500 (₹500 OFF)');
       setAppliedCodeName('SUMMER500');
       setCouponCode('');
-    } else if (code === 'EARLYBIRD15' || code === 'GAURAV15') {
-      const disc = Math.round(calculateSubtotal() * 0.15);
+    } else if (code === 'GOA-KR7X9P' || code === 'EARLYBIRD15' || code === 'GAURAV15') {
+      const disc = Math.round(sub * 0.15);
       setDiscount(disc);
-      setAppliedCoupon(`${code} (15% Creator Discount)`);
+      setAppliedCoupon(`${code} (15% Creator Discount Applied)`);
       setAppliedCodeName(code);
       setCouponCode('');
-    } else if (code === 'EXPLOREWITHGAURAV') {
-      setDiscount(1000);
-      setAppliedCoupon('EXPLOREWITHGAURAV (₹1,000 Creator OFF)');
-      setAppliedCodeName('EXPLOREWITHGAURAV');
+    } else if (code === 'MEGH-X82P9A' || code === 'EXPLOREWITHGAURAV') {
+      const disc = Math.round(sub * 0.1);
+      setDiscount(disc);
+      setAppliedCoupon(`${code} (10% Creator Discount Applied)`);
+      setAppliedCodeName(code);
       setCouponCode('');
     } else {
-      setCouponError('Invalid code. Try WANDER10, SUMMER500, GAURAV15, or EXPLOREWITHGAURAV');
+      setCouponError('Invalid coupon. Try GOA-KR7X9P, MEGH-X82P9A, WANDER10, or SUMMER500');
     }
+  };
+
+  const handleApplyCoupon = (e) => {
+    e.preventDefault();
+    setCouponError('');
+    applyCodeLogic(couponCode);
   };
 
   const subtotal = calculateSubtotal();
@@ -139,7 +156,7 @@ const Checkout = () => {
       coTravelers: coTravelers
     };
 
-    // If an influencer coupon was applied, credit commission
+    // If an influencer coupon was applied, record attribution commission
     if (appliedCodeName && recordInfluencerCommission) {
       recordInfluencerCommission(appliedCodeName, finalTotal, leadName, initialData.tripTitle);
     }
@@ -537,7 +554,7 @@ const Checkout = () => {
                     type="text"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value)}
-                    placeholder="Try GAURAV15 or WANDER10"
+                    placeholder="e.g. GOA-KR7X9P or WANDER10"
                     className="w-full px-3 py-2 bg-brand-light border border-gray-200 rounded-xl text-xs font-bold uppercase focus:outline-none focus:border-brand-emerald"
                   />
                   <button

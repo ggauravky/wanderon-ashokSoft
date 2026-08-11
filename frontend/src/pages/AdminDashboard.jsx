@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
-  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut
+  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut, Sparkles, Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,7 +11,9 @@ import { UPCOMING_TRIPS } from '../constants/mockData';
 import { getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, deleteCouponApi, getAdminUsersApi, updateUserRoleApi } from '../services/api';
 
 const AdminDashboard = () => {
-  const { user, logout } = useAuth();
+  const { 
+    user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility 
+  } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('analytics');
 
@@ -44,9 +46,8 @@ const AdminDashboard = () => {
   // Users State
   const [usersList, setUsersList] = useState([
     { id: 'u1', name: 'Gaurav Kumar Yadav (Admin)', email: 'gaurav99@gmail.com', phone: '8542036499', role: 'admin', bookingsCount: 3, joined: '2026-08-01' },
-    { id: 'u2', name: 'Gaurav Kumar Yadav', email: 'kumar.gaurav.yadav2007@gmail.com', phone: '8542036499', role: 'user', bookingsCount: 1, joined: '2026-08-02' },
-    { id: 'u3', name: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', phone: '+91 8765432109', role: 'user', bookingsCount: 2, joined: '2026-08-04' },
-    { id: 'u4', name: 'Ananya Roy', email: 'ananya.roy@wanderluxe.in', phone: '+91 7654321098', role: 'admin', bookingsCount: 5, joined: '2026-07-15' }
+    { id: 'u2', name: 'Gaurav Kumar Yadav (Influencer)', email: 'influencer@wanderluxe.in', phone: '8542036499', role: 'influencer', bookingsCount: 14, joined: '2026-08-02' },
+    { id: 'u3', name: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', phone: '+91 8765432109', role: 'user', bookingsCount: 2, joined: '2026-08-04' }
   ]);
 
   // Trips State
@@ -56,8 +57,7 @@ const AdminDashboard = () => {
   const [masterBookings, setMasterBookings] = useState([
     { id: 'WL-894201', customer: 'Gaurav Kumar Yadav', email: 'kumar.gaurav.yadav2007@gmail.com', trip: 'Meghalaya Backpacking', amount: 37000, date: '2026-08-01', status: 'Confirmed' },
     { id: 'WL-782104', customer: 'Sarah Jenkins', email: 'sarah.j@gmail.com', trip: 'Spiti Valley Circuit', amount: 22000, date: '2026-08-03', status: 'Confirmed' },
-    { id: 'WL-541289', customer: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', trip: 'Bali Island Escape', amount: 45000, date: '2026-08-04', status: 'Pending' },
-    { id: 'WL-390124', customer: 'Amitabh Verma', email: 'amitabh@gmail.com', trip: 'Kerala Backwaters', amount: 15500, date: '2026-08-05', status: 'Cancelled' }
+    { id: 'WL-541289', customer: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', trip: 'Bali Island Escape', amount: 45000, date: '2026-08-04', status: 'Pending' }
   ]);
 
   // Modal States
@@ -71,7 +71,6 @@ const AdminDashboard = () => {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   useEffect(() => {
-    // Fetch stats & coupons from backend API if live
     const loadAdminData = async () => {
       try {
         const statsData = await getAdminStatsApi();
@@ -92,7 +91,6 @@ const AdminDashboard = () => {
     navigate('/admin/login');
   };
 
-  // Coupon Handlers
   const handleAddCoupon = async (e) => {
     e.preventDefault();
     if (!newCoupon.code || !newCoupon.value) return;
@@ -136,7 +134,6 @@ const AdminDashboard = () => {
     setCoupons(coupons.filter((c) => c.id !== id));
   };
 
-  // User Role Handlers
   const handleToggleRole = async (userId, currentRole) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     try {
@@ -147,7 +144,6 @@ const AdminDashboard = () => {
     setUsersList(usersList.map((u) => (u.id === userId || u._id === userId ? { ...u, role: newRole } : u)));
   };
 
-  // Trip Handlers
   const handleAddTrip = (e) => {
     e.preventDefault();
     if (!newTrip.title || !newTrip.price) return;
@@ -179,7 +175,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Booking Status Handler
   const handleBookingStatus = (id, newStatus) => {
     setMasterBookings(masterBookings.map((b) => (b.id === id ? { ...b, status: newStatus } : b)));
   };
@@ -398,15 +393,15 @@ const AdminDashboard = () => {
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-2">
               <span className="bg-brand-emerald/20 text-brand-emerald border border-brand-emerald/30 text-xs font-extrabold px-3 py-1 rounded-full inline-block">
-                Master Admin Portal
+                Master Admin Control Panel
               </span>
               <span className="text-xs text-white/60 font-mono">
                 Admin: {user?.email || 'gaurav99@gmail.com'}
               </span>
             </div>
-            <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Control Panel</h1>
+            <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Influencer Engine</h1>
             <p className="text-white/70 text-xs md:text-sm font-medium mt-1">
-              Real-time sales revenue, trip CRUD, coupon engine, and user role administration.
+              Sales revenue analytics, Influencer plan configurator, payout approvals, and master bookings logs.
             </p>
           </div>
 
@@ -428,19 +423,20 @@ const AdminDashboard = () => {
         </div>
 
         {/* Tab Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 mb-8">
           {[
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} /> },
-            { id: 'trips', label: 'Trip CRUD', icon: <Layers size={16} /> },
-            { id: 'coupons', label: 'Coupons Engine', icon: <Tag size={16} /> },
+            { id: 'influencer_plans', label: 'Influencer Plans', icon: <Sparkles size={16} /> },
+            { id: 'payouts', label: 'Payout Approvals', icon: <Wallet size={16} /> },
+            { id: 'trips', label: 'Trip Catalog', icon: <Layers size={16} /> },
+            { id: 'coupons', label: 'Discount Engine', icon: <Tag size={16} /> },
             { id: 'users', label: 'Users & Roles', icon: <Users size={16} /> },
-            { id: 'bookings', label: 'Bookings Log', icon: <Ticket size={16} /> },
-            { id: 'settings', label: 'System Settings', icon: <Power size={16} /> }
+            { id: 'bookings', label: 'Bookings Log', icon: <Ticket size={16} /> }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`p-3.5 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-2 ${
+              className={`p-3 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'bg-brand-navy text-white shadow-lg'
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
@@ -454,7 +450,6 @@ const AdminDashboard = () => {
         {/* TAB 1: ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="space-y-8">
-            {/* Metric KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
                 <span className="text-xs font-bold text-gray-400 uppercase">Gross Revenue</span>
@@ -489,7 +484,7 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            {/* Interactive Graph Section */}
+            {/* Monthly Revenue Chart */}
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-200/80 space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -501,7 +496,6 @@ const AdminDashboard = () => {
                 </span>
               </div>
 
-              {/* Bar Chart Visualization */}
               <div className="h-64 flex items-end justify-between gap-3 pt-8 pb-4 border-b border-gray-100">
                 {stats.monthlyRevenue.map((item, index) => {
                   const maxRev = 1200000;
@@ -524,7 +518,120 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* TAB 2: TRIP CRUD */}
+        {/* TAB 2: INFLUENCER PLAN ELIGIBILITY CONFIGURATOR (PDF SECTION 11) */}
+        {activeTab === 'influencer_plans' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-brand-navy">Influencer Plan Eligibility & Commercial Rules</h2>
+              <p className="text-xs text-gray-500 font-medium">Admins control which travel plans creators can promote, along with discount % and commission rates.</p>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
+                  <tr>
+                    <th className="p-4">Plan Title</th>
+                    <th className="p-4">Destination</th>
+                    <th className="p-4">Base Price</th>
+                    <th className="p-4">Customer Discount %</th>
+                    <th className="p-4">Creator Commission %</th>
+                    <th className="p-4">Eligibility Status</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium">
+                  {eligiblePlans.map((plan) => (
+                    <tr key={plan.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-bold text-brand-navy">{plan.planTitle}</td>
+                      <td className="p-4 text-gray-600">{plan.destination}</td>
+                      <td className="p-4 font-extrabold text-brand-navy">₹{plan.basePrice.toLocaleString()}</td>
+                      <td className="p-4 font-bold text-emerald-600">{plan.customerDiscountPct}% OFF</td>
+                      <td className="p-4 font-bold text-brand-emerald">{plan.influencerCommissionPct}% Share</td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                          plan.status.includes('Active') ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {plan.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => adminTogglePlanEligibility(plan.id)}
+                          className="px-3 py-1.5 bg-brand-light text-brand-navy rounded-xl text-xs font-bold hover:bg-gray-200"
+                        >
+                          {plan.status.includes('Active') ? 'Pause Eligibility' : 'Enable Plan'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PAYOUT APPROVALS MANAGER (PDF SECTION 10 & 11) */}
+        {activeTab === 'payouts' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-brand-navy">Influencer Payout Requests Manager</h2>
+              <p className="text-xs text-gray-500 font-medium">Review and process influencer commission withdrawal requests.</p>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
+                  <tr>
+                    <th className="p-4">Request ID</th>
+                    <th className="p-4">Influencer</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Date</th>
+                    <th className="p-4">Destination Method</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Approval Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium">
+                  {allPayoutRequests.map((po) => (
+                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-mono font-bold text-brand-navy">{po.id}</td>
+                      <td className="p-4">
+                        <div className="font-bold text-brand-navy">{po.influencerName}</div>
+                        <div className="text-[10px] text-gray-400">{po.influencerEmail}</div>
+                      </td>
+                      <td className="p-4 font-extrabold text-brand-emerald text-sm">₹{po.amount.toLocaleString()}</td>
+                      <td className="p-4 text-gray-500">{po.date}</td>
+                      <td className="p-4 font-mono text-gray-700">{po.method}</td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                          po.status.includes('Paid') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {po.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        {po.status !== 'Paid Out' ? (
+                          <button
+                            onClick={() => adminApprovePayout(po.id)}
+                            className="px-3 py-1.5 bg-brand-emerald text-white rounded-xl text-xs font-extrabold hover:bg-brand-teal transition-all shadow-md"
+                          >
+                            Approve & Pay Out
+                          </button>
+                        ) : (
+                          <span className="text-xs font-bold text-emerald-600 flex items-center justify-end gap-1">
+                            <CheckCircle2 size={14} /> Completed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: TRIP CATALOG */}
         {activeTab === 'trips' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -570,7 +677,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* TAB 3: COUPONS ENGINE */}
+        {/* TAB 5: COUPONS ENGINE */}
         {activeTab === 'coupons' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -636,7 +743,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* TAB 4: USERS & ROLES */}
+        {/* TAB 6: USERS & ROLES */}
         {activeTab === 'users' && (
           <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-brand-navy">Registered Users & Role Elevation</h2>
@@ -660,7 +767,7 @@ const AdminDashboard = () => {
                       <td className="p-4 text-gray-500">{usr.phone}</td>
                       <td className="p-4">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          usr.role === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'
+                          usr.role === 'admin' ? 'bg-amber-100 text-amber-800' : usr.role === 'influencer' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
                         }`}>
                           {usr.role || 'user'}
                         </span>
@@ -681,7 +788,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* TAB 5: BOOKINGS LOG */}
+        {/* TAB 7: BOOKINGS LOG */}
         {activeTab === 'bookings' && (
           <div className="space-y-6">
             <h2 className="text-xl font-extrabold text-brand-navy">Master System Bookings</h2>
@@ -733,40 +840,6 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: SYSTEM SETTINGS */}
-        {activeTab === 'settings' && (
-          <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-200/80 space-y-6 max-w-2xl">
-            <h2 className="text-xl font-extrabold text-brand-navy">System Settings & Maintenance</h2>
-
-            <div className="space-y-4 text-sm font-medium">
-              <div className="flex items-center justify-between p-4 bg-brand-light rounded-2xl border border-gray-200">
-                <div>
-                  <h4 className="font-bold text-brand-navy">MongoDB Atlas Sync Status</h4>
-                  <p className="text-xs text-gray-500">Database cluster connection status</p>
-                </div>
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full flex items-center gap-1">
-                  <CheckCircle2 size={14} /> Active Connected
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-brand-light rounded-2xl border border-gray-200">
-                <div>
-                  <h4 className="font-bold text-brand-navy">Maintenance Mode</h4>
-                  <p className="text-xs text-gray-500">Temporarily restrict public bookings for updates</p>
-                </div>
-                <button
-                  onClick={() => setMaintenanceMode(!maintenanceMode)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                    maintenanceMode ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  {maintenanceMode ? 'Enabled' : 'Disabled'}
-                </button>
-              </div>
             </div>
           </div>
         )}

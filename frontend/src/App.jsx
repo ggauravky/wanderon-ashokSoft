@@ -19,6 +19,7 @@ import InfluencerDashboard from './pages/InfluencerDashboard';
 import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerRoute from './components/InfluencerRoute';
 import CreatorTrip from './pages/CreatorTrip';
+import CreatorStorefront from './pages/CreatorStorefront';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 
@@ -46,6 +47,8 @@ function App() {
                 <InfluencerDashboard />
               </InfluencerRoute>
             } />
+            <Route path="creator/:username" element={<CreatorStorefront />} />
+            <Route path="creators/:username" element={<CreatorStorefront />} />
             <Route path="creators/:username/:tripSlug" element={<CreatorTrip />} />
             <Route path="destinations" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
