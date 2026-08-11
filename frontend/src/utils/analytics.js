@@ -1,7 +1,9 @@
 /**
  * GA4 Event Tracking Helper (Google Search Central & GA4 Compliant)
- * Tracks user behavior and SEO landing page funnel events:
- * destination_view, package_view, itinerary_view, search, filter_use, wishlist_add, coupon_apply, checkout_start, purchase, lead_submit
+ * Tracks user behavior, organic SEO funnel events, and influencer attribution:
+ * organic_landing_page, destination_view, package_view, itinerary_view, search, filter_use, 
+ * wishlist_add, coupon_apply, checkout_start, purchase, lead_submit,
+ * creator_page_view, creator_referral_click, influencer_attributed_booking
  */
 
 export const trackGA4Event = (eventName, eventParams = {}) => {
@@ -77,5 +79,20 @@ export const trackPurchase = (bookingId, tripTitle, paidAmount, paymentMethod) =
     value: paidAmount,
     currency: 'INR',
     payment_type: paymentMethod
+  });
+};
+
+export const trackCreatorPageView = (creatorUsername, handle) => {
+  trackGA4Event('creator_page_view', {
+    creator: creatorUsername,
+    handle: handle
+  });
+};
+
+export const trackInfluencerAttributedBooking = (couponCode, influencerId, bookingAmount) => {
+  trackGA4Event('influencer_attributed_booking', {
+    coupon_code: couponCode,
+    influencer_id: influencerId,
+    booking_amount: bookingAmount
   });
 };

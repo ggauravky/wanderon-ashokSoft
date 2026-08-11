@@ -184,3 +184,52 @@ export const updateUserRoleApi = async (userId, role) => {
   }
   return data;
 };
+
+// Influencer & Checkout Server APIs
+export const validateCouponServerApi = async (code, bookingAmount, planId) => {
+  const response = await fetch(`${API_BASE_URL}/checkout/coupon/validate`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ code, bookingAmount, planId })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Coupon validation failed');
+  }
+  return data;
+};
+
+export const getInfluencerPlansApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/influencer/plans`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  return response.json();
+};
+
+export const generateCouponApi = async (planData) => {
+  const response = await fetch(`${API_BASE_URL}/influencer/coupons`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(planData)
+  });
+  return response.json();
+};
+
+export const getWalletSummaryApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/influencer/wallet`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  return response.json();
+};
+
+export const requestPayoutApi = async (amount, destination) => {
+  const response = await fetch(`${API_BASE_URL}/influencer/payouts`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ amount, destination })
+  });
+  return response.json();
+};
