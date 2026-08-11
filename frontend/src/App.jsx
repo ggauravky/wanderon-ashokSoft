@@ -22,11 +22,13 @@ import CreatorTrip from './pages/CreatorTrip';
 import CreatorStorefront from './pages/CreatorStorefront';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
+import ScrollToTop from './components/ScrollToTop';
 
 function App() {
   return (
     <AuthProvider>
       <Router>
+        <ScrollToTop />
         <Routes>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
