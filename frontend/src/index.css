@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -7,25 +7,62 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
   }
   
   body {
-    @apply bg-brand-light text-brand-navy font-sans antialiased;
+    @apply bg-[#f8fafc] text-slate-900 font-sans antialiased selection:bg-emerald-500 selection:text-white;
+  }
+
+  /* Custom Focus Ring for Keyboard Nav */
+  :focus-visible {
+    @apply outline-none ring-2 ring-emerald-500 ring-offset-2 ring-offset-white;
   }
 }
 
 @layer utilities {
+  .apple-glass {
+    @apply bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.03)];
+  }
+  
+  .apple-glass-dark {
+    @apply bg-[#0b132b]/85 backdrop-blur-xl border-b border-white/10 shadow-lg text-white;
+  }
+
+  .apple-card {
+    @apply bg-white rounded-2xl border border-slate-200/70 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_25px_-4px_rgba(0,0,0,0.08)] transition-all duration-200;
+  }
+
+  .linear-panel {
+    @apply bg-[#0f172a] text-slate-100 border border-slate-800/80 rounded-2xl shadow-xl;
+  }
+
   .glass {
     @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-sm;
   }
   
   .glass-dark {
-    @apply bg-brand-navy/80 backdrop-blur-lg border border-white/10 shadow-lg text-white;
+    @apply bg-[#0b132b]/80 backdrop-blur-lg border border-white/10 shadow-lg text-white;
+  }
+
+  .shimmer-skeleton {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 
 /* Swiper Equal Height Fix */
-.swiper-  wrapper {
+.swiper-wrapper {
   align-items: stretch;
 }
 .swiper-slide {
