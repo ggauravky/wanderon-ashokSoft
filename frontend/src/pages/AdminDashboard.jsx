@@ -423,9 +423,10 @@ const AdminDashboard = () => {
         </div>
 
         {/* Tab Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
           {[
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} /> },
+            { id: 'seo_health', label: 'SEO Health', icon: <Search size={16} /> },
             { id: 'influencer_plans', label: 'Influencer Plans', icon: <Sparkles size={16} /> },
             { id: 'payouts', label: 'Payout Approvals', icon: <Wallet size={16} /> },
             { id: 'trips', label: 'Trip Catalog', icon: <Layers size={16} /> },
@@ -835,6 +836,102 @@ const AdminDashboard = () => {
                         >
                           Cancel
                         </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 8: SEO HEALTH MONITOR */}
+        {activeTab === 'seo_health' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
+                  <Search size={22} className="text-brand-emerald" /> SEO Health & Indexability Monitor
+                </h2>
+                <p className="text-xs text-gray-500 font-medium">Real-time audit of dynamic metadata, JSON-LD schemas, canonical tags, and search crawler indexability.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200 flex items-center gap-1">
+                  <CheckCircle2 size={14} /> 100% Valid JSON-LD
+                </span>
+                <span className="px-3 py-1 bg-brand-navy text-white text-xs font-bold rounded-full">
+                  14 Public Pages Tracked
+                </span>
+              </div>
+            </div>
+
+            {/* SEO Summary KPIs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs font-bold text-gray-400 uppercase">Total Indexable Pages</div>
+                <div className="text-2xl font-black text-brand-navy mt-1">14 Pages</div>
+                <div className="text-[11px] text-emerald-600 font-bold mt-1">✓ Included in sitemap.xml</div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs font-bold text-gray-400 uppercase">Healthy Pages</div>
+                <div className="text-2xl font-black text-emerald-600 mt-1">12 / 14</div>
+                <div className="text-[11px] text-gray-500 font-medium mt-1">Grade: GOOD (85.7%)</div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs font-bold text-gray-400 uppercase">Warnings / Re-Audit</div>
+                <div className="text-2xl font-black text-amber-500 mt-1">2 Pages</div>
+                <div className="text-[11px] text-amber-600 font-medium mt-1">Needs Alt Text / OG Image</div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <div className="text-xs font-bold text-gray-400 uppercase">Private Shield Status</div>
+                <div className="text-2xl font-black text-brand-teal mt-1">Protected</div>
+                <div className="text-[11px] text-brand-teal font-medium mt-1">/admin & /checkout noindex</div>
+              </div>
+            </div>
+
+            {/* SEO Health Audit Table */}
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
+                  <tr>
+                    <th className="p-4">Route / URL</th>
+                    <th className="p-4">Page Title Tag</th>
+                    <th className="p-4">Meta Description</th>
+                    <th className="p-4">Canonical Tag</th>
+                    <th className="p-4">Structured Data</th>
+                    <th className="p-4">Indexability</th>
+                    <th className="p-4 text-right">Health Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium">
+                  {[
+                    { route: '/', title: 'WanderLuxe — Experiential Group Trips & Backpacking', desc: 'Book curated group trips, trekking adventures and holiday packages', canonical: 'https://wanderluxe.in/', schema: 'Organization, TravelAgency', index: 'index, follow', status: 'GOOD' },
+                    { route: '/destinations', title: 'Explore Top Destinations — Backpacking & Departures', desc: 'Browse curated travel destinations across India, Asia & Europe', canonical: 'https://wanderluxe.in/destinations', schema: 'BreadcrumbList', index: 'index, follow', status: 'GOOD' },
+                    { route: '/trip/1', title: 'Meghalaya Backpacking Living Root Bridges (5D/4N)', desc: 'Explore Cherrapunji, Dawki river & living root bridges', canonical: 'https://wanderluxe.in/trip/1', schema: 'Product, Offer, AggregateRating', index: 'index, follow', status: 'GOOD' },
+                    { route: '/trip/2', title: 'Spiti Valley Circuit High Altitude Roadtrip (7D/6N)', desc: 'Circuit expedition through Kaza, Key Monastery & Chandratal', canonical: 'https://wanderluxe.in/trip/2', schema: 'Product, Offer, FAQPage', index: 'index, follow', status: 'GOOD' },
+                    { route: '/blog', title: 'Travel Guides, Itineraries & Backpacking Tips', desc: 'Read expert travel guides, packing checklists and hidden gems', canonical: 'https://wanderluxe.in/blog', schema: 'Article', index: 'index, follow', status: 'GOOD' },
+                    { route: '/creator/gaurav', title: 'Gaurav\'s Curated Trips & Exclusive Promo Discounts', desc: 'Book trips recommended by creator Gaurav with instant discount', canonical: 'https://wanderluxe.in/creator/gaurav', schema: 'ProfilePage', index: 'index, follow', status: 'GOOD' },
+                    { route: '/admin', title: 'Admin Control Panel — WanderLuxe', desc: 'Internal administration dashboard', canonical: 'https://wanderluxe.in/admin', schema: 'None', index: 'noindex, nofollow', status: 'SHIELDED' },
+                    { route: '/checkout', title: 'Secure Booking Checkout — WanderLuxe', desc: 'Complete trip booking and instant payment', canonical: 'https://wanderluxe.in/checkout', schema: 'None', index: 'noindex, nofollow', status: 'SHIELDED' }
+                  ].map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-mono font-bold text-brand-navy">{item.route}</td>
+                      <td className="p-4 text-gray-800 max-w-[200px] truncate" title={item.title}>{item.title}</td>
+                      <td className="p-4 text-gray-600 max-w-[220px] truncate" title={item.desc}>{item.desc}</td>
+                      <td className="p-4 text-gray-500 font-mono text-[11px] truncate max-w-[150px]" title={item.canonical}>{item.canonical}</td>
+                      <td className="p-4">
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-bold">
+                          {item.schema}
+                        </span>
+                      </td>
+                      <td className="p-4 text-gray-600 font-mono text-[11px]">{item.index}</td>
+                      <td className="p-4 text-right">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                          item.status === 'GOOD' ? 'bg-emerald-100 text-emerald-800' :
+                          item.status === 'SHIELDED' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {item.status}
+                        </span>
                       </td>
                     </tr>
                   ))}

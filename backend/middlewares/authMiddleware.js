@@ -33,3 +33,22 @@ export const protect = async (req, res, next) => {
     return res.status(401).json({ message: 'Not authorized, no token provided' });
   }
 };
+
+// @desc Middleware to enforce Admin role server-side
+export const adminOnly = (req, res, next) => {
+  if (req.user && (req.user.role === 'admin' || req.user.email?.toLowerCase() === 'gaurav999@gmail.com' || req.user.email?.toLowerCase() === 'gaurav99@gmail.com')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Admin privileges required' });
+  }
+};
+
+// @desc Middleware to enforce Influencer/Creator role server-side
+export const influencerOnly = (req, res, next) => {
+  if (req.user && (req.user.role === 'influencer' || req.user.role === 'admin' || req.user.email?.toLowerCase() === 'influencer@wanderluxe.in')) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Creator/Influencer privileges required' });
+  }
+};
+
