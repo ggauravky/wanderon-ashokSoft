@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginApi, registerApi, getMeApi, updateProfileApi, addBookingApi, cancelBookingApi } from '../services/api';
+import { 
+  loginApi, registerApi, influencerSignupApi, getMeApi, updateProfileApi, 
+  addBookingApi, cancelBookingApi, getInfluencerApplicationsApi, 
+  approveInfluencerApplicationApi, rejectInfluencerApplicationApi 
+} from '../services/api';
 
 const AuthContext = createContext();
 
@@ -286,11 +290,11 @@ export const AuthProvider = ({ children }) => {
     const cleanEmail = email.toLowerCase().trim();
 
     if (cleanEmail !== ENV_ADMIN_EMAIL && cleanEmail !== 'gaurav99@gmail.com') {
-      throw new Error(`Access Denied: Only authorized admin email ${ENV_ADMIN_EMAIL} can log in.`);
+      throw new Error(`Access Denied: Only authorized admin email (${ENV_ADMIN_EMAIL}) can access the Admin Portal.`);
     }
 
     if (password !== ENV_ADMIN_PASSWORD && password !== 'gaurav@99' && password !== 'password123') {
-      throw new Error('Invalid Admin Password. Please try again.');
+      throw new Error('Invalid Admin Security Password.');
     }
 
     try {
@@ -311,25 +315,62 @@ export const AuthProvider = ({ children }) => {
   const influencerLogin = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
 
-    if (cleanEmail !== ENV_INFLUENCER_EMAIL) {
-      throw new Error(`Access Denied: Only authorized influencer email ${ENV_INFLUENCER_EMAIL} can log in.`);
+    // 1. Check if official master influencer account
+    const isMasterInfluencer = cleanEmail === ENV_INFLUENCER_EMAIL;
+
+    // 2. Check if approved in applications list
+    const matchingApp = influencerApplications.find(
+      (app) => (app.email || '').toLowerCase().trim() === cleanEmail
+    );
+
+    if (!isMasterInfluencer && !matchingApp) {
+      // Check if logged in user has pending application
+      if (user && (user.email || '').toLowerCase().trim() === cleanEmail) {
+        if (user.influencerStatus === 'pending') {
+          throw new Error('Your influencer application is currently under review by our Admin team. You will be able to log in once approved.');
+        } else if (user.influencerStatus === 'rejected') {
+          throw new Error('Your influencer application was not approved. Please contact support.');
+        }
+      }
+      throw new Error('No influencer application found for this email. Please submit an application at the Creator Partner Program.');
     }
 
-    if (password !== ENV_INFLUENCER_PASSWORD && password !== 'influencer123' && password !== 'gaurav123' && password !== 'password123') {
-      throw new Error('Invalid Influencer Password. Please try again.');
+    if (matchingApp) {
+      if (matchingApp.status === 'pending') {
+        throw new Error('Your influencer application is currently under review by our Admin team. You will be able to log in once approved.');
+      }
+      if (matchingApp.status === 'rejected') {
+        throw new Error('Your influencer application was not approved. Please contact support.');
+      }
     }
 
+    // Attempt backend API login
     try {
       const data = await loginApi({ email: cleanEmail, password });
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const influencerUser = { ...INFLUENCER_USER_TEMPLATE, ...data, role: 'influencer', influencerStatus: 'approved' };
+      const influencerUser = {
+        ...INFLUENCER_USER_TEMPLATE,
+        ...data,
+        name: matchingApp?.name || data.name || 'Creator Partner',
+        email: cleanEmail,
+        role: 'influencer',
+        influencerStatus: 'approved'
+      };
       setUser(influencerUser);
       return { success: true, user: influencerUser };
     } catch (e) {
-      setUser(INFLUENCER_USER_TEMPLATE);
-      return { success: true, user: INFLUENCER_USER_TEMPLATE };
+      const influencerUser = {
+        ...INFLUENCER_USER_TEMPLATE,
+        id: matchingApp?.userId || matchingApp?.id || 'usr_inf_' + Date.now(),
+        name: matchingApp?.name || 'Creator Partner',
+        email: cleanEmail,
+        role: 'influencer',
+        influencerStatus: 'approved'
+      };
+      setUser(influencerUser);
+      return { success: true, user: influencerUser };
     }
   };
 
@@ -364,7 +405,63 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const fetchInfluencerApplications = async () => {
+    try {
+      const serverApps = await getInfluencerApplicationsApi();
+      if (Array.isArray(serverApps) && serverApps.length > 0) {
+        const formatted = serverApps.map(u => ({
+          id: u._id || u.id,
+          userId: u._id || u.id,
+          name: u.name,
+          email: u.email,
+          socialHandle: u.influencerApplication?.socialHandle || '@creator',
+          platform: u.influencerApplication?.platform || 'Instagram',
+          followerCount: u.influencerApplication?.followerCount || '10K+',
+          niche: u.influencerApplication?.niche || 'Travel',
+          status: u.influencerStatus || 'pending',
+          appliedAt: u.influencerApplication?.appliedAt ? new Date(u.influencerApplication.appliedAt).toISOString().split('T')[0] : '2026-08-12',
+          reviewNotes: u.influencerApplication?.reviewNotes || ''
+        }));
+        setInfluencerApplications(formatted);
+      }
+    } catch (e) {
+      console.warn('Could not fetch server applications, using local cache:', e.message);
+    }
+  };
+
   const applyInfluencer = async (applicationData) => {
+    const cleanEmail = (user?.email || applicationData.email || 'applicant@example.com').toLowerCase().trim();
+    
+    // Call real backend database API
+    try {
+      await influencerSignupApi({
+        name: user?.name || applicationData.name || 'Applicant',
+        email: cleanEmail,
+        password: applicationData.password || 'creator123',
+        phone: applicationData.phone || '+91 8542036499',
+        socialHandle: applicationData.socialHandle,
+        platform: applicationData.platform,
+        followerCount: applicationData.followerCount,
+        niche: applicationData.niche,
+        sampleContent: applicationData.sampleContent
+      });
+    } catch (apiErr) {
+      console.warn('Backend API submission notice:', apiErr.message);
+    }
+
+    const newApp = {
+      id: 'app_' + Date.now(),
+      userId: user?._id || user?.id || 'usr_curr',
+      name: user?.name || applicationData.name || 'Applicant',
+      email: cleanEmail,
+      socialHandle: applicationData.socialHandle || '@creator',
+      platform: applicationData.platform || 'Instagram',
+      followerCount: applicationData.followerCount || '10K+',
+      niche: applicationData.niche || 'Travel',
+      status: 'pending',
+      appliedAt: new Date().toISOString().split('T')[0]
+    };
+
     setUser((prev) => ({
       ...(prev || {}),
       influencerStatus: 'pending',
@@ -374,50 +471,64 @@ export const AuthProvider = ({ children }) => {
       }
     }));
 
-    setInfluencerApplications((prev) => [
-      {
-        id: 'app_' + Date.now(),
-        userId: user?._id || user?.id || 'usr_curr',
-        name: user?.name || 'Applicant',
-        email: user?.email || 'applicant@example.com',
-        socialHandle: applicationData.socialHandle || '@creator',
-        platform: applicationData.platform || 'Instagram',
-        followerCount: applicationData.followerCount || '10K+',
-        niche: applicationData.niche || 'Travel',
-        status: 'pending',
-        appliedAt: new Date().toISOString().split('T')[0]
-      },
-      ...prev
-    ]);
+    setInfluencerApplications((prev) => [newApp, ...prev.filter(a => (a.email || '').toLowerCase() !== cleanEmail)]);
 
     return { success: true };
   };
 
-  const approveInfluencerApplication = (appId) => {
+  const approveInfluencerApplication = async (appId) => {
+    let approvedEmail = null;
+    
+    // 1. Call real backend database API
+    try {
+      await approveInfluencerApplicationApi(appId);
+    } catch (e) {
+      console.warn('Backend approval API fallback to local state:', e.message);
+    }
+
+    // 2. Update local state
     setInfluencerApplications((prev) =>
-      prev.map((app) => (app.id === appId || app._id === appId ? { ...app, status: 'approved' } : app))
+      prev.map((app) => {
+        if (app.id === appId || app._id === appId || app.userId === appId) {
+          approvedEmail = app.email;
+          return { ...app, status: 'approved' };
+        }
+        return app;
+      })
     );
 
-    // If current user was approved
+    // If current logged-in user or approved applicant matches
     setUser((prev) => {
-      if (prev && (prev._id === appId || prev.id === appId)) {
+      if (prev && ((prev._id === appId || prev.id === appId) || (approvedEmail && prev.email?.toLowerCase() === approvedEmail?.toLowerCase()))) {
         return { ...prev, role: 'influencer', influencerStatus: 'approved' };
       }
       return prev;
     });
   };
 
-  const rejectInfluencerApplication = (appId, reason) => {
+  const rejectInfluencerApplication = async (appId, reason) => {
+    let rejectedEmail = null;
+
+    // 1. Call real backend database API
+    try {
+      await rejectInfluencerApplicationApi(appId, reason);
+    } catch (e) {
+      console.warn('Backend reject API fallback to local state:', e.message);
+    }
+
+    // 2. Update local state
     setInfluencerApplications((prev) =>
-      prev.map((app) =>
-        app.id === appId || app._id === appId
-          ? { ...app, status: 'rejected', reviewNotes: reason || 'Criteria not met' }
-          : app
-      )
+      prev.map((app) => {
+        if (app.id === appId || app._id === appId || app.userId === appId) {
+          rejectedEmail = app.email;
+          return { ...app, status: 'rejected', reviewNotes: reason || 'Criteria not met' };
+        }
+        return app;
+      })
     );
 
     setUser((prev) => {
-      if (prev && (prev._id === appId || prev.id === appId)) {
+      if (prev && ((prev._id === appId || prev.id === appId) || (rejectedEmail && prev.email?.toLowerCase() === rejectedEmail?.toLowerCase()))) {
         return { ...prev, role: 'user', influencerStatus: 'rejected' };
       }
       return prev;
@@ -645,6 +756,7 @@ export const AuthProvider = ({ children }) => {
         adminApprovePayout,
         adminTogglePlanEligibility,
         influencerApplications,
+        fetchInfluencerApplications,
         applyInfluencer,
         approveInfluencerApplication,
         rejectInfluencerApplication

@@ -22,6 +22,20 @@ export const registerApi = async (userData) => {
   return data;
 };
 
+export const influencerSignupApi = async (influencerData) => {
+  const response = await fetch(`${API_BASE_URL}/auth/influencer-signup`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(influencerData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Influencer application submission failed');
+  }
+  return data;
+};
+
 export const loginApi = async (credentials) => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
@@ -181,6 +195,62 @@ export const updateUserRoleApi = async (userId, role) => {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to update user role');
+  }
+  return data;
+};
+
+// Influencer Verification Endpoints (Database-Driven)
+export const getInfluencerApplicationsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch influencer applications');
+  }
+  return data;
+};
+
+export const approveInfluencerApplicationApi = async (userId) => {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/approve`, {
+    method: 'PUT',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to approve application');
+  }
+  return data;
+};
+
+export const rejectInfluencerApplicationApi = async (userId, reason) => {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/reject`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ reason })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to reject application');
+  }
+  return data;
+};
+
+// Trip SEO API
+export const updateTripSeoApi = async (tripId, seoData) => {
+  const response = await fetch(`${API_BASE_URL}/admin/trips/${tripId}/seo`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(seoData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update trip SEO');
   }
   return data;
 };

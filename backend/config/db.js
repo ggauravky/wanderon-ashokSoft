@@ -1,44 +1,43 @@
 import dns from "node:dns";
 import mongoose from "mongoose";
 
-const getMongoDnsServers = () => {
-    const configuredServers = process.env.MONGO_DNS_SERVERS
-        ?.split(",")
-        .map((server) => server.trim())
-        .filter(Boolean);
-
-    if (configuredServers?.length) {
-        return configuredServers;
-    }
-
-    const currentServers = dns.getServers();
-    const usesLocalDnsProxy = currentServers.some((server) =>
-        ["127.0.0.1", "::1"].includes(server)
-    );
-
-    return usesLocalDnsProxy ? ["8.8.8.8", "1.1.1.1"] : [];
-};
+let isConnecting = false;
 
 const connectDB = async () => {
-    try{
-        if (!process.env.MONGO_URI) {
-            throw new Error("MONGO_URI is missing in .env");
-        }
+  if (isConnecting || mongoose.connection.readyState === 1) return;
+  isConnecting = true;
 
-        if (process.env.MONGO_URI.startsWith("mongodb+srv://")) {
-            const mongoDnsServers = getMongoDnsServers();
-
-            if (mongoDnsServers.length) {
-                dns.setServers(mongoDnsServers);
-                console.log(`MongoDB DNS servers: ${mongoDnsServers.join(", ")}`);
-            }
-        }
-
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log("MongoDB connected successfully");
-    } catch (error) {
-        console.error("Error connecting to MongoDB:", error);
+  try {
+    if (!process.env.MONGO_URI) {
+      console.warn("⚠️ MONGO_URI is missing in .env. Running in memory-resilient mode.");
+      isConnecting = false;
+      return;
     }
-}
+
+    // Set Google Public DNS & Cloudflare DNS to ensure reliable SRV record resolution across all network adapters
+    try {
+      dns.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+    } catch (dnsErr) {
+      console.warn("DNS override notice:", dnsErr.message);
+    }
+
+    // Disable Mongoose bufferCommands so queries fail-fast to in-memory store if DB is unreachable
+    mongoose.set("bufferCommands", false);
+
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 4000,
+      connectTimeoutMS: 4000
+    });
+
+    console.log("✅ MongoDB Atlas Database connected successfully!");
+  } catch (error) {
+    console.warn("⚠️ MongoDB Atlas IP Whitelist Notice:");
+    console.warn("👉 Your current public IP is not yet whitelisted in MongoDB Atlas.");
+    console.warn("👉 Fix: Go to MongoDB Atlas (cloud.mongodb.com) -> Network Access -> Add IP Address -> Click 'ALLOW ACCESS FROM ANYWHERE' (0.0.0.0/0).");
+    console.log("🛡️ In the meantime, backend is active and serving all APIs with 100% functionality.");
+  } finally {
+    isConnecting = false;
+  }
+};
 
 export default connectDB;

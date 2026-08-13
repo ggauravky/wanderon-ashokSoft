@@ -44,7 +44,7 @@ const Navbar = () => {
     { name: 'Weekend Trips', path: '/weekend-trips' },
     { name: 'Backpacking', path: '/community-trips' },
     { name: 'Custom Trip', path: '/custom-trip' },
-    { name: 'Influencer Portal', path: '/influencer/login' },
+    { name: 'Creator Program', path: '/influencer/program' },
     { name: 'Contact', path: '/contact' },
   ];
 

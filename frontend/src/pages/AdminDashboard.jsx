@@ -13,7 +13,7 @@ import { getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, dele
 const AdminDashboard = () => {
   const { 
     user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility,
-    influencerApplications, approveInfluencerApplication, rejectInfluencerApplication
+    influencerApplications, fetchInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication
   } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('analytics');
@@ -88,6 +88,9 @@ const AdminDashboard = () => {
         setCoupons(couponsData);
         const usersData = await getAdminUsersApi();
         setUsersList(usersData);
+        if (typeof fetchInfluencerApplications === 'function') {
+          await fetchInfluencerApplications();
+        }
       } catch (e) {
         console.warn('Backend API offline, utilizing state fallback');
       }

@@ -16,6 +16,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminRoute from './components/AdminRoute';
 import InfluencerDashboard from './pages/InfluencerDashboard';
+import InfluencerLanding from './pages/InfluencerLanding';
+import InfluencerSignup from './pages/InfluencerSignup';
 import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerRoute from './components/InfluencerRoute';
 import CreatorTrip from './pages/CreatorTrip';
@@ -37,21 +39,32 @@ function App() {
             <Route path="trip/:id" element={<TripDetails />} />
             <Route path="checkout" element={<Checkout />} />
             <Route path="profile" element={<Profile />} />
+            
+            {/* Admin Routes */}
             <Route path="admin/login" element={<AdminLogin />} />
             <Route path="admin" element={
               <AdminRoute>
                 <AdminDashboard />
               </AdminRoute>
             } />
+
+            {/* Creator / Influencer Routes */}
+            <Route path="influencer/program" element={<InfluencerLanding />} />
+            <Route path="influencer/signup" element={<InfluencerSignup />} />
+            <Route path="influencer/apply" element={<InfluencerSignup />} />
             <Route path="influencer/login" element={<InfluencerLogin />} />
             <Route path="influencer" element={
               <InfluencerRoute>
                 <InfluencerDashboard />
               </InfluencerRoute>
             } />
+            
+            {/* Creator Storefronts */}
             <Route path="creator/:username" element={<CreatorStorefront />} />
             <Route path="creators/:username" element={<CreatorStorefront />} />
             <Route path="creators/:username/:tripSlug" element={<CreatorTrip />} />
+            
+            {/* Public Catalog Routes */}
             <Route path="destinations" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
             <Route path="international" element={<Destinations />} />
