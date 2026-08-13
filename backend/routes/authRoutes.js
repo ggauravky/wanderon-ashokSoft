@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
   registerUser, loginUser, getMe, 
-  updateUserProfile, addBooking, cancelUserBooking 
+  updateUserProfile, applyInfluencer, addBooking, cancelUserBooking 
 } from '../controllers/authController.js';
 import { protect } from '../middlewares/authMiddleware.js';
 
@@ -11,6 +11,7 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateUserProfile);
+router.post('/influencer-apply', protect, applyInfluencer);
 router.post('/booking', protect, addBooking);
 router.put('/booking/cancel', protect, cancelUserBooking);
 

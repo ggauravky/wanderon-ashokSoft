@@ -67,6 +67,7 @@ const ADMIN_USER_TEMPLATE = {
   address: 'Lucknow, UP, India',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
   role: 'admin',
+  influencerStatus: 'approved',
   joinedDate: 'August 2026',
   wanderCoins: 5000,
   bookedTrips: []
@@ -80,6 +81,7 @@ const INFLUENCER_USER_TEMPLATE = {
   address: 'Lucknow, UP, India',
   avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
   role: 'influencer',
+  influencerStatus: 'approved',
   joinedDate: 'August 2026',
   wanderCoins: 2500,
   pendingBalance: 18500,
@@ -130,6 +132,41 @@ const INFLUENCER_USER_TEMPLATE = {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Store influencer applications in local state + localStorage fallback
+  const [influencerApplications, setInfluencerApplications] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('wanderluxe_influencer_applications')) || [
+        {
+          id: 'app_101',
+          userId: 'usr_201',
+          name: 'Priya Sharma',
+          email: 'priya.travels@gmail.com',
+          socialHandle: '@priya_explores',
+          platform: 'Instagram',
+          followerCount: '45,000',
+          niche: 'Solo Travel & Trekking',
+          status: 'pending',
+          appliedAt: '2026-08-11'
+        },
+        {
+          id: 'app_102',
+          userId: 'usr_202',
+          name: 'Rohan Mehta',
+          email: 'rohan.vlogs@youtube.com',
+          socialHandle: '@rohan_vlogs',
+          platform: 'YouTube',
+          followerCount: '120,000',
+          niche: 'Motorcycle Roadtrips',
+          status: 'pending',
+          appliedAt: '2026-08-12'
+        }
+      ];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [eligiblePlans, setEligiblePlans] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('wanderluxe_eligible_plans')) || DEFAULT_ELIGIBLE_PLANS;
@@ -149,6 +186,10 @@ export const AuthProvider = ({ children }) => {
   });
 
   useEffect(() => {
+    localStorage.setItem('wanderluxe_influencer_applications', JSON.stringify(influencerApplications));
+  }, [influencerApplications]);
+
+  useEffect(() => {
     localStorage.setItem('wanderluxe_eligible_plans', JSON.stringify(eligiblePlans));
   }, [eligiblePlans]);
 
@@ -165,8 +206,13 @@ export const AuthProvider = ({ children }) => {
           const userData = await getMeApi();
           const clean = userData.email?.toLowerCase();
           const isAdmin = clean === ENV_ADMIN_EMAIL || clean === 'gaurav99@gmail.com' || userData.role === 'admin';
-          const isInfluencer = clean === ENV_INFLUENCER_EMAIL || userData.role === 'influencer';
-          setUser({ ...userData, role: isAdmin ? 'admin' : isInfluencer ? 'influencer' : 'user', wanderCoins: userData.wanderCoins || 1250 });
+          const isInfluencer = clean === ENV_INFLUENCER_EMAIL || (userData.role === 'influencer' && userData.influencerStatus === 'approved');
+          setUser({
+            ...userData,
+            role: isAdmin ? 'admin' : isInfluencer ? 'influencer' : 'user',
+            influencerStatus: userData.influencerStatus || (isInfluencer ? 'approved' : 'none'),
+            wanderCoins: userData.wanderCoins || 1250
+          });
         } catch (error) {
           console.warn('Backend server session check failed, using local session');
           const savedUser = localStorage.getItem('wanderluxe_user');
@@ -209,7 +255,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('wanderluxe_token', data.token);
       }
       const role = isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : (data.role || 'user');
-      const fullUser = { ...data, role, wanderCoins: 1250 };
+      const influencerStatus = data.influencerStatus || (isInfluencerEmail ? 'approved' : 'none');
+      const fullUser = { ...data, role, influencerStatus, wanderCoins: 1250 };
       setUser(fullUser);
       return { success: true, user: fullUser };
     } catch (error) {
@@ -226,6 +273,7 @@ export const AuthProvider = ({ children }) => {
           address: 'Lucknow, UP, India',
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
           role: 'user',
+          influencerStatus: 'none',
           wanderCoins: 1250,
           bookedTrips: []
         };
@@ -250,7 +298,7 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const adminUser = { ...data, role: 'admin' };
+      const adminUser = { ...data, role: 'admin', influencerStatus: 'approved' };
       setUser(adminUser);
       return { success: true, user: adminUser };
     } catch (e) {
@@ -276,7 +324,7 @@ export const AuthProvider = ({ children }) => {
       if (data.token) {
         localStorage.setItem('wanderluxe_token', data.token);
       }
-      const influencerUser = { ...INFLUENCER_USER_TEMPLATE, ...data, role: 'influencer' };
+      const influencerUser = { ...INFLUENCER_USER_TEMPLATE, ...data, role: 'influencer', influencerStatus: 'approved' };
       setUser(influencerUser);
       return { success: true, user: influencerUser };
     } catch (e) {
@@ -293,7 +341,8 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('wanderluxe_token', data.token);
       }
       const role = (cleanEmail === ENV_ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com') ? 'admin' : (cleanEmail === ENV_INFLUENCER_EMAIL) ? 'influencer' : 'user';
-      const fullUser = { ...data, role, wanderCoins: 500 };
+      const influencerStatus = cleanEmail === ENV_INFLUENCER_EMAIL ? 'approved' : 'none';
+      const fullUser = { ...data, role, influencerStatus, wanderCoins: 500 };
       setUser(fullUser);
       return { success: true, user: fullUser };
     } catch (error) {
@@ -306,12 +355,73 @@ export const AuthProvider = ({ children }) => {
         address: 'Lucknow, UP, India',
         avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail || 'gaurav'}`,
         role: 'user',
+        influencerStatus: 'none',
         wanderCoins: 500,
         bookedTrips: []
       };
       setUser(newUser);
       return { success: true, user: newUser };
     }
+  };
+
+  const applyInfluencer = async (applicationData) => {
+    setUser((prev) => ({
+      ...(prev || {}),
+      influencerStatus: 'pending',
+      influencerApplication: {
+        ...applicationData,
+        appliedAt: new Date().toISOString().split('T')[0]
+      }
+    }));
+
+    setInfluencerApplications((prev) => [
+      {
+        id: 'app_' + Date.now(),
+        userId: user?._id || user?.id || 'usr_curr',
+        name: user?.name || 'Applicant',
+        email: user?.email || 'applicant@example.com',
+        socialHandle: applicationData.socialHandle || '@creator',
+        platform: applicationData.platform || 'Instagram',
+        followerCount: applicationData.followerCount || '10K+',
+        niche: applicationData.niche || 'Travel',
+        status: 'pending',
+        appliedAt: new Date().toISOString().split('T')[0]
+      },
+      ...prev
+    ]);
+
+    return { success: true };
+  };
+
+  const approveInfluencerApplication = (appId) => {
+    setInfluencerApplications((prev) =>
+      prev.map((app) => (app.id === appId || app._id === appId ? { ...app, status: 'approved' } : app))
+    );
+
+    // If current user was approved
+    setUser((prev) => {
+      if (prev && (prev._id === appId || prev.id === appId)) {
+        return { ...prev, role: 'influencer', influencerStatus: 'approved' };
+      }
+      return prev;
+    });
+  };
+
+  const rejectInfluencerApplication = (appId, reason) => {
+    setInfluencerApplications((prev) =>
+      prev.map((app) =>
+        app.id === appId || app._id === appId
+          ? { ...app, status: 'rejected', reviewNotes: reason || 'Criteria not met' }
+          : app
+      )
+    );
+
+    setUser((prev) => {
+      if (prev && (prev._id === appId || prev.id === appId)) {
+        return { ...prev, role: 'user', influencerStatus: 'rejected' };
+      }
+      return prev;
+    });
   };
 
   const logout = () => {
@@ -533,7 +643,11 @@ export const AuthProvider = ({ children }) => {
         recordInfluencerCommission,
         allPayoutRequests,
         adminApprovePayout,
-        adminTogglePlanEligibility
+        adminTogglePlanEligibility,
+        influencerApplications,
+        applyInfluencer,
+        approveInfluencerApplication,
+        rejectInfluencerApplication
       }}
     >
       {children}

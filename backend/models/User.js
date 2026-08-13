@@ -37,8 +37,23 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
+      enum: ['user', 'admin', 'influencer'],
       default: 'user'
+    },
+    influencerStatus: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none'
+    },
+    influencerApplication: {
+      socialHandle: { type: String, default: '' },
+      platform: { type: String, default: 'Instagram' },
+      followerCount: { type: String, default: '10K+' },
+      niche: { type: String, default: 'Travel & Lifestyle' },
+      sampleContent: { type: String, default: '' },
+      appliedAt: { type: Date },
+      reviewedAt: { type: Date },
+      reviewNotes: { type: String, default: '' }
     },
     bookedTrips: {
       type: Array,

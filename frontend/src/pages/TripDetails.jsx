@@ -82,10 +82,10 @@ const TripDetails = () => {
   return (
     <div className="min-h-screen bg-brand-light pt-20 pb-24">
       <SEOHead
-        title={`${trip.title} | Itinerary, Dates & Price`}
-        description={`Book ${trip.title} (${trip.duration}). Prices from ₹${trip.price.toLocaleString()}. Includes boutique stays, transfers, certified captain, and 0% EMI.`}
-        canonical={`/trip/${trip.id}`}
-        ogImage={trip.image}
+        title={trip.seo?.seoTitle || `${trip.title} | Itinerary, Dates & Price`}
+        description={trip.seo?.metaDescription || `Book ${trip.title} (${trip.duration}). Prices from ₹${trip.price.toLocaleString()}. Includes boutique stays, transfers, certified captain, and 0% EMI.`}
+        canonical={trip.seo?.canonicalUrl || `/trip/${trip.id}`}
+        ogImage={trip.seo?.ogImage || trip.image}
         jsonLd={combinedSchemas}
       />
 

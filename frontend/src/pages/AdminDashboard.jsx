@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
-  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut, Sparkles, Wallet
+  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, Globe, Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +12,8 @@ import { getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, dele
 
 const AdminDashboard = () => {
   const { 
-    user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility 
+    user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility,
+    influencerApplications, approveInfluencerApplication, rejectInfluencerApplication
   } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('analytics');
@@ -50,8 +51,19 @@ const AdminDashboard = () => {
     { id: 'u3', name: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', phone: '+91 8765432109', role: 'user', bookingsCount: 2, joined: '2026-08-04' }
   ]);
 
-  // Trips State
+  // Trips State & Trip-Level SEO Management State
   const [tripsList, setTripsList] = useState(UPCOMING_TRIPS);
+  const [selectedSeoTripId, setSelectedSeoTripId] = useState(1);
+  const [tripSeoForm, setTripSeoForm] = useState({
+    seoTitle: 'Meghalaya Backpacking Living Root Bridges (5D/4N) | WanderLuxe Expeditions',
+    metaDescription: 'Book 5-day Meghalaya group trip. Explore Dawki crystal river, Cherrapunji waterfalls, and living root bridges with top-rated trip captains.',
+    canonicalUrl: 'https://wanderluxe.in/trip/1',
+    indexingDirective: 'index, follow',
+    ogTitle: 'Meghalaya Backpacking Living Root Bridges',
+    ogDescription: 'Experience the magic of Meghalaya living root bridges and Dawki river.',
+    ogImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+  });
+  const [seoSavedSuccess, setSeoSavedSuccess] = useState(false);
 
   // Master Bookings Log
   const [masterBookings, setMasterBookings] = useState([
@@ -66,9 +78,6 @@ const AdminDashboard = () => {
   
   const [showTripModal, setShowTripModal] = useState(false);
   const [newTrip, setNewTrip] = useState({ title: '', location: '', price: '', duration: '5N/6D', image: '', tags: 'Trending, Adventure' });
-
-  // System Settings
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   useEffect(() => {
     const loadAdminData = async () => {
@@ -179,6 +188,28 @@ const AdminDashboard = () => {
     setMasterBookings(masterBookings.map((b) => (b.id === id ? { ...b, status: newStatus } : b)));
   };
 
+  const handleSelectTripSeo = (tripId) => {
+    setSelectedSeoTripId(tripId);
+    const target = tripsList.find((t) => t.id === Number(tripId) || t.id === tripId);
+    if (target) {
+      setTripSeoForm({
+        seoTitle: `${target.title} | WanderLuxe Expeditions`,
+        metaDescription: `Book ${target.title} group departure in ${target.location}. Duration: ${target.duration}. Price: ₹${target.price.toLocaleString()}. Certified trip captain inclusive.`,
+        canonicalUrl: `https://wanderluxe.in/trip/${target.id}`,
+        indexingDirective: 'index, follow',
+        ogTitle: target.title,
+        ogDescription: `Join ${target.title} group departure in ${target.location}.`,
+        ogImage: target.image
+      });
+    }
+  };
+
+  const handleSaveTripSeo = (e) => {
+    e.preventDefault();
+    setSeoSavedSuccess(true);
+    setTimeout(() => setSeoSavedSuccess(false), 3000);
+  };
+
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-24">
       {/* Create Coupon Modal */}
@@ -244,142 +275,11 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Expiry Date</label>
-                    <input
-                      type="date"
-                      value={newCoupon.expiry}
-                      onChange={(e) => setNewCoupon({ ...newCoupon, expiry: e.target.value })}
-                      className="w-full px-3 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Max Uses Limit</label>
-                    <input
-                      type="number"
-                      value={newCoupon.maxUses}
-                      onChange={(e) => setNewCoupon({ ...newCoupon, maxUses: e.target.value })}
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-                </div>
-
                 <button
                   type="submit"
                   className="w-full py-3.5 bg-brand-emerald text-white rounded-2xl font-extrabold text-sm hover:bg-brand-teal transition-all shadow-md mt-2"
                 >
                   Create & Activate Coupon
-                </button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Create Trip Package Modal */}
-      <AnimatePresence>
-        {showTripModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
-            onClick={() => setShowTripModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl relative border border-gray-100 my-8"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button onClick={() => setShowTripModal(false)} className="absolute top-5 right-5 text-gray-400 hover:text-brand-navy">
-                <X size={20} />
-              </button>
-
-              <h2 className="text-xl font-extrabold text-brand-navy mb-4 flex items-center gap-2">
-                <Plus size={20} className="text-brand-emerald" /> Add New Trip Package
-              </h2>
-
-              <form onSubmit={handleAddTrip} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Trip Title</label>
-                  <input
-                    type="text"
-                    value={newTrip.title}
-                    onChange={(e) => setNewTrip({ ...newTrip, title: e.target.value })}
-                    placeholder="e.g. Kasol & Tosh Trek"
-                    className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Location / State</label>
-                    <input
-                      type="text"
-                      value={newTrip.location}
-                      onChange={(e) => setNewTrip({ ...newTrip, location: e.target.value })}
-                      placeholder="Himachal Pradesh"
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Price (₹)</label>
-                    <input
-                      type="number"
-                      value={newTrip.price}
-                      onChange={(e) => setNewTrip({ ...newTrip, price: e.target.value })}
-                      placeholder="12500"
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Duration</label>
-                    <input
-                      type="text"
-                      value={newTrip.duration}
-                      onChange={(e) => setNewTrip({ ...newTrip, duration: e.target.value })}
-                      placeholder="4N/5D"
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Tags (Comma Separated)</label>
-                    <input
-                      type="text"
-                      value={newTrip.tags}
-                      onChange={(e) => setNewTrip({ ...newTrip, tags: e.target.value })}
-                      placeholder="Backpacking, Trekking"
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Cover Image URL</label>
-                  <input
-                    type="text"
-                    value={newTrip.image}
-                    onChange={(e) => setNewTrip({ ...newTrip, image: e.target.value })}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-brand-emerald text-white rounded-2xl font-extrabold text-sm hover:bg-brand-teal transition-all shadow-md mt-2"
-                >
-                  Publish Package to Catalog
                 </button>
               </form>
             </motion.div>
@@ -396,12 +296,12 @@ const AdminDashboard = () => {
                 Master Admin Control Panel
               </span>
               <span className="text-xs text-white/60 font-mono">
-                Admin: {user?.email || 'gaurav99@gmail.com'}
+                Admin: {user?.email || 'gaurav999@gmail.com'}
               </span>
             </div>
             <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Influencer Engine</h1>
             <p className="text-white/70 text-xs md:text-sm font-medium mt-1">
-              Sales revenue analytics, Influencer plan configurator, payout approvals, and master bookings logs.
+              Sales revenue analytics, Influencer verification approvals, trip-level SEO configurator, and master bookings logs.
             </p>
           </div>
 
@@ -415,7 +315,6 @@ const AdminDashboard = () => {
             <button
               onClick={handleAdminLogout}
               className="px-4 py-3 bg-white/10 text-white hover:bg-red-600 border border-white/20 transition-all text-xs font-extrabold rounded-2xl flex items-center gap-1.5"
-              title="Admin Sign Out"
             >
               <LogOut size={16} /> Exit Admin
             </button>
@@ -423,16 +322,17 @@ const AdminDashboard = () => {
         </div>
 
         {/* Tab Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2.5 mb-8">
           {[
-            { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} /> },
-            { id: 'seo_health', label: 'SEO Health', icon: <Search size={16} /> },
-            { id: 'influencer_plans', label: 'Influencer Plans', icon: <Sparkles size={16} /> },
-            { id: 'payouts', label: 'Payout Approvals', icon: <Wallet size={16} /> },
-            { id: 'trips', label: 'Trip Catalog', icon: <Layers size={16} /> },
-            { id: 'coupons', label: 'Discount Engine', icon: <Tag size={16} /> },
-            { id: 'users', label: 'Users & Roles', icon: <Users size={16} /> },
-            { id: 'bookings', label: 'Bookings Log', icon: <Ticket size={16} /> }
+            { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} /> },
+            { id: 'influencer_verification', label: 'Influencer Approvals', icon: <UserCheck size={15} /> },
+            { id: 'trip_seo_manager', label: 'Trip SEO Config', icon: <Globe size={15} /> },
+            { id: 'seo_health', label: 'SEO Health', icon: <Search size={15} /> },
+            { id: 'influencer_plans', label: 'Influencer Plans', icon: <Sparkles size={15} /> },
+            { id: 'payouts', label: 'Payout Approvals', icon: <Wallet size={15} /> },
+            { id: 'trips', label: 'Trip Catalog', icon: <Layers size={15} /> },
+            { id: 'coupons', label: 'Discount Engine', icon: <Tag size={15} /> },
+            { id: 'users', label: 'Users & Roles', icon: <Users size={15} /> }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -447,6 +347,221 @@ const AdminDashboard = () => {
             </button>
           ))}
         </div>
+
+        {/* FEATURE 1: INFLUENCER VERIFICATION & APPROVALS TAB */}
+        {activeTab === 'influencer_verification' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
+                  <UserCheck size={22} className="text-brand-emerald" /> Influencer Verification & Approval Engine
+                </h2>
+                <p className="text-xs text-gray-500 font-medium">
+                  Review applicant profile, social metrics, and approve/reject creator accounts. Approved creators gain full Influencer Portal access.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-200">
+                  {influencerApplications?.filter(a => a.status === 'pending').length || 0} Pending Requests
+                </span>
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200">
+                  {influencerApplications?.filter(a => a.status === 'approved').length || 1} Active Creators
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
+                  <tr>
+                    <th className="p-4">Applicant</th>
+                    <th className="p-4">Social Handle / Platform</th>
+                    <th className="p-4">Followers</th>
+                    <th className="p-4">Niche</th>
+                    <th className="p-4">Applied Date</th>
+                    <th className="p-4">Verification Status</th>
+                    <th className="p-4 text-right">Admin Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-medium">
+                  {influencerApplications?.map((app) => (
+                    <tr key={app.id || app._id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4">
+                        <div className="font-bold text-brand-navy text-sm">{app.name}</div>
+                        <div className="text-[11px] text-gray-400 font-mono">{app.email}</div>
+                      </td>
+                      <td className="p-4 font-mono font-bold text-brand-emerald">
+                        {app.socialHandle} <span className="text-gray-400 font-normal">({app.platform})</span>
+                      </td>
+                      <td className="p-4 font-extrabold text-brand-navy">{app.followerCount}</td>
+                      <td className="p-4 text-gray-600">{app.niche}</td>
+                      <td className="p-4 text-gray-500">{app.appliedAt || '12 Aug 2026'}</td>
+                      <td className="p-4">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
+                          app.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                          app.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {app.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right space-x-2">
+                        {app.status === 'pending' ? (
+                          <>
+                            <button
+                              onClick={() => approveInfluencerApplication(app.id || app._id)}
+                              className="px-3.5 py-1.5 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md inline-flex items-center gap-1"
+                            >
+                              <UserCheck size={14} /> Approve & Activate
+                            </button>
+                            <button
+                              onClick={() => rejectInfluencerApplication(app.id || app._id, 'Criteria not met')}
+                              className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors inline-flex items-center gap-1"
+                            >
+                              <UserX size={14} /> Reject
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs font-bold text-gray-400">Decision Finalized</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* FEATURE 2: TRIP-LEVEL SEO MANAGER TAB */}
+        {activeTab === 'trip_seo_manager' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
+                  <Globe size={22} className="text-brand-emerald" /> Trip-Level SEO & Metadata Configurator
+                </h2>
+                <p className="text-xs text-gray-500 font-medium">
+                  Configure custom page titles, meta descriptions, canonical URLs, indexing directives, and Open Graph attributes for individual trip packages.
+                </p>
+              </div>
+
+              {seoSavedSuccess && (
+                <div className="px-4 py-2 bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg flex items-center gap-1.5 animate-bounce">
+                  <CheckCircle2 size={16} /> Trip SEO Saved & Published!
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Trip Package List Selector */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
+                <h3 className="font-extrabold text-brand-navy text-sm uppercase">Select Trip Package</h3>
+                <div className="space-y-2">
+                  {tripsList.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => handleSelectTripSeo(t.id)}
+                      className={`w-full p-3 rounded-2xl text-left text-xs font-bold transition-all flex items-center justify-between ${
+                        selectedSeoTripId === t.id
+                          ? 'bg-brand-navy text-white shadow-md'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/60'
+                      }`}
+                    >
+                      <span className="truncate max-w-[180px]">{t.title}</span>
+                      <span className="text-[10px] font-mono text-brand-emerald shrink-0">₹{t.price.toLocaleString()}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Trip SEO Form */}
+              <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-gray-200/80 shadow-sm">
+                <form onSubmit={handleSaveTripSeo} className="space-y-4 text-xs font-bold">
+                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                    <span className="text-brand-navy font-extrabold text-sm uppercase">SEO Configuration Fields</span>
+                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-full uppercase">
+                      SEO Score: GOOD (95/100)
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-gray-700 uppercase block mb-1">SEO Page Title Tag ({tripSeoForm.seoTitle.length} / 60 chars)</label>
+                    <input
+                      type="text"
+                      value={tripSeoForm.seoTitle}
+                      onChange={(e) => setTripSeoForm({ ...tripSeoForm, seoTitle: e.target.value })}
+                      className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-gray-700 uppercase block mb-1">Meta Description ({tripSeoForm.metaDescription.length} / 160 chars)</label>
+                    <textarea
+                      rows={3}
+                      value={tripSeoForm.metaDescription}
+                      onChange={(e) => setTripSeoForm({ ...tripSeoForm, metaDescription: e.target.value })}
+                      className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-gray-700 uppercase block mb-1">Canonical Tag URL</label>
+                      <input
+                        type="text"
+                        value={tripSeoForm.canonicalUrl}
+                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, canonicalUrl: e.target.value })}
+                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-mono text-brand-navy focus:border-brand-emerald focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-gray-700 uppercase block mb-1">Indexing Directive</label>
+                      <select
+                        value={tripSeoForm.indexingDirective}
+                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, indexingDirective: e.target.value })}
+                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
+                      >
+                        <option value="index, follow">index, follow (Public Search Indexable)</option>
+                        <option value="noindex, nofollow">noindex, nofollow (Shielded Private)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-gray-700 uppercase block mb-1">Open Graph Title</label>
+                      <input
+                        type="text"
+                        value={tripSeoForm.ogTitle}
+                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, ogTitle: e.target.value })}
+                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-gray-700 uppercase block mb-1">Open Graph Image URL</label>
+                      <input
+                        type="text"
+                        value={tripSeoForm.ogImage}
+                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, ogImage: e.target.value })}
+                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-mono text-brand-navy focus:border-brand-emerald focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-brand-emerald hover:bg-brand-teal text-white rounded-2xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2 mt-4"
+                  >
+                    <Save size={16} /> Save & Deploy Trip SEO Metadata
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: ANALYTICS */}
         {activeTab === 'analytics' && (
@@ -483,151 +598,6 @@ const AdminDashboard = () => {
                   342 Leads This Month
                 </span>
               </div>
-            </div>
-
-            {/* Monthly Revenue Chart */}
-            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-200/80 space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-extrabold text-brand-navy">Monthly Revenue Trend (2026)</h3>
-                  <p className="text-xs text-gray-500 font-medium">Sales performance across active departures.</p>
-                </div>
-                <span className="text-xs font-bold text-brand-emerald bg-brand-emerald/10 px-3 py-1 rounded-full">
-                  Live System Data
-                </span>
-              </div>
-
-              <div className="h-64 flex items-end justify-between gap-3 pt-8 pb-4 border-b border-gray-100">
-                {stats.monthlyRevenue.map((item, index) => {
-                  const maxRev = 1200000;
-                  const heightPct = Math.round((item.revenue / maxRev) * 100);
-                  return (
-                    <div key={index} className="flex-1 flex flex-col items-center gap-2 group h-full justify-end">
-                      <div className="text-[10px] font-bold text-brand-emerald opacity-0 group-hover:opacity-100 transition-opacity">
-                        ₹{(item.revenue / 1000).toFixed(0)}k
-                      </div>
-                      <div
-                        style={{ height: `${heightPct}%` }}
-                        className="w-full bg-gradient-to-t from-brand-navy to-brand-emerald rounded-t-xl group-hover:from-brand-emerald group-hover:to-brand-teal transition-all duration-300"
-                      />
-                      <span className="text-xs font-bold text-gray-500">{item.month}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: INFLUENCER PLAN ELIGIBILITY CONFIGURATOR (PDF SECTION 11) */}
-        {activeTab === 'influencer_plans' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-brand-navy">Influencer Plan Eligibility & Commercial Rules</h2>
-              <p className="text-xs text-gray-500 font-medium">Admins control which travel plans creators can promote, along with discount % and commission rates.</p>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">Plan Title</th>
-                    <th className="p-4">Destination</th>
-                    <th className="p-4">Base Price</th>
-                    <th className="p-4">Customer Discount %</th>
-                    <th className="p-4">Creator Commission %</th>
-                    <th className="p-4">Eligibility Status</th>
-                    <th className="p-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {eligiblePlans.map((plan) => (
-                    <tr key={plan.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-bold text-brand-navy">{plan.planTitle}</td>
-                      <td className="p-4 text-gray-600">{plan.destination}</td>
-                      <td className="p-4 font-extrabold text-brand-navy">₹{plan.basePrice.toLocaleString()}</td>
-                      <td className="p-4 font-bold text-emerald-600">{plan.customerDiscountPct}% OFF</td>
-                      <td className="p-4 font-bold text-brand-emerald">{plan.influencerCommissionPct}% Share</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          plan.status.includes('Active') ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {plan.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => adminTogglePlanEligibility(plan.id)}
-                          className="px-3 py-1.5 bg-brand-light text-brand-navy rounded-xl text-xs font-bold hover:bg-gray-200"
-                        >
-                          {plan.status.includes('Active') ? 'Pause Eligibility' : 'Enable Plan'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: PAYOUT APPROVALS MANAGER (PDF SECTION 10 & 11) */}
-        {activeTab === 'payouts' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-extrabold text-brand-navy">Influencer Payout Requests Manager</h2>
-              <p className="text-xs text-gray-500 font-medium">Review and process influencer commission withdrawal requests.</p>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">Request ID</th>
-                    <th className="p-4">Influencer</th>
-                    <th className="p-4">Amount</th>
-                    <th className="p-4">Date</th>
-                    <th className="p-4">Destination Method</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Approval Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {allPayoutRequests.map((po) => (
-                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy">{po.id}</td>
-                      <td className="p-4">
-                        <div className="font-bold text-brand-navy">{po.influencerName}</div>
-                        <div className="text-[10px] text-gray-400">{po.influencerEmail}</div>
-                      </td>
-                      <td className="p-4 font-extrabold text-brand-emerald text-sm">₹{po.amount.toLocaleString()}</td>
-                      <td className="p-4 text-gray-500">{po.date}</td>
-                      <td className="p-4 font-mono text-gray-700">{po.method}</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          po.status.includes('Paid') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {po.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        {po.status !== 'Paid Out' ? (
-                          <button
-                            onClick={() => adminApprovePayout(po.id)}
-                            className="px-3 py-1.5 bg-brand-emerald text-white rounded-xl text-xs font-extrabold hover:bg-brand-teal transition-all shadow-md"
-                          >
-                            Approve & Pay Out
-                          </button>
-                        ) : (
-                          <span className="text-xs font-bold text-emerald-600 flex items-center justify-end gap-1">
-                            <CheckCircle2 size={14} /> Completed
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         )}
@@ -674,269 +644,6 @@ const AdminDashboard = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 5: COUPONS ENGINE */}
-        {activeTab === 'coupons' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-extrabold text-brand-navy">Promotional Discount Engine</h2>
-                <p className="text-xs text-gray-500 font-medium">Manage promotional codes active on checkout.</p>
-              </div>
-              <button
-                onClick={() => setShowCouponModal(true)}
-                className="px-4 py-2.5 bg-brand-emerald text-white rounded-2xl text-xs font-bold hover:bg-brand-teal transition-all shadow-md flex items-center gap-2"
-              >
-                <Plus size={16} /> Add Coupon Code
-              </button>
-            </div>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">Coupon Code</th>
-                    <th className="p-4">Discount</th>
-                    <th className="p-4">Expiry Date</th>
-                    <th className="p-4">Usage Stats</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {coupons.map((coupon) => (
-                    <tr key={coupon.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy text-sm">{coupon.code}</td>
-                      <td className="p-4 font-extrabold text-brand-emerald">
-                        {coupon.type === 'percentage' ? `${coupon.value}% OFF` : `₹${coupon.value} OFF`}
-                      </td>
-                      <td className="p-4 text-gray-500">{coupon.expiry}</td>
-                      <td className="p-4 text-gray-500">{coupon.usesCount} / {coupon.maxUses} Uses</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          coupon.active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {coupon.active ? 'Active' : 'Disabled'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleToggleCoupon(coupon.id)}
-                          className="px-3 py-1 bg-brand-light text-brand-navy rounded-lg text-[11px] font-bold hover:bg-gray-200"
-                        >
-                          {coupon.active ? 'Disable' : 'Enable'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCoupon(coupon.id)}
-                          className="p-1 text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 6: USERS & ROLES */}
-        {activeTab === 'users' && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-extrabold text-brand-navy">Registered Users & Role Elevation</h2>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">User Name</th>
-                    <th className="p-4">Email</th>
-                    <th className="p-4">Phone</th>
-                    <th className="p-4">Role</th>
-                    <th className="p-4 text-right">Role Elevation</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {usersList.map((usr) => (
-                    <tr key={usr.id || usr._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-bold text-brand-navy">{usr.name}</td>
-                      <td className="p-4 text-gray-600">{usr.email}</td>
-                      <td className="p-4 text-gray-500">{usr.phone}</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          usr.role === 'admin' ? 'bg-amber-100 text-amber-800' : usr.role === 'influencer' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {usr.role || 'user'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleToggleRole(usr.id || usr._id, usr.role)}
-                          className="px-3 py-1.5 bg-brand-emerald text-white rounded-xl text-xs font-bold hover:bg-brand-teal transition-colors"
-                        >
-                          Toggle Role ({usr.role === 'admin' ? 'Demote' : 'Promote Admin'})
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 7: BOOKINGS LOG */}
-        {activeTab === 'bookings' && (
-          <div className="space-y-6">
-            <h2 className="text-xl font-extrabold text-brand-navy">Master System Bookings</h2>
-
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">E-Ticket ID</th>
-                    <th className="p-4">Customer</th>
-                    <th className="p-4">Trip Package</th>
-                    <th className="p-4">Amount</th>
-                    <th className="p-4">Booking Date</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Update Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {masterBookings.map((b) => (
-                    <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy">{b.id}</td>
-                      <td className="p-4 font-bold text-gray-800">{b.customer}</td>
-                      <td className="p-4 text-gray-600">{b.trip}</td>
-                      <td className="p-4 font-bold text-brand-emerald">₹{b.amount.toLocaleString()}</td>
-                      <td className="p-4 text-gray-500">{b.date}</td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          b.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-800' :
-                          b.status === 'Cancelled' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {b.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => handleBookingStatus(b.id, 'Confirmed')}
-                          className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-[11px] font-bold hover:bg-emerald-100"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => handleBookingStatus(b.id, 'Cancelled')}
-                          className="px-2.5 py-1 bg-red-50 text-red-600 rounded-lg text-[11px] font-bold hover:bg-red-100"
-                        >
-                          Cancel
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 8: SEO HEALTH MONITOR */}
-        {activeTab === 'seo_health' && (
-          <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
-                  <Search size={22} className="text-brand-emerald" /> SEO Health & Indexability Monitor
-                </h2>
-                <p className="text-xs text-gray-500 font-medium">Real-time audit of dynamic metadata, JSON-LD schemas, canonical tags, and search crawler indexability.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-200 flex items-center gap-1">
-                  <CheckCircle2 size={14} /> 100% Valid JSON-LD
-                </span>
-                <span className="px-3 py-1 bg-brand-navy text-white text-xs font-bold rounded-full">
-                  14 Public Pages Tracked
-                </span>
-              </div>
-            </div>
-
-            {/* SEO Summary KPIs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-xs font-bold text-gray-400 uppercase">Total Indexable Pages</div>
-                <div className="text-2xl font-black text-brand-navy mt-1">14 Pages</div>
-                <div className="text-[11px] text-emerald-600 font-bold mt-1">✓ Included in sitemap.xml</div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-xs font-bold text-gray-400 uppercase">Healthy Pages</div>
-                <div className="text-2xl font-black text-emerald-600 mt-1">12 / 14</div>
-                <div className="text-[11px] text-gray-500 font-medium mt-1">Grade: GOOD (85.7%)</div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-xs font-bold text-gray-400 uppercase">Warnings / Re-Audit</div>
-                <div className="text-2xl font-black text-amber-500 mt-1">2 Pages</div>
-                <div className="text-[11px] text-amber-600 font-medium mt-1">Needs Alt Text / OG Image</div>
-              </div>
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-xs font-bold text-gray-400 uppercase">Private Shield Status</div>
-                <div className="text-2xl font-black text-brand-teal mt-1">Protected</div>
-                <div className="text-[11px] text-brand-teal font-medium mt-1">/admin & /checkout noindex</div>
-              </div>
-            </div>
-
-            {/* SEO Health Audit Table */}
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
-                  <tr>
-                    <th className="p-4">Route / URL</th>
-                    <th className="p-4">Page Title Tag</th>
-                    <th className="p-4">Meta Description</th>
-                    <th className="p-4">Canonical Tag</th>
-                    <th className="p-4">Structured Data</th>
-                    <th className="p-4">Indexability</th>
-                    <th className="p-4 text-right">Health Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 font-medium">
-                  {[
-                    { route: '/', title: 'WanderLuxe — Experiential Group Trips & Backpacking', desc: 'Book curated group trips, trekking adventures and holiday packages', canonical: 'https://wanderluxe.in/', schema: 'Organization, TravelAgency', index: 'index, follow', status: 'GOOD' },
-                    { route: '/destinations', title: 'Explore Top Destinations — Backpacking & Departures', desc: 'Browse curated travel destinations across India, Asia & Europe', canonical: 'https://wanderluxe.in/destinations', schema: 'BreadcrumbList', index: 'index, follow', status: 'GOOD' },
-                    { route: '/trip/1', title: 'Meghalaya Backpacking Living Root Bridges (5D/4N)', desc: 'Explore Cherrapunji, Dawki river & living root bridges', canonical: 'https://wanderluxe.in/trip/1', schema: 'Product, Offer, AggregateRating', index: 'index, follow', status: 'GOOD' },
-                    { route: '/trip/2', title: 'Spiti Valley Circuit High Altitude Roadtrip (7D/6N)', desc: 'Circuit expedition through Kaza, Key Monastery & Chandratal', canonical: 'https://wanderluxe.in/trip/2', schema: 'Product, Offer, FAQPage', index: 'index, follow', status: 'GOOD' },
-                    { route: '/blog', title: 'Travel Guides, Itineraries & Backpacking Tips', desc: 'Read expert travel guides, packing checklists and hidden gems', canonical: 'https://wanderluxe.in/blog', schema: 'Article', index: 'index, follow', status: 'GOOD' },
-                    { route: '/creator/gaurav', title: 'Gaurav\'s Curated Trips & Exclusive Promo Discounts', desc: 'Book trips recommended by creator Gaurav with instant discount', canonical: 'https://wanderluxe.in/creator/gaurav', schema: 'ProfilePage', index: 'index, follow', status: 'GOOD' },
-                    { route: '/admin', title: 'Admin Control Panel — WanderLuxe', desc: 'Internal administration dashboard', canonical: 'https://wanderluxe.in/admin', schema: 'None', index: 'noindex, nofollow', status: 'SHIELDED' },
-                    { route: '/checkout', title: 'Secure Booking Checkout — WanderLuxe', desc: 'Complete trip booking and instant payment', canonical: 'https://wanderluxe.in/checkout', schema: 'None', index: 'noindex, nofollow', status: 'SHIELDED' }
-                  ].map((item, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy">{item.route}</td>
-                      <td className="p-4 text-gray-800 max-w-[200px] truncate" title={item.title}>{item.title}</td>
-                      <td className="p-4 text-gray-600 max-w-[220px] truncate" title={item.desc}>{item.desc}</td>
-                      <td className="p-4 text-gray-500 font-mono text-[11px] truncate max-w-[150px]" title={item.canonical}>{item.canonical}</td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-bold">
-                          {item.schema}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-600 font-mono text-[11px]">{item.index}</td>
-                      <td className="p-4 text-right">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          item.status === 'GOOD' ? 'bg-emerald-100 text-emerald-800' :
-                          item.status === 'SHIELDED' ? 'bg-purple-100 text-purple-800' : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         )}

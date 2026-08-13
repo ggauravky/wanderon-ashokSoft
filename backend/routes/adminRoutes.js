@@ -1,7 +1,8 @@
 import express from 'express';
 import { 
   getAdminStats, getCoupons, createCoupon, 
-  toggleCoupon, deleteCoupon, getAdminUsers, updateUserRole 
+  toggleCoupon, deleteCoupon, getAdminUsers, updateUserRole,
+  getInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication, updateTripSeo
 } from '../controllers/adminController.js';
 import { protect, adminOnly } from '../middlewares/authMiddleware.js';
 
@@ -19,5 +20,12 @@ router.delete('/coupons/:id', deleteCoupon);
 router.get('/users', getAdminUsers);
 router.put('/users/:id/role', updateUserRole);
 
-export default router;
+// Influencer Verification Routes
+router.get('/influencer-applications', getInfluencerApplications);
+router.put('/influencer-applications/:id/approve', approveInfluencerApplication);
+router.put('/influencer-applications/:id/reject', rejectInfluencerApplication);
 
+// Trip-Level SEO Route
+router.put('/trips/:id/seo', updateTripSeo);
+
+export default router;

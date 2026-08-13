@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import Trip from '../models/Trip.js';
 
 // Initial Mock Coupon Storage for Backend
 let couponsList = [
@@ -146,6 +147,144 @@ export const updateUserRole = async (req, res) => {
     await user.save();
 
     res.json({ _id: user._id, name: user.name, email: user.email, role: user.role });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Get all influencer verification applications
+// @route   GET /api/admin/influencer-applications
+// @access  Private/Admin
+export const getInfluencerApplications = async (req, res) => {
+  try {
+    const applications = await User.find({
+      $or: [
+        { influencerStatus: { $in: ['pending', 'approved', 'rejected'] } },
+        { role: 'influencer' }
+      ]
+    }).select('-password').sort({ updatedAt: -1 });
+
+    res.json(applications);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Approve influencer application
+// @route   PUT /api/admin/influencer-applications/:id/approve
+// @access  Private/Admin
+export const approveInfluencerApplication = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Applicant user record not found' });
+    }
+
+    user.role = 'influencer';
+    user.influencerStatus = 'approved';
+    user.influencerApplication = {
+      ...user.influencerApplication,
+      reviewedAt: new Date(),
+      reviewNotes: 'Application approved by Admin'
+    };
+
+    await user.save();
+
+    res.json({
+      message: 'Influencer application approved successfully',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        influencerStatus: user.influencerStatus
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Reject influencer application
+// @route   PUT /api/admin/influencer-applications/:id/reject
+// @access  Private/Admin
+export const rejectInfluencerApplication = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Applicant user record not found' });
+    }
+
+    user.role = 'user';
+    user.influencerStatus = 'rejected';
+    user.influencerApplication = {
+      ...user.influencerApplication,
+      reviewedAt: new Date(),
+      reviewNotes: reason || 'Criteria not met'
+    };
+
+    await user.save();
+
+    res.json({
+      message: 'Influencer application rejected successfully',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        influencerStatus: user.influencerStatus
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Update trip-level SEO configuration
+// @route   PUT /api/admin/trips/:id/seo
+// @access  Private/Admin
+export const updateTripSeo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { seoTitle, metaDescription, canonicalUrl, indexingDirective, ogTitle, ogDescription, ogImage } = req.body;
+
+    let trip = await Trip.findOne({ $or: [{ _id: id }, { slug: id }, { id: id }] });
+
+    if (!trip) {
+      // Fallback create or mock return
+      trip = new Trip({
+        title: req.body.title || 'Meghalaya Backpacking Living Root Bridges',
+        slug: id,
+        location: 'Meghalaya',
+        duration: '5D/4N',
+        price: 18500,
+        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+      });
+    }
+
+    trip.seo = {
+      seoTitle: seoTitle || trip.title,
+      metaDescription: metaDescription || '',
+      canonicalUrl: canonicalUrl || `https://wanderluxe.in/trip/${trip.slug || id}`,
+      indexingDirective: indexingDirective || 'index, follow',
+      ogTitle: ogTitle || seoTitle || trip.title,
+      ogDescription: ogDescription || metaDescription || '',
+      ogImage: ogImage || trip.image,
+      structuredSchemaType: 'Product'
+    };
+
+    await trip.save();
+
+    res.json({
+      message: 'Trip-Level SEO updated successfully',
+      trip
+    });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
   }

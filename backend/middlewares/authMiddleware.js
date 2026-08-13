@@ -43,12 +43,20 @@ export const adminOnly = (req, res, next) => {
   }
 };
 
-// @desc Middleware to enforce Influencer/Creator role server-side
+// @desc Middleware to enforce Influencer/Creator approval status server-side
 export const influencerOnly = (req, res, next) => {
-  if (req.user && (req.user.role === 'influencer' || req.user.role === 'admin' || req.user.email?.toLowerCase() === 'influencer@wanderluxe.in')) {
+  const isApproved = req.user && (
+    req.user.role === 'admin' ||
+    req.user.role === 'influencer' ||
+    req.user.influencerStatus === 'approved' ||
+    req.user.email?.toLowerCase() === 'influencer@wanderluxe.in'
+  );
+
+  if (isApproved) {
     next();
   } else {
-    res.status(403).json({ message: 'Access denied: Creator/Influencer privileges required' });
+    res.status(403).json({ 
+      message: 'Access denied: Your influencer application is pending review or requires Admin approval.' 
+    });
   }
 };
-

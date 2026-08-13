@@ -26,7 +26,7 @@ export const registerUser = async (req, res) => {
     }
 
     const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
-    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL || role === 'influencer';
+    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
 
     // Create user in MongoDB Atlas
     const user = await User.create({
@@ -36,7 +36,14 @@ export const registerUser = async (req, res) => {
       phone: phone || '8542036499',
       address: address || 'Lucknow, UP, India',
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-      role: isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'
+      role: isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : (role === 'influencer' ? 'user' : 'user'),
+      influencerStatus: isInfluencerEmail ? 'approved' : (role === 'influencer' ? 'pending' : 'none'),
+      influencerApplication: role === 'influencer' ? {
+        socialHandle: req.body.socialHandle || '@creator',
+        platform: req.body.platform || 'Instagram',
+        followerCount: req.body.followerCount || '10K+',
+        appliedAt: new Date()
+      } : {}
     });
 
     if (user) {
@@ -48,6 +55,7 @@ export const registerUser = async (req, res) => {
         address: user.address,
         avatar: user.avatar,
         role: user.role,
+        influencerStatus: user.influencerStatus,
         bookedTrips: user.bookedTrips,
         token: generateToken(user._id)
       });
@@ -87,7 +95,8 @@ export const loginUser = async (req, res) => {
         phone: '8542036499',
         address: 'Lucknow, UP, India',
         avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        role: 'admin'
+        role: 'admin',
+        influencerStatus: 'approved'
       });
     }
 
@@ -100,7 +109,8 @@ export const loginUser = async (req, res) => {
         phone: '8542036499',
         address: 'Lucknow, UP, India',
         avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
-        role: 'influencer'
+        role: 'influencer',
+        influencerStatus: 'approved'
       });
     }
 
@@ -114,6 +124,7 @@ export const loginUser = async (req, res) => {
         address: user.address,
         avatar: user.avatar,
         role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'),
+        influencerStatus: user.influencerStatus || (isInfluencerEmail ? 'approved' : 'none'),
         bookedTrips: user.bookedTrips,
         token: generateToken(user._id)
       });
@@ -138,7 +149,8 @@ export const getMe = async (req, res) => {
       const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
       res.json({
         ...user._doc,
-        role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user')
+        role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'),
+        influencerStatus: user.influencerStatus || (isInfluencerEmail ? 'approved' : 'none')
       });
     } else {
       res.status(404).json({ message: 'User not found' });
@@ -178,8 +190,48 @@ export const updateUserProfile = async (req, res) => {
       address: updatedUser.address,
       avatar: updatedUser.avatar,
       role: updatedUser.role,
+      influencerStatus: updatedUser.influencerStatus,
       bookedTrips: updatedUser.bookedTrips,
       token: generateToken(updatedUser._id)
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Submit influencer verification application
+// @route   POST /api/auth/influencer-apply
+// @access  Private
+export const applyInfluencer = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.influencerStatus === 'approved' || user.role === 'influencer') {
+      return res.status(400).json({ message: 'You are already an approved influencer partner' });
+    }
+
+    const { socialHandle, platform, followerCount, niche, sampleContent } = req.body;
+
+    user.influencerStatus = 'pending';
+    user.influencerApplication = {
+      socialHandle: socialHandle || '@creator',
+      platform: platform || 'Instagram',
+      followerCount: followerCount || '10K+',
+      niche: niche || 'Travel & Adventure',
+      sampleContent: sampleContent || '',
+      appliedAt: new Date()
+    };
+
+    await user.save();
+
+    res.status(201).json({
+      message: 'Influencer verification application submitted successfully',
+      influencerStatus: user.influencerStatus,
+      application: user.influencerApplication
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
