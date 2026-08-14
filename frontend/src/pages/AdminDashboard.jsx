@@ -8,7 +8,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
-import { getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, deleteCouponApi, getAdminUsersApi, updateUserRoleApi } from '../services/api';
+import { 
+  getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, 
+  deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi 
+} from '../services/api';
 
 const AdminDashboard = () => {
   const { 
@@ -84,6 +87,18 @@ const AdminDashboard = () => {
         setCoupons(couponsData);
         const usersData = await getAdminUsersApi();
         setUsersList(usersData);
+        const bookingsData = await getAdminBookingsApi();
+        if (Array.isArray(bookingsData) && bookingsData.length > 0) {
+          setMasterBookings(bookingsData.map(b => ({
+            id: b.bookingId || b._id,
+            customer: b.customer?.name || 'Traveler',
+            email: b.customer?.email || '',
+            trip: b.tripSnapshot?.title || 'Expedition',
+            amount: b.pricing?.finalAmount || b.paidAmount || 18500,
+            date: b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : '2026-08-14',
+            status: b.bookingStatus === 'CONFIRMED' ? 'Confirmed' : b.bookingStatus === 'CANCELLED' ? 'Cancelled' : 'Pending'
+          })));
+        }
         if (typeof fetchInfluencerApplications === 'function') {
           await fetchInfluencerApplications();
         }

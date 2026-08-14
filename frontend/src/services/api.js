@@ -213,6 +213,19 @@ export const updateUserRoleApi = async (userId, role) => {
   return data;
 };
 
+export const getAdminBookingsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/bookings`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch admin bookings');
+  }
+  return data;
+};
+
 // Influencer Verification Endpoints (Database-Driven)
 export const getInfluencerApplicationsApi = async () => {
   const response = await fetch(`${API_BASE_URL}/admin/influencer-applications`, {
@@ -316,4 +329,75 @@ export const requestPayoutApi = async (amount, destination) => {
     body: JSON.stringify({ amount, destination })
   });
   return response.json();
+};
+
+// ==========================================
+// REAL BOOKING & RAZORPAY TEST PAYMENT APIS
+// ==========================================
+
+export const createBookingOrderApi = async (bookingPayload) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/create-order`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(bookingPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to initialize booking order');
+  }
+  return data;
+};
+
+export const verifyBookingPaymentApi = async (verificationPayload) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/verify-payment`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(verificationPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Payment verification failed');
+  }
+  return data;
+};
+
+export const getMyBookingsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/bookings/my-bookings`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch user bookings');
+  }
+  return data;
+};
+
+export const getBookingByIdApi = async (bookingId) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch booking details');
+  }
+  return data;
+};
+
+export const verifyBookingTokenApi = async (token) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/verify/${token}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to verify booking token');
+  }
+  return data;
 };

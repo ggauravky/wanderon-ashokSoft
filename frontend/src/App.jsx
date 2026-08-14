@@ -8,6 +8,8 @@ import Signup from './pages/Signup';
 import TripDetails from './pages/TripDetails';
 import Checkout from './pages/Checkout';
 import Profile from './pages/Profile';
+import BookingConfirmation from './pages/BookingConfirmation';
+import BookingVerify from './pages/BookingVerify';
 import Destinations from './pages/Destinations';
 import Contact from './pages/Contact';
 import Blog from './pages/Blog';
@@ -38,6 +40,9 @@ function App() {
             <Route path="signup" element={<Signup />} />
             <Route path="trip/:id" element={<TripDetails />} />
             <Route path="checkout" element={<Checkout />} />
+            <Route path="booking/confirmation/:bookingId" element={<BookingConfirmation />} />
+            <Route path="bookings/:bookingId" element={<BookingConfirmation />} />
+            <Route path="booking/verify/:token" element={<BookingVerify />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Admin Routes */}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   User, Calendar, Mail, Phone, MapPin, Ticket, ShieldCheck, 
@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
+import { getMyBookingsApi } from '../services/api';
 
 const Profile = () => {
   const { user, logout, updateProfile, cancelBooking } = useAuth();
@@ -16,14 +17,16 @@ const Profile = () => {
   const [activeTab, setActiveTab] = useState('bookings');
   const [bookingFilter, setBookingFilter] = useState('All');
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [liveBookings, setLiveBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
   
   // Profile edit state
-  const [name, setName] = useState(user?.name || 'Gaurav Kumar Yadav');
-  const [email, setEmail] = useState(user?.email || 'kumar.gaurav.yadav2007@gmail.com');
-  const [phone, setPhone] = useState(user?.phone || '8542036499');
-  const [address, setAddress] = useState(user?.address || 'Lucknow, UP, India');
-  const [avatar, setAvatar] = useState(user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250');
-  const [emergencyPhone, setEmergencyPhone] = useState('+91 9876543210');
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [address, setAddress] = useState(user?.address || '');
+  const [avatar, setAvatar] = useState(user?.avatar || '');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -32,6 +35,37 @@ const Profile = () => {
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [passSuccess, setPassSuccess] = useState(false);
+
+  // Sync profile state when user session loads
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '');
+      setEmail(user.email || '');
+      setPhone(user.phone || '');
+      setAddress(user.address || '');
+      setAvatar(user.avatar || '');
+    }
+  }, [user]);
+
+  // Fetch real database bookings from MongoDB
+  useEffect(() => {
+    const fetchBookings = async () => {
+      if (!user) return;
+      try {
+        setLoadingBookings(true);
+        const serverBookings = await getMyBookingsApi();
+        if (Array.isArray(serverBookings)) {
+          setLiveBookings(serverBookings);
+        }
+      } catch (err) {
+        console.warn('Could not load live bookings from server:', err.message);
+      } finally {
+        setLoadingBookings(false);
+      }
+    };
+
+    fetchBookings();
+  }, [user]);
 
   if (!user) {
     return (
@@ -83,7 +117,23 @@ const Profile = () => {
   };
 
   // Filter bookings
-  const filteredBookings = (user.bookedTrips || []).filter((b) => {
+  const allBookings = [
+    ...liveBookings.map(b => ({
+      id: b.bookingId || b._id,
+      bookingId: b.bookingId,
+      tripTitle: b.tripSnapshot?.title || b.tripTitle,
+      image: b.tripSnapshot?.image || b.image || 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg',
+      destination: b.tripSnapshot?.destination || b.destination,
+      batchDate: b.tripSnapshot?.batchDate || b.travelDate || b.batchDate || '15 Sep - 20 Sep 2026',
+      paidAmount: b.pricing?.finalAmount || b.paidAmount || b.amount || 18500,
+      status: b.bookingStatus === 'CONFIRMED' ? 'Confirmed' : b.bookingStatus === 'CANCELLED' ? 'Cancelled' : b.status || 'Confirmed',
+      qrCode: b.qrCode?.dataUrl || b.qrCode,
+      raw: b
+    })),
+    ...(user.bookedTrips || []).filter(ub => !liveBookings.some(lb => (lb.bookingId || lb._id) === (ub.bookingId || ub.id)))
+  ];
+
+  const filteredBookings = allBookings.filter((b) => {
     if (bookingFilter === 'All') return true;
     if (bookingFilter === 'Confirmed') return b.status !== 'Cancelled';
     if (bookingFilter === 'Cancelled') return b.status === 'Cancelled';
@@ -351,12 +401,12 @@ const Profile = () => {
                             <span className="text-base font-extrabold text-brand-emerald">₹{booking.paidAmount?.toLocaleString()}</span>
                           </div>
 
-                          <button
-                            onClick={() => setSelectedTicket(booking)}
+                          <Link
+                            to={`/booking/confirmation/${booking.bookingId || booking.id}`}
                             className="px-4 py-2.5 bg-brand-navy text-white rounded-xl text-xs font-bold hover:bg-brand-emerald transition-colors flex items-center gap-1.5 shadow-sm"
                           >
-                            <Ticket size={14} /> E-Ticket
-                          </button>
+                            <QrCode size={14} /> Verified Pass & QR
+                          </Link>
 
                           {booking.status !== 'Cancelled' && (
                             <button

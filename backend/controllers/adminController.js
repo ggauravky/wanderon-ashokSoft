@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Trip from '../models/Trip.js';
+import Booking from '../models/Booking.js';
 
 // Initial Mock Coupon Storage for Backend
 let couponsList = [
@@ -132,6 +133,18 @@ export const getAdminUsers = async (req, res) => {
   try {
     const users = await User.find().select('-password').sort({ createdAt: -1 });
     res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Get all bookings for admin management from MongoDB
+// @route   GET /api/admin/bookings
+// @access  Private/Admin
+export const getAdminBookings = async (req, res) => {
+  try {
+    const bookings = await Booking.find().sort({ createdAt: -1 });
+    res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
   }

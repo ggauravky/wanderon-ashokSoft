@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import influencerRoutes from './routes/influencerRoutes.js';
 import checkoutRoutes from './routes/checkoutRoutes.js';
+import bookingRoutes from './routes/bookingRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/influencer', influencerRoutes);
 app.use('/api/checkout', checkoutRoutes);
+app.use('/api/bookings', bookingRoutes);
 
 app.get('/', (req, res) => {
   res.json({ status: 'OK', message: 'WanderLuxe REST API Server is Active 🚀' });
