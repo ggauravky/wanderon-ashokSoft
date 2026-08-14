@@ -44,12 +44,8 @@ const AdminDashboard = () => {
     { id: 'c4', code: 'FESTIVE20', type: 'percentage', value: 20, expiry: '2026-11-01', maxUses: 100, usesCount: 12, active: false }
   ]);
 
-  // Users State
-  const [usersList, setUsersList] = useState([
-    { id: 'u1', name: 'Gaurav Kumar Yadav (Admin)', email: 'gaurav99@gmail.com', phone: '8542036499', role: 'admin', bookingsCount: 3, joined: '2026-08-01' },
-    { id: 'u2', name: 'Gaurav Kumar Yadav (Influencer)', email: 'influencer@wanderluxe.in', phone: '8542036499', role: 'influencer', bookingsCount: 14, joined: '2026-08-02' },
-    { id: 'u3', name: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', phone: '+91 8765432109', role: 'user', bookingsCount: 2, joined: '2026-08-04' }
-  ]);
+  // Users State (Loaded from MongoDB)
+  const [usersList, setUsersList] = useState([]);
 
   // Trips State & Trip-Level SEO Management State
   const [tripsList, setTripsList] = useState(UPCOMING_TRIPS);
@@ -412,13 +408,13 @@ const AdminDashboard = () => {
                         {app.status === 'pending' ? (
                           <>
                             <button
-                              onClick={() => approveInfluencerApplication(app.id || app._id)}
+                              onClick={() => approveInfluencerApplication(app.userId || app._id || app.id)}
                               className="px-3.5 py-1.5 bg-emerald-500 text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all shadow-md inline-flex items-center gap-1"
                             >
                               <UserCheck size={14} /> Approve & Activate
                             </button>
                             <button
-                              onClick={() => rejectInfluencerApplication(app.id || app._id, 'Criteria not met')}
+                              onClick={() => rejectInfluencerApplication(app.userId || app._id || app.id, 'Criteria not met')}
                               className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors inline-flex items-center gap-1"
                             >
                               <UserX size={14} /> Reject

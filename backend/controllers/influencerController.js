@@ -116,11 +116,11 @@ export const requestPayout = async (req, res) => {
     }
 
     const payout = await Payout.create({
-      influencerId: req.user?._id || 'usr_influencer',
-      influencerName: req.user?.name || 'Gaurav Kumar Yadav',
-      influencerEmail: req.user?.email || 'influencer@wanderluxe.in',
+      influencerId: req.user._id,
+      influencerName: req.user.name,
+      influencerEmail: req.user.email,
       amount: amt,
-      destination: destination || '8542036499@upi',
+      destination: destination || 'Direct Transfer',
       status: 'REQUESTED',
       providerReference: `REQ-${Math.floor(100000 + Math.random() * 900000)}`
     });

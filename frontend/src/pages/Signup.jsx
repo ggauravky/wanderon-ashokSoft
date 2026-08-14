@@ -4,15 +4,15 @@ import { User, Mail, Phone, Lock, Eye, EyeOff, Sparkles, ArrowRight, ShieldCheck
 import { useAuth } from '../contexts/AuthContext';
 
 const Signup = () => {
-  const [name, setName] = useState('Gaurav Kumar Yadav');
-  const [email, setEmail] = useState('kumar.gaurav.yadav2007@gmail.com');
-  const [phone, setPhone] = useState('8542036499');
-  const [password, setPassword] = useState('password123');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { isAuthenticated, signup, demoLogin } = useAuth();
+  const { isAuthenticated, signup } = useAuth();
   const navigate = useNavigate();
 
   // Redirect authenticated user away from signup page
@@ -40,13 +40,6 @@ const Signup = () => {
       setLoading(false);
       setError(err.message || 'Registration failed. Please try again.');
     }
-  };
-
-  const handleDemoSignup = async () => {
-    setLoading(true);
-    await demoLogin();
-    setLoading(false);
-    navigate('/profile', { replace: true });
   };
 
   return (
@@ -99,15 +92,6 @@ const Signup = () => {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleDemoSignup}
-            className="mb-6 w-full py-3 px-4 bg-brand-emerald/10 border border-brand-emerald/30 text-brand-emerald font-bold rounded-2xl hover:bg-brand-emerald hover:text-white transition-all flex items-center justify-center gap-2 text-sm"
-          >
-            <Sparkles size={18} />
-            Quick Demo Registration (Gaurav Kumar Yadav)
-          </button>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-brand-navy mb-1.5">
@@ -119,7 +103,7 @@ const Signup = () => {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Gaurav Kumar Yadav"
+                  placeholder="Your Full Name"
                   className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald text-brand-navy text-sm font-medium"
                   required
                 />
@@ -136,7 +120,7 @@ const Signup = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="kumar.gaurav.yadav2007@gmail.com"
+                  placeholder="name@example.com"
                   className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald text-brand-navy text-sm font-medium"
                   required
                 />
@@ -153,7 +137,7 @@ const Signup = () => {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="8542036499"
+                  placeholder="+91 9876543210"
                   className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald text-brand-navy text-sm font-medium"
                 />
               </div>

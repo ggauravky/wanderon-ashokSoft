@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Please add an email address'],
       unique: true,
       lowercase: true,
+      trim: true,
       match: [
         /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
         'Please add a valid email address'
@@ -51,8 +52,12 @@ const userSchema = new mongoose.Schema(
       followerCount: { type: String, default: '10K+' },
       niche: { type: String, default: 'Travel & Lifestyle' },
       sampleContent: { type: String, default: '' },
+      applicationSubmitted: { type: Boolean, default: false },
       appliedAt: { type: Date },
+      approvedAt: { type: Date },
+      rejectedAt: { type: Date },
       reviewedAt: { type: Date },
+      reviewedBy: { type: String, default: '' },
       reviewNotes: { type: String, default: '' }
     },
     bookedTrips: {

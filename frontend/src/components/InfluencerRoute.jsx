@@ -19,12 +19,11 @@ const InfluencerRoute = ({ children }) => {
     return <Navigate to="/influencer/login" state={{ from: location }} replace />;
   }
 
-  const isOfficialAdmin = user?.role === 'admin' || user?.email?.toLowerCase() === 'gaurav999@gmail.com';
-  const isOfficialTestInfluencer = user?.email?.toLowerCase() === 'influencer@wanderluxe.in';
-  const isApprovedInfluencer = user?.role === 'influencer' && (user?.influencerStatus === 'approved' || !user?.influencerStatus);
+  const isOfficialAdmin = user?.role === 'admin';
+  const isApprovedInfluencer = user?.role === 'influencer' && user?.influencerStatus === 'approved';
 
-  // If applicant is pending approval or rejected, render InfluencerPending screen
-  if (!isOfficialAdmin && !isOfficialTestInfluencer && !isApprovedInfluencer) {
+  // If applicant is pending approval or not approved, render InfluencerPending screen
+  if (!isOfficialAdmin && !isApprovedInfluencer) {
     return <InfluencerPending />;
   }
 

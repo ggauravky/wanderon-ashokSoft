@@ -7,392 +7,43 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'gaurav@999';
 const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
 const INFLUENCER_PASSWORD = process.env.INFLUENCER_PASSWORD || 'influencer123';
 
-// In-Memory Persistent Store to guarantee 100% uptime even if MongoDB Atlas has DNS/network timeout
-const inMemoryUsers = new Map();
-
-// Helper to check if MongoDB is connected and ready
-const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
-
-// @desc    Register a new standard user
+// @desc    Register a new user directly into MongoDB database
 // @route   POST /api/auth/register
 // @access  Public
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, phone, address, role } = req.body;
+    const { name, email, password, phone, address } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please provide name, email, and password' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
+    const isAdminEmail = cleanEmail === ADMIN_EMAIL;
     const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
 
-    // 1. If DB is connected, attempt MongoDB
-    if (isDbConnected()) {
-      try {
-        const userExists = await User.findOne({ email: cleanEmail });
-        if (userExists) {
-          return res.status(400).json({ message: 'User already exists with this email address' });
-        }
-
-        const user = await User.create({
-          name,
-          email: cleanEmail,
-          password,
-          phone: phone || '8542036499',
-          address: address || 'Lucknow, UP, India',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-          role: isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user',
-          influencerStatus: isInfluencerEmail ? 'approved' : 'none',
-          bookedTrips: []
-        });
-
-        if (user) {
-          return res.status(201).json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            address: user.address,
-            avatar: user.avatar,
-            role: user.role,
-            influencerStatus: user.influencerStatus,
-            bookedTrips: user.bookedTrips,
-            token: generateToken(user._id)
-          });
-        }
-      } catch (dbErr) {
-        console.warn('MongoDB query failed, falling back to memory store:', dbErr.message);
-      }
-    }
-
-    // 2. Resilient In-Memory Fallback
-    if (inMemoryUsers.has(cleanEmail)) {
+    const userExists = await User.findOne({ email: cleanEmail });
+    if (userExists) {
       return res.status(400).json({ message: 'User already exists with this email address' });
     }
 
-    const fallbackUser = {
-      _id: 'usr_' + Date.now(),
-      name,
+    const user = await User.create({
+      name: name.trim(),
       email: cleanEmail,
       password,
-      phone: phone || '8542036499',
-      address: address || 'Lucknow, UP, India',
+      phone: phone || '',
+      address: address || '',
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
       role: isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user',
       influencerStatus: isInfluencerEmail ? 'approved' : 'none',
       bookedTrips: []
-    };
-
-    inMemoryUsers.set(cleanEmail, fallbackUser);
-
-    res.status(201).json({
-      _id: fallbackUser._id,
-      name: fallbackUser.name,
-      email: fallbackUser.email,
-      phone: fallbackUser.phone,
-      address: fallbackUser.address,
-      avatar: fallbackUser.avatar,
-      role: fallbackUser.role,
-      influencerStatus: fallbackUser.influencerStatus,
-      bookedTrips: fallbackUser.bookedTrips,
-      token: generateToken(fallbackUser._id)
     });
-  } catch (error) {
-    console.error('Register Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error' });
-  }
-};
 
-// @desc    Register Influencer Application (Status = PENDING)
-// @route   POST /api/auth/influencer-signup
-// @access  Public
-export const registerInfluencer = async (req, res) => {
-  try {
-    const { 
-      name, email, password, phone, address,
-      socialHandle, platform, followerCount, niche, sampleContent 
-    } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please provide name, email, and password' });
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
-
-    // 1. If DB is connected, save to MongoDB
-    if (isDbConnected()) {
-      try {
-        let user = await User.findOne({ email: cleanEmail });
-
-        if (user) {
-          if (user.influencerStatus === 'approved') {
-            return res.status(400).json({ message: 'You are already an approved influencer. Please login directly.' });
-          }
-          if (user.influencerStatus === 'pending') {
-            return res.status(400).json({ message: 'You already have an application under review by our Admin team.' });
-          }
-
-          // Upgrade existing customer account to pending influencer
-          user.influencerStatus = 'pending';
-          user.influencerApplication = {
-            socialHandle: socialHandle || '@creator',
-            platform: platform || 'Instagram',
-            followerCount: followerCount || '10K+',
-            niche: niche || 'Travel & Adventure',
-            sampleContent: sampleContent || '',
-            appliedAt: new Date()
-          };
-          await user.save();
-
-          return res.status(201).json({
-            message: 'Application submitted successfully. Status is PENDING Admin review.',
-            influencerStatus: 'pending',
-            user: {
-              _id: user._id,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              influencerStatus: user.influencerStatus
-            }
-          });
-        }
-
-        // Create new user with PENDING influencer status
-        user = await User.create({
-          name,
-          email: cleanEmail,
-          password,
-          phone: phone || '+91 8542036499',
-          address: address || 'Lucknow, UP, India',
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-          role: 'user', // strictly NOT active influencer until approved
-          influencerStatus: 'pending',
-          influencerApplication: {
-            socialHandle: socialHandle || '@creator',
-            platform: platform || 'Instagram',
-            followerCount: followerCount || '10K+',
-            niche: niche || 'Travel & Adventure',
-            sampleContent: sampleContent || '',
-            appliedAt: new Date()
-          }
-        });
-
-        return res.status(201).json({
-          message: 'Influencer application submitted successfully. Status is PENDING Admin review.',
-          influencerStatus: 'pending',
-          user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            influencerStatus: user.influencerStatus
-          }
-        });
-      } catch (dbErr) {
-        console.warn('MongoDB query failed, saving in memory store:', dbErr.message);
-      }
-    }
-
-    // 2. In-Memory Persistent Fallback
-    const fallbackUser = {
-      _id: 'usr_inf_' + Date.now(),
-      name,
-      email: cleanEmail,
-      password,
-      phone: phone || '+91 8542036499',
-      address: address || 'Lucknow, UP, India',
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-      role: 'user',
-      influencerStatus: 'pending',
-      influencerApplication: {
-        socialHandle: socialHandle || '@creator',
-        platform: platform || 'Instagram',
-        followerCount: followerCount || '10K+',
-        niche: niche || 'Travel & Adventure',
-        sampleContent: sampleContent || '',
-        appliedAt: new Date()
-      },
-      bookedTrips: []
-    };
-
-    inMemoryUsers.set(cleanEmail, fallbackUser);
-
-    res.status(201).json({
-      message: 'Influencer application submitted successfully. Status is PENDING Admin review.',
-      influencerStatus: 'pending',
-      user: {
-        _id: fallbackUser._id,
-        name: fallbackUser.name,
-        email: fallbackUser.email,
-        role: fallbackUser.role,
-        influencerStatus: fallbackUser.influencerStatus
-      }
-    });
-  } catch (error) {
-    console.error('Influencer Signup Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error' });
-  }
-};
-
-// @desc    Authenticate user & get token
-// @route   POST /api/auth/login
-// @access  Public
-export const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Please enter both email and password' });
-    }
-
-    const cleanEmail = email.toLowerCase().trim();
-    const isAdminEmail = cleanEmail === ADMIN_EMAIL || cleanEmail === 'gaurav99@gmail.com';
-    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
-
-    // 1. If DB is connected, attempt MongoDB
-    if (isDbConnected()) {
-      try {
-        let user = await User.findOne({ email: cleanEmail });
-
-        if (!user && isAdminEmail && (password === ADMIN_PASSWORD || password === 'gaurav@99' || password === 'password123')) {
-          user = await User.create({
-            name: 'Gaurav Kumar Yadav (Admin)',
-            email: cleanEmail,
-            password: password,
-            phone: '8542036499',
-            address: 'Lucknow, UP, India',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-            role: 'admin',
-            influencerStatus: 'approved'
-          });
-        }
-
-        if (!user && isInfluencerEmail && (password === INFLUENCER_PASSWORD || password === 'influencer123' || password === 'gaurav123')) {
-          user = await User.create({
-            name: 'Gaurav Kumar Yadav (Influencer)',
-            email: cleanEmail,
-            password: password,
-            phone: '8542036499',
-            address: 'Lucknow, UP, India',
-            avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
-            role: 'influencer',
-            influencerStatus: 'approved'
-          });
-        }
-
-        if (user && (await user.matchPassword(password))) {
-          return res.json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            address: user.address,
-            avatar: user.avatar,
-            role: user.role || (isAdminEmail ? 'admin' : isInfluencerEmail ? 'influencer' : 'user'),
-            influencerStatus: user.influencerStatus || (isInfluencerEmail ? 'approved' : 'none'),
-            bookedTrips: user.bookedTrips,
-            token: generateToken(user._id)
-          });
-        }
-      } catch (dbErr) {
-        console.warn('MongoDB query failed, falling back to memory store:', dbErr.message);
-      }
-    }
-
-    // 2. Resilient In-Memory Fallback
-    if (isAdminEmail && (password === ADMIN_PASSWORD || password === 'gaurav@99' || password === 'password123')) {
-      const adminUser = {
-        _id: 'usr_admin',
-        name: 'Gaurav Kumar Yadav (Admin)',
-        email: cleanEmail,
-        phone: '8542036499',
-        address: 'Lucknow, UP, India',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-        role: 'admin',
-        influencerStatus: 'approved',
-        bookedTrips: []
-      };
-      return res.json({ ...adminUser, token: generateToken(adminUser._id) });
-    }
-
-    if (isInfluencerEmail && (password === INFLUENCER_PASSWORD || password === 'influencer123' || password === 'gaurav123')) {
-      const influencerUser = {
-        _id: 'usr_influencer',
-        name: 'Gaurav Kumar Yadav (Influencer)',
-        email: cleanEmail,
-        phone: '8542036499',
-        address: 'Lucknow, UP, India',
-        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
-        role: 'influencer',
-        influencerStatus: 'approved',
-        bookedTrips: []
-      };
-      return res.json({ ...influencerUser, token: generateToken(influencerUser._id) });
-    }
-
-    const memUser = inMemoryUsers.get(cleanEmail);
-    if (memUser && memUser.password === password) {
-      return res.json({
-        _id: memUser._id,
-        name: memUser.name,
-        email: memUser.email,
-        phone: memUser.phone,
-        address: memUser.address,
-        avatar: memUser.avatar,
-        role: memUser.role,
-        influencerStatus: memUser.influencerStatus,
-        bookedTrips: memUser.bookedTrips,
-        token: generateToken(memUser._id)
-      });
-    }
-
-    res.status(401).json({ message: 'Invalid email or password' });
-  } catch (error) {
-    console.error('Login Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error' });
-  }
-};
-
-// @desc    Get current user profile
-// @route   GET /api/auth/me
-// @access  Private
-export const getMe = async (req, res) => {
-  try {
-    if (req.user) {
-      return res.json(req.user);
-    }
-    res.status(404).json({ message: 'User not found' });
-  } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error' });
-  }
-};
-
-// @desc    Update user profile info
-// @route   PUT /api/auth/profile
-// @access  Private
-export const updateUserProfile = async (req, res) => {
-  try {
-    const user = req.user;
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(500).json({ message: 'Database failed to save user profile.' });
     }
 
-    user.name = req.body.name || user.name;
-    user.phone = req.body.phone || user.phone;
-    user.address = req.body.address || user.address;
-    user.avatar = req.body.avatar || user.avatar;
-
-    if (isDbConnected() && typeof user.save === 'function') {
-      try {
-        await user.save();
-      } catch (e) {
-        console.warn('DB save failed:', e.message);
-      }
-    }
-
-    res.json({
+    res.status(201).json({
       _id: user._id,
       name: user.name,
       email: user.email,
@@ -405,54 +56,299 @@ export const updateUserProfile = async (req, res) => {
       token: generateToken(user._id)
     });
   } catch (error) {
+    console.error('Register Error:', error);
     res.status(500).json({ message: error.message || 'Server Error' });
   }
 };
 
-// @desc    Submit influencer verification application
+// @desc    Submit / Apply for Creator & Influencer Status (Tied to authenticated user's DB ID)
 // @route   POST /api/auth/influencer-apply
 // @access  Private
 export const applyInfluencer = async (req, res) => {
   try {
-    const user = req.user;
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required. Please log in first.' });
+    }
+
+    const { name, socialHandle, platform, followerCount, niche, sampleContent, phone } = req.body;
+
+    const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User record not found in database.' });
+    }
+
+    if (user.influencerStatus === 'approved') {
+      return res.status(400).json({ 
+        message: 'You are already an approved creator partner. Please login via Influencer Portal.',
+        influencerStatus: 'approved'
+      });
+    }
+
+    if (user.influencerStatus === 'pending') {
+      return res.status(400).json({ 
+        message: 'You already have an application under review by our Admin team.',
+        influencerStatus: 'pending'
+      });
+    }
+
+    if (name && name.trim()) {
+      user.name = name.trim();
+    }
+    if (phone && phone.trim()) {
+      user.phone = phone.trim();
     }
 
     user.influencerStatus = 'pending';
     user.influencerApplication = {
-      socialHandle: req.body.socialHandle || '@creator',
-      platform: req.body.platform || 'Instagram',
-      followerCount: req.body.followerCount || '10K+',
-      niche: req.body.niche || 'Travel & Adventure',
-      sampleContent: req.body.sampleContent || '',
-      appliedAt: new Date()
+      socialHandle: socialHandle || '@creator',
+      platform: platform || 'Instagram',
+      followerCount: followerCount || '10K+',
+      niche: niche || 'Travel & Adventure',
+      sampleContent: sampleContent || '',
+      applicationSubmitted: true,
+      appliedAt: new Date(),
+      reviewedAt: null,
+      reviewedBy: '',
+      reviewNotes: ''
     };
 
-    if (isDbConnected() && typeof user.save === 'function') {
-      try {
-        await user.save();
-      } catch (e) {
-        console.warn('DB save failed:', e.message);
-      }
-    }
+    await user.save();
 
     res.status(201).json({
-      message: 'Influencer verification application submitted successfully',
+      message: 'Influencer application submitted successfully. Status is PENDING Admin review.',
+      influencerStatus: 'pending',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        influencerStatus: user.influencerStatus,
+        influencerApplication: user.influencerApplication
+      }
+    });
+  } catch (error) {
+    console.error('Influencer Application Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Authenticate registered user & get JWT session token
+// @route   POST /api/auth/login
+// @access  Public
+export const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please enter both email and password' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const isAdminEmail = cleanEmail === ADMIN_EMAIL;
+    const isInfluencerEmail = cleanEmail === INFLUENCER_EMAIL;
+
+    let user = await User.findOne({ email: cleanEmail });
+
+    // Auto-seed official Admin account if logging in with valid Admin credentials
+    if (!user && isAdminEmail && (password === ADMIN_PASSWORD || password === 'gaurav@99')) {
+      user = await User.create({
+        name: 'Gaurav Kumar Yadav (Admin)',
+        email: cleanEmail,
+        password: password,
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+        role: 'admin',
+        influencerStatus: 'approved'
+      });
+    }
+
+    // Auto-seed official test Influencer account
+    if (!user && isInfluencerEmail && password === INFLUENCER_PASSWORD) {
+      user = await User.create({
+        name: 'Gaurav Kumar Yadav (Influencer)',
+        email: cleanEmail,
+        password: password,
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
+        role: 'influencer',
+        influencerStatus: 'approved'
+      });
+    }
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password. Please check your credentials or register.' });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password.' });
+    }
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      avatar: user.avatar,
+      role: user.role,
       influencerStatus: user.influencerStatus,
-      application: user.influencerApplication
+      influencerApplication: user.influencerApplication,
+      bookedTrips: user.bookedTrips,
+      token: generateToken(user._id)
+    });
+  } catch (error) {
+    console.error('Login Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Dedicated Creator & Influencer Login (Strict database approval check)
+// @route   POST /api/auth/influencer-login
+// @access  Public
+export const influencerLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please enter both creator email and password' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const isMasterInfluencer = cleanEmail === INFLUENCER_EMAIL;
+
+    let user = await User.findOne({ email: cleanEmail });
+
+    if (!user && isMasterInfluencer && password === INFLUENCER_PASSWORD) {
+      user = await User.create({
+        name: 'Gaurav Kumar Yadav (Influencer)',
+        email: cleanEmail,
+        password: password,
+        phone: '8542036499',
+        address: 'Lucknow, UP, India',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
+        role: 'influencer',
+        influencerStatus: 'approved'
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({ 
+        message: 'No account found with this email. Please apply to become an influencer first.' 
+      });
+    }
+
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid password. Please try again.' });
+    }
+
+    // Strict Server-Side Approval State Machine Check
+    if (user.influencerStatus === 'pending') {
+      return res.status(403).json({ 
+        message: 'Your influencer application is currently under review by our Admin team. You will be able to log in once approved.',
+        influencerStatus: 'pending'
+      });
+    }
+
+    if (user.influencerStatus === 'rejected') {
+      return res.status(403).json({ 
+        message: 'Your influencer application was not approved. Please contact support.',
+        influencerStatus: 'rejected'
+      });
+    }
+
+    if (user.influencerStatus !== 'approved' && user.role !== 'influencer') {
+      return res.status(403).json({ 
+        message: 'No approved influencer account found. Please submit your application at the Creator Partner Program.',
+        influencerStatus: 'none'
+      });
+    }
+
+    // Approved Influencer - Issue Session Token
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      role: 'influencer',
+      influencerStatus: 'approved',
+      influencerApplication: user.influencerApplication,
+      token: generateToken(user._id)
+    });
+  } catch (error) {
+    console.error('Influencer Login Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Get current authenticated user profile from MongoDB
+// @route   GET /api/auth/me
+// @access  Private
+export const getMe = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found in database.' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error' });
+  }
+};
+
+// @desc    Update user profile info in MongoDB
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.name = req.body.name || user.name;
+    user.phone = req.body.phone !== undefined ? req.body.phone : user.phone;
+    user.address = req.body.address !== undefined ? req.body.address : user.address;
+    user.avatar = req.body.avatar || user.avatar;
+    if (req.body.password) {
+      user.password = req.body.password;
+    }
+
+    await user.save();
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      avatar: user.avatar,
+      role: user.role,
+      influencerStatus: user.influencerStatus,
+      token: generateToken(user._id)
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
   }
 };
 
-// @desc    Add booking to current user
+// @desc    Add booking to current user in MongoDB
 // @route   POST /api/auth/booking
 // @access  Private
 export const addBooking = async (req, res) => {
   try {
-    const user = req.user;
+    const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -466,14 +362,7 @@ export const addBooking = async (req, res) => {
 
     user.bookedTrips = user.bookedTrips || [];
     user.bookedTrips.unshift(newBooking);
-
-    if (isDbConnected() && typeof user.save === 'function') {
-      try {
-        await user.save();
-      } catch (e) {
-        console.warn('DB save failed:', e.message);
-      }
-    }
+    await user.save();
 
     res.status(201).json(newBooking);
   } catch (error) {
@@ -481,13 +370,13 @@ export const addBooking = async (req, res) => {
   }
 };
 
-// @desc    Cancel user booking
+// @desc    Cancel user booking in MongoDB
 // @route   PUT /api/auth/booking/cancel
 // @access  Private
 export const cancelUserBooking = async (req, res) => {
   try {
     const { bookingId } = req.body;
-    const user = req.user;
+    const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -495,14 +384,7 @@ export const cancelUserBooking = async (req, res) => {
     user.bookedTrips = (user.bookedTrips || []).map((b) =>
       b.id === bookingId ? { ...b, status: 'Cancelled' } : b
     );
-
-    if (isDbConnected() && typeof user.save === 'function') {
-      try {
-        await user.save();
-      } catch (e) {
-        console.warn('DB save failed:', e.message);
-      }
-    }
+    await user.save();
 
     res.json({ message: 'Booking cancelled successfully', bookingId });
   } catch (error) {

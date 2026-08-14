@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const Login = () => {
-  const [email, setEmail] = useState('kumar.gaurav.yadav2007@gmail.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { isAuthenticated, login, demoLogin } = useAuth();
+  const { isAuthenticated, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -41,15 +41,8 @@ const Login = () => {
       }
     } catch (err) {
       setLoading(false);
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.message || 'Invalid email or password.');
     }
-  };
-
-  const handleDemoLogin = async () => {
-    setLoading(true);
-    await demoLogin();
-    setLoading(false);
-    navigate(from, { replace: true });
   };
 
   return (
@@ -69,13 +62,13 @@ const Login = () => {
           <div className="relative z-10">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-semibold text-brand-emerald mb-6">
               <Sparkles size={14} />
-              Welcome Gaurav Kumar Yadav
+              WanderLuxe Travel Portal
             </div>
             <h2 className="text-3xl font-extrabold leading-tight mb-4">
               Your Next Unforgettable Journey Awaits.
             </h2>
             <p className="text-white/80 text-sm leading-relaxed">
-              Log in to access your booked itineraries, exclusive member discounts, and seamless group departures.
+              Log in with your registered email to access your booked itineraries, exclusive member discounts, and seamless group departures.
             </p>
           </div>
 
@@ -93,7 +86,7 @@ const Login = () => {
         <div className="p-8 md:p-12 flex flex-col justify-center">
           <div className="mb-8">
             <h1 className="text-2xl md:text-3xl font-bold text-brand-navy mb-2">Welcome Back</h1>
-            <p className="text-gray-500 text-sm">Enter details to access your WanderLuxe account</p>
+            <p className="text-gray-500 text-sm">Enter your account credentials to sign in</p>
           </div>
 
           {error && (
@@ -101,22 +94,6 @@ const Login = () => {
               {error}
             </div>
           )}
-
-          {/* Quick Demo Login Button */}
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            className="mb-6 w-full py-3 px-4 bg-brand-emerald/10 border border-brand-emerald/30 text-brand-emerald font-bold rounded-2xl hover:bg-brand-emerald hover:text-white transition-all flex items-center justify-center gap-2 group text-sm"
-          >
-            <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
-            1-Click Demo Login as Gaurav
-          </button>
-
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-gray-200"></div>
-            <span className="flex-shrink mx-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">or sign in with email</span>
-            <div className="flex-grow border-t border-gray-200"></div>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -129,7 +106,7 @@ const Login = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="kumar.gaurav.yadav2007@gmail.com"
+                  placeholder="you@example.com"
                   className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/20 text-brand-navy text-sm font-medium transition-all"
                   required
                 />

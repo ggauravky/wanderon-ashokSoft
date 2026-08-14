@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, Sparkles, ArrowRight, KeyRound } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const DEFAULT_ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com';
-const DEFAULT_ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'gaurav@999';
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState(DEFAULT_ADMIN_EMAIL);
-  const [password, setPassword] = useState(DEFAULT_ADMIN_PASSWORD);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,18 +42,6 @@ const AdminLogin = () => {
     }
   };
 
-  const handleAdminQuickLogin = async () => {
-    setLoading(true);
-    try {
-      await adminLogin(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD);
-      setLoading(false);
-      navigate('/admin', { replace: true });
-    } catch (err) {
-      setLoading(false);
-      setError('Admin quick login failed.');
-    }
-  };
-
   return (
     <div className="min-h-screen pt-24 pb-16 flex items-center justify-center bg-brand-navy px-4 relative overflow-hidden">
       {/* Background Orbs */}
@@ -72,7 +59,7 @@ const AdminLogin = () => {
               WanderLuxe Master Administration
             </h2>
             <p className="text-white/70 text-sm leading-relaxed font-medium">
-              Authorized access only. Monitor system analytics, manage trip catalog, configure discount coupons, and manage user roles.
+              Authorized access only. Monitor system analytics, manage trip catalog, configure discount coupons, and verify influencer partners.
             </p>
           </div>
 
@@ -102,24 +89,6 @@ const AdminLogin = () => {
             </div>
           )}
 
-          {/* 1-Click Admin Quick Login Button */}
-          <button
-            type="button"
-            onClick={handleAdminQuickLogin}
-            className="mb-6 w-full py-3.5 px-4 bg-brand-navy text-white font-extrabold rounded-2xl hover:bg-brand-emerald transition-all flex items-center justify-center gap-2 text-xs shadow-lg shadow-brand-navy/20"
-          >
-            <KeyRound size={16} className="text-brand-emerald" />
-            1-Click Admin Login ({DEFAULT_ADMIN_EMAIL})
-          </button>
-
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-gray-200"></div>
-            <span className="flex-shrink mx-4 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
-              or enter admin details
-            </span>
-            <div className="flex-grow border-t border-gray-200"></div>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-extrabold uppercase tracking-wider text-brand-navy mb-1.5">
@@ -131,7 +100,7 @@ const AdminLogin = () => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={DEFAULT_ADMIN_EMAIL}
+                  placeholder="admin@wanderluxe.in"
                   className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald text-brand-navy text-xs font-bold"
                   required
                 />

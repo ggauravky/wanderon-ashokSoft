@@ -201,7 +201,7 @@ const InfluencerDashboard = () => {
                 Creator-Powered Travel Commerce System
               </span>
               <span className="text-xs text-white/60 font-mono">
-                {user?.email || 'influencer@wanderluxe.in'}
+                {user?.email}
               </span>
             </div>
             <h1 className="text-2xl md:text-4xl font-extrabold">Influencer Coupon & Wallet Engine</h1>

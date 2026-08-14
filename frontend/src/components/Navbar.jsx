@@ -14,12 +14,11 @@ const Navbar = () => {
   const navigate = useNavigate();
 
   const isAdmin = 
-    isAuthenticated && 
-    (user?.role === 'admin' || user?.email?.toLowerCase() === 'gaurav99@gmail.com');
+    isAuthenticated && user?.role === 'admin';
 
   const isInfluencer = 
     isAuthenticated && 
-    (user?.role === 'influencer' || user?.role === 'admin' || user?.email?.toLowerCase() === 'influencer@wanderluxe.in');
+    ((user?.role === 'influencer' && user?.influencerStatus === 'approved') || user?.role === 'admin');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -152,12 +151,12 @@ const Navbar = () => {
                       </Link>
 
                       <Link
-                        to="/influencer/login"
+                        to={isInfluencer ? "/influencer" : "/influencer/program"}
                         onClick={() => setUserDropdownOpen(false)}
                         className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-emerald text-white hover:bg-brand-teal transition-colors my-1"
                       >
                         <Sparkles size={16} />
-                        Influencer Portal
+                        {isInfluencer ? "Influencer Dashboard" : "Creator Program"}
                       </Link>
 
                       {isAdmin && (
@@ -263,11 +262,11 @@ const Navbar = () => {
                   </Link>
 
                   <Link
-                    to="/influencer/login"
+                    to={isInfluencer ? "/influencer" : "/influencer/program"}
                     className="flex items-center gap-2 text-brand-emerald font-extrabold py-2"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Sparkles size={18} /> Influencer Portal
+                    <Sparkles size={18} /> {isInfluencer ? "Influencer Dashboard" : "Creator Program"}
                   </Link>
 
                   {isAdmin && (

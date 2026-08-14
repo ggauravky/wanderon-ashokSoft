@@ -22,20 +22,6 @@ export const registerApi = async (userData) => {
   return data;
 };
 
-export const influencerSignupApi = async (influencerData) => {
-  const response = await fetch(`${API_BASE_URL}/auth/influencer-signup`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(influencerData)
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || 'Influencer application submission failed');
-  }
-  return data;
-};
-
 export const loginApi = async (credentials) => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
@@ -46,6 +32,34 @@ export const loginApi = async (credentials) => {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Invalid email or password');
+  }
+  return data;
+};
+
+export const influencerLoginApi = async (credentials) => {
+  const response = await fetch(`${API_BASE_URL}/auth/influencer-login`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(credentials)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Invalid creator credentials or unapproved status.');
+  }
+  return data;
+};
+
+export const influencerApplyApi = async (applicationData) => {
+  const response = await fetch(`${API_BASE_URL}/auth/influencer-apply`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(applicationData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to submit influencer application');
   }
   return data;
 };

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, KeyRound, TrendingUp, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, ArrowRight, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const InfluencerLogin = () => {
-  const [email, setEmail] = useState('influencer@wanderluxe.in');
-  const [password, setPassword] = useState('influencer123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,7 +15,7 @@ const InfluencerLogin = () => {
 
   // If already logged in as approved Influencer, redirect directly to /influencer
   useEffect(() => {
-    if (isAuthenticated && (user?.role === 'influencer' || user?.influencerStatus === 'approved' || user?.email?.toLowerCase() === 'influencer@wanderluxe.in')) {
+    if (isAuthenticated && (user?.role === 'influencer' || user?.influencerStatus === 'approved')) {
       navigate('/influencer', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -37,18 +37,6 @@ const InfluencerLogin = () => {
     } catch (err) {
       setLoading(false);
       setError(err.message || 'Invalid Influencer Credentials.');
-    }
-  };
-
-  const handleQuickMasterLogin = async () => {
-    setLoading(true);
-    try {
-      await influencerLogin('influencer@wanderluxe.in', 'influencer123');
-      setLoading(false);
-      navigate('/influencer', { replace: true });
-    } catch (err) {
-      setLoading(false);
-      setError('Influencer quick login failed.');
     }
   };
 
@@ -98,24 +86,6 @@ const InfluencerLogin = () => {
               {error}
             </div>
           )}
-
-          {/* 1-Click Master Influencer Quick Login */}
-          <button
-            type="button"
-            onClick={handleQuickMasterLogin}
-            className="mb-6 w-full py-3.5 px-4 bg-slate-800 text-white font-extrabold rounded-2xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 text-xs shadow-lg border border-slate-700 hover:border-emerald-500"
-          >
-            <KeyRound size={16} className="text-emerald-400" />
-            1-Click Influencer Login (influencer@wanderluxe.in)
-          </button>
-
-          <div className="relative flex py-2 items-center mb-6">
-            <div className="flex-grow border-t border-slate-800"></div>
-            <span className="flex-shrink mx-4 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              or enter creator credentials
-            </span>
-            <div className="flex-grow border-t border-slate-800"></div>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

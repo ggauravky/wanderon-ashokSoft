@@ -98,7 +98,7 @@ const Footer = () => {
             <h4 className="text-sm font-extrabold uppercase tracking-wider text-white mb-6">Company & Creators</h4>
             <ul className="space-y-3 text-xs text-gray-400 font-medium">
               <li><Link to="/about" className="hover:text-brand-emerald transition-colors">About WanderLuxe</Link></li>
-              <li><Link to="/influencer/login" className="text-brand-emerald font-bold hover:underline flex items-center gap-1.5"><Sparkles size={14} /> Influencer Partner Program</Link></li>
+              <li><Link to="/influencer/program" className="text-brand-emerald font-bold hover:underline flex items-center gap-1.5"><Sparkles size={14} /> Creator Partner Program</Link></li>
               <li><Link to="/contact" className="hover:text-brand-emerald transition-colors">Custom Trip Planner</Link></li>
               <li><Link to="/privacy" className="hover:text-brand-emerald transition-colors">Privacy Policy</Link></li>
               <li><Link to="/terms" className="hover:text-brand-emerald transition-colors">Terms of Service</Link></li>
