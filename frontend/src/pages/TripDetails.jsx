@@ -4,12 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   MapPin, Clock, Star, Calendar, Users, ShieldCheck, Check, X, 
   ChevronDown, ChevronUp, Share2, Heart, Info, ArrowRight, Compass,
-  Sparkles, Camera, PhoneCall, HelpCircle, MessageSquare
+  Sparkles, Camera, PhoneCall, HelpCircle, MessageSquare, CloudSun,
+  Award, CheckCircle2, ShieldAlert
 } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
+import WeatherBadge from '../components/WeatherBadge';
 import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
+import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
 
 const TripDetails = () => {
   const { id } = useParams();
@@ -17,8 +20,10 @@ const TripDetails = () => {
 
   // Find trip by ID or fallback to trip 1
   const trip = UPCOMING_TRIPS.find((t) => t.id === parseInt(id)) || UPCOMING_TRIPS[0];
+  const weather = trip.weather || getDestinationWeather(trip.location);
+  const season = getCurrentSeason();
 
-  const [selectedBatch, setSelectedBatch] = useState(trip.availableBatches[0]);
+  const [selectedBatch, setSelectedBatch] = useState(trip.availableBatches[0] || { dates: '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' });
   const [occupancy, setOccupancy] = useState('Double Sharing');
   const [travelers, setTravelers] = useState(1);
   const [activeTab, setActiveTab] = useState('overview');
@@ -80,7 +85,7 @@ const TripDetails = () => {
   };
 
   return (
-    <div className="min-h-screen bg-brand-light pt-20 pb-24">
+    <div className="min-h-screen bg-brand-light pt-20 pb-28">
       <SEOHead
         title={trip.seo?.seoTitle || `${trip.title} | Itinerary, Dates & Price`}
         description={trip.seo?.metaDescription || `Book ${trip.title} (${trip.duration}). Prices from ₹${trip.price.toLocaleString()}. Includes boutique stays, transfers, certified captain, and 0% EMI.`}
@@ -99,143 +104,186 @@ const TripDetails = () => {
             className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
             onClick={() => setLightboxIndex(null)}
           >
+            <img 
+              src={trip.gallery?.[lightboxIndex] || trip.image} 
+              alt={trip.title} 
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+            />
             <button 
-              className="absolute top-6 right-6 text-white p-3 rounded-full bg-white/10 hover:bg-white/20"
               onClick={() => setLightboxIndex(null)}
+              className="absolute top-6 right-6 text-white p-2 rounded-full bg-white/20 hover:bg-white/30"
             >
               <X size={24} />
             </button>
-            <img 
-              src={trip.gallery?.[lightboxIndex] || trip.image} 
-              alt={`${trip.title} full view photo ${lightboxIndex + 1}`} 
-              className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
-            />
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="container mx-auto px-4 md:px-8">
-        {/* Breadcrumbs Navigation */}
-        <div className="my-4">
-          <Breadcrumbs
-            items={[
-              { name: 'Destinations', path: '/destinations' },
-              { name: trip.shortTitle || trip.title, path: `/trip/${trip.id}` }
-            ]}
-          />
-        </div>
+        <Breadcrumbs items={[
+          { name: 'Destinations', path: '/destinations' },
+          { name: trip.title, path: `/trip/${trip.id}` }
+        ]} />
 
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+        {/* Title & Location Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              {trip.tags?.map((tag) => (
-                <span key={tag} className="bg-brand-emerald/10 text-brand-emerald text-xs font-bold px-3 py-1 rounded-full border border-brand-emerald/20">
-                  {tag}
-                </span>
-              ))}
-              <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                <Star size={14} fill="currentColor" /> {trip.rating} ({trip.reviews} reviews)
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="bg-emerald-500/10 text-brand-emerald text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider border border-emerald-500/20">
+                {trip.tags?.[0] || 'Curated Expedition'}
+              </span>
+              <span className="text-xs font-bold text-gray-500 flex items-center gap-1">
+                <MapPin size={13} className="text-brand-emerald" /> {trip.location}
               </span>
             </div>
-            <h1 className="text-3xl md:text-5xl font-extrabold text-brand-navy leading-tight mb-2">
+            <h1 className="text-2xl sm:text-4xl font-black text-brand-navy leading-tight">
               {trip.title}
             </h1>
-            <p className="flex items-center gap-2 text-gray-600 text-sm font-medium">
-              <MapPin size={18} className="text-brand-emerald" /> {trip.location}
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsLiked(!isLiked)}
-              className={`p-3 rounded-full border transition-all ${
-                isLiked ? 'bg-red-50 border-red-200 text-red-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+              className={`p-3 rounded-2xl border transition-all ${
+                isLiked 
+                  ? 'bg-red-50 border-red-200 text-red-500' 
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
+              title="Save to wishlist"
             >
-              <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
+              <Heart size={18} fill={isLiked ? 'currentColor' : 'none'} />
             </button>
+
             <button 
               onClick={openWhatsAppEnquiry}
-              className="p-3 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 transition-all flex items-center gap-2 text-xs font-bold px-4"
+              className="px-5 py-3 rounded-2xl bg-emerald-500/10 text-emerald-700 border border-emerald-500/30 text-xs font-black flex items-center gap-2 hover:bg-emerald-500/20 transition-all"
             >
-              <MessageSquare size={18} /> Chat Captain
+              <MessageSquare size={16} /> WhatsApp Captain
             </button>
           </div>
         </div>
 
-        {/* Media Gallery Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-3xl overflow-hidden mb-10 shadow-xl border border-gray-200/60">
+        {/* Photo Gallery Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-3xl overflow-hidden mb-8 h-[380px] md:h-[480px]">
           <div 
-            className="md:col-span-2 h-[320px] md:h-[420px] relative group cursor-pointer overflow-hidden"
             onClick={() => setLightboxIndex(0)}
+            className="md:col-span-2 relative group cursor-pointer overflow-hidden bg-slate-200 h-full"
           >
             <img 
-              src={trip.gallery?.[0] || trip.image} 
-              alt={`${trip.title} hero photograph`} 
+              src={trip.image} 
+              alt={trip.title} 
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
             />
-            <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-              <Camera size={14} /> View All Photos
-            </div>
+            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
           </div>
-          <div className="hidden md:grid col-span-2 grid-cols-2 gap-3">
-            {(trip.gallery?.slice(1, 4) || [trip.image, trip.image, trip.image]).map((img, idx) => (
+
+          <div className="hidden md:grid grid-cols-1 gap-3 md:col-span-1 h-full">
+            {(trip.gallery?.slice(1, 3) || [trip.image, trip.image]).map((img, i) => (
               <div 
-                key={idx} 
-                className="h-[203px] relative group cursor-pointer overflow-hidden rounded-xl"
-                onClick={() => setLightboxIndex(idx + 1)}
+                key={i} 
+                onClick={() => setLightboxIndex(i + 1)}
+                className="relative group cursor-pointer overflow-hidden rounded-2xl bg-slate-200 h-full"
               >
                 <img 
                   src={img} 
-                  alt={`${trip.title} gallery view ${idx + 2}`} 
+                  alt={`${trip.title} view ${i + 1}`} 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                 />
               </div>
             ))}
           </div>
+
+          <div className="hidden md:grid grid-cols-1 gap-3 md:col-span-1 h-full">
+            {(trip.gallery?.slice(3, 5) || [trip.image]).map((img, i) => (
+              <div 
+                key={i} 
+                onClick={() => setLightboxIndex(i + 3)}
+                className="relative group cursor-pointer overflow-hidden rounded-2xl bg-slate-200 h-full"
+              >
+                <img 
+                  src={img} 
+                  alt={`${trip.title} view ${i + 3}`} 
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                />
+                {i === 0 && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white text-xs font-black gap-1.5 backdrop-blur-[2px]">
+                    <Camera size={16} /> View Gallery
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Quick Attributes Bar */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200/80 mb-10 grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-          <div className="border-r border-gray-100 last:border-none">
-            <span className="text-xs text-gray-400 font-semibold uppercase block mb-1">Duration</span>
-            <span className="text-base font-bold text-brand-navy flex items-center justify-center gap-1">
-              <Clock size={16} className="text-brand-emerald" /> {trip.duration}
-            </span>
+        {/* Live Weather & Destination Climate Widget */}
+        <div className="bg-gradient-to-r from-brand-navy via-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 text-white mb-10 shadow-xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+              <CloudSun size={32} className="text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-black">{weather.temp}</span>
+                <span className="text-xs text-emerald-300 font-extrabold">{weather.condition}</span>
+              </div>
+              <p className="text-xs text-slate-300 font-medium mt-0.5">{weather.vibe}</p>
+            </div>
           </div>
-          <div className="border-r border-gray-100 last:border-none">
-            <span className="text-xs text-gray-400 font-semibold uppercase block mb-1">Grade</span>
-            <span className="text-base font-bold text-brand-navy">{trip.grade || 'Moderate'}</span>
-          </div>
-          <div className="border-r border-gray-100 last:border-none">
-            <span className="text-xs text-gray-400 font-semibold uppercase block mb-1">Altitude</span>
-            <span className="text-base font-bold text-brand-navy">{trip.altitude || 'As Specified'}</span>
-          </div>
-          <div className="border-r border-gray-100 last:border-none">
-            <span className="text-xs text-gray-400 font-semibold uppercase block mb-1">Age Group</span>
-            <span className="text-base font-bold text-brand-navy">{trip.ageGroup || '18 - 35 Yrs'}</span>
-          </div>
-          <div className="col-span-2 md:col-span-1">
-            <span className="text-xs text-gray-400 font-semibold uppercase block mb-1">Starting Point</span>
-            <span className="text-base font-bold text-brand-navy truncate block">{trip.startingPoint || 'Guwahati'}</span>
+
+          <div className="flex items-center gap-6 border-t md:border-t-0 md:border-l border-white/10 pt-4 md:pt-0 md:pl-8 text-center md:text-left w-full md:w-auto justify-between md:justify-start">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Best Season</span>
+              <span className="text-xs font-black text-white">{weather.bestMonths}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Trek Grade</span>
+              <span className="text-xs font-black text-white">{trip.grade || 'Moderate'}</span>
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Altitude</span>
+              <span className="text-xs font-black text-white">{trip.altitude || '4,900 ft'}</span>
+            </div>
           </div>
         </div>
 
         {/* Main Content Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          {/* Left Column: Details & Accordions */}
-          <div className="lg:col-span-2 space-y-10">
-            {/* Sticky Navigation Tabs */}
-            <div className="sticky top-20 z-30 bg-white/90 backdrop-blur-md rounded-2xl p-2 border border-gray-200/80 shadow-md flex items-center justify-between gap-1 overflow-x-auto">
-              {['overview', 'itinerary', 'inclusions', 'batches', 'faqs'].map((tab) => (
+          {/* Left 2 Cols: Details Tabs, Itinerary, Inclusions */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-4 rounded-2xl bg-white border border-gray-200/80 text-center">
+                <Clock size={18} className="text-brand-emerald mx-auto mb-1" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase block">Duration</span>
+                <span className="text-xs font-black text-brand-navy">{trip.duration}</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200/80 text-center">
+                <Calendar size={18} className="text-brand-emerald mx-auto mb-1" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase block">Next Batch</span>
+                <span className="text-xs font-black text-brand-navy">{trip.nextBatch}</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200/80 text-center">
+                <Users size={18} className="text-brand-emerald mx-auto mb-1" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase block">Age Group</span>
+                <span className="text-xs font-black text-brand-navy">{trip.ageGroup || '18 - 35 Years'}</span>
+              </div>
+              <div className="p-4 rounded-2xl bg-white border border-gray-200/80 text-center">
+                <Star size={18} className="text-amber-400 fill-amber-400 mx-auto mb-1" />
+                <span className="text-[10px] font-bold text-gray-400 uppercase block">Rating</span>
+                <span className="text-xs font-black text-brand-navy">{trip.rating}★ ({trip.reviews})</span>
+              </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-gray-200 gap-6 text-xs font-black uppercase tracking-wider overflow-x-auto pb-1 scrollbar-none">
+              {['overview', 'itinerary', 'inclusions', 'batches'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-2.5 rounded-xl text-xs md:text-sm font-bold capitalize transition-all whitespace-nowrap ${
+                  className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${
                     activeTab === tab 
-                      ? 'bg-brand-emerald text-white shadow-md shadow-brand-emerald/30' 
-                      : 'text-gray-600 hover:text-brand-navy hover:bg-gray-100'
+                      ? 'border-brand-emerald text-brand-emerald' 
+                      : 'border-transparent text-gray-400 hover:text-brand-navy'
                   }`}
                 >
                   {tab}
@@ -243,289 +291,244 @@ const TripDetails = () => {
               ))}
             </div>
 
-            {/* Overview Section */}
-            <section id="overview" className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-200/80">
-              <h2 className="text-2xl font-bold text-brand-navy mb-4">Trip Overview</h2>
-              <p className="text-gray-600 leading-relaxed mb-6 font-medium text-sm md:text-base">
-                {trip.overview}
-              </p>
+            {/* Tab: Overview */}
+            {activeTab === 'overview' && (
+              <div className="space-y-6">
+                <div className="bg-white rounded-3xl p-6 md:p-8 border border-gray-200/80 space-y-4">
+                  <h3 className="text-lg font-black text-brand-navy">Expedition Overview</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 font-medium leading-relaxed">
+                    {trip.overview}
+                  </p>
+                </div>
 
-              <h3 className="text-lg font-bold text-brand-navy mb-3">Key Highlights</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {trip.highlights?.map((h, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3 rounded-2xl bg-brand-light text-brand-navy text-sm font-semibold">
-                    <Sparkles size={18} className="text-brand-emerald shrink-0 mt-0.5" />
-                    <span>{h}</span>
+                {trip.highlights && (
+                  <div className="bg-white rounded-3xl p-6 md:p-8 border border-gray-200/80 space-y-4">
+                    <h3 className="text-lg font-black text-brand-navy">Key Highlights</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {trip.highlights.map((h, i) => (
+                        <div key={i} className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                          <CheckCircle2 size={16} className="text-brand-emerald shrink-0 mt-0.5" />
+                          <span className="text-xs text-gray-700 font-bold">{h}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab: Itinerary */}
+            {activeTab === 'itinerary' && (
+              <div className="space-y-3">
+                {trip.itinerary?.map((item) => (
+                  <div key={item.day} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden">
+                    <button
+                      onClick={() => setOpenDay(openDay === item.day ? null : item.day)}
+                      className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-xl bg-brand-emerald text-white text-xs font-black flex items-center justify-center shrink-0">
+                          D{item.day}
+                        </span>
+                        <span className="text-xs sm:text-sm font-black text-brand-navy">
+                          {item.title}
+                        </span>
+                      </div>
+                      {openDay === item.day ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                    </button>
+
+                    {openDay === item.day && (
+                      <div className="p-4 pt-0 text-xs text-gray-600 font-medium leading-relaxed border-t border-gray-100 mt-2">
+                        <p className="mb-2">{item.description}</p>
+                        {item.meals && (
+                          <span className="inline-block bg-gray-100 text-gray-700 text-[10px] font-bold px-2.5 py-1 rounded-lg">
+                            Meals Included: {item.meals}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            </section>
+            )}
 
-            {/* Day-by-Day Itinerary Section */}
-            <section id="itinerary" className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-200/80">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-brand-navy">Detailed Itinerary</h2>
-                  <p className="text-xs text-gray-500">Day by day breakdown of your expedition</p>
-                </div>
-                <button 
-                  onClick={() => setOpenDay(openDay === null ? 1 : null)}
-                  className="text-xs font-bold text-brand-emerald hover:underline"
-                >
-                  {openDay === null ? 'Expand Day 1' : 'Collapse All'}
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {trip.itinerary?.map((day) => {
-                  const isOpen = openDay === day.day;
-                  return (
-                    <div 
-                      key={day.day} 
-                      className={`border rounded-2xl transition-all overflow-hidden ${
-                        isOpen ? 'border-brand-emerald bg-brand-emerald/5 shadow-md' : 'border-gray-200 bg-white'
-                      }`}
-                    >
-                      <button
-                        onClick={() => setOpenDay(isOpen ? null : day.day)}
-                        className="w-full p-4 text-left flex items-center justify-between gap-4 font-bold text-brand-navy"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-9 h-9 rounded-xl bg-brand-navy text-white text-xs font-extrabold flex items-center justify-center shrink-0">
-                            Day {day.day}
-                          </span>
-                          <span className="text-base">{day.title}</span>
-                        </div>
-                        {isOpen ? <ChevronUp size={20} className="text-brand-emerald" /> : <ChevronDown size={20} className="text-gray-400" />}
-                      </button>
-
-                      <AnimatePresence>
-                        {isOpen && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="px-5 pb-5 pt-1 text-sm text-gray-600 border-t border-brand-emerald/20"
-                          >
-                            <p className="leading-relaxed mb-4">{day.description}</p>
-                            {day.meals && (
-                              <div className="inline-flex items-center gap-2 text-xs font-semibold text-brand-navy bg-white px-3 py-1.5 rounded-full border border-gray-200">
-                                🍽️ Included Meals: <span className="text-brand-emerald">{day.meals}</span>
-                              </div>
-                            )}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* Inclusions vs Exclusions */}
-            <section id="inclusions" className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-200/80">
-              <h2 className="text-2xl font-bold text-brand-navy mb-6">Inclusions & Exclusions</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Inclusions */}
-                <div className="bg-emerald-50/50 rounded-2xl p-5 border border-emerald-100">
-                  <h3 className="text-base font-bold text-emerald-900 mb-4 flex items-center gap-2">
-                    <Check size={20} className="text-emerald-600" /> What's Included
-                  </h3>
-                  <ul className="space-y-3 text-xs md:text-sm text-emerald-950 font-medium">
+            {/* Tab: Inclusions */}
+            {activeTab === 'inclusions' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="bg-white rounded-3xl p-6 border border-gray-200/80 space-y-4">
+                  <div className="flex items-center gap-2 text-brand-emerald font-black text-sm uppercase">
+                    <Check size={18} /> Inclusions
+                  </div>
+                  <ul className="space-y-2.5 text-xs text-gray-600 font-medium">
                     {trip.inclusions?.map((inc, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-2" />
+                        <Check size={14} className="text-brand-emerald shrink-0 mt-0.5" />
                         <span>{inc}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                {/* Exclusions */}
-                <div className="bg-rose-50/50 rounded-2xl p-5 border border-rose-100">
-                  <h3 className="text-base font-bold text-rose-900 mb-4 flex items-center gap-2">
-                    <X size={20} className="text-rose-600" /> What's Excluded
-                  </h3>
-                  <ul className="space-y-3 text-xs md:text-sm text-rose-950 font-medium">
+                <div className="bg-white rounded-3xl p-6 border border-gray-200/80 space-y-4">
+                  <div className="flex items-center gap-2 text-red-500 font-black text-sm uppercase">
+                    <X size={18} /> Exclusions
+                  </div>
+                  <ul className="space-y-2.5 text-xs text-gray-600 font-medium">
                     {trip.exclusions?.map((exc, i) => (
                       <li key={i} className="flex items-start gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0 mt-2" />
+                        <X size={14} className="text-red-400 shrink-0 mt-0.5" />
                         <span>{exc}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
               </div>
-            </section>
+            )}
 
-            {/* Package FAQs Section */}
-            <section id="faqs" className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-200/80 space-y-4">
-              <h2 className="text-2xl font-bold text-brand-navy flex items-center gap-2">
-                <HelpCircle size={22} className="text-brand-emerald" /> Package FAQs & Policies
-              </h2>
-              <div className="space-y-3 text-xs md:text-sm">
-                {tripFaqs.map((faq, i) => (
-                  <div key={i} className="p-4 bg-brand-light rounded-2xl border border-gray-200">
-                    <h3 className="font-extrabold text-brand-navy mb-1">{faq.q}</h3>
-                    <p className="text-gray-600 font-medium">{faq.a}</p>
+            {/* Tab: Batches */}
+            {activeTab === 'batches' && (
+              <div className="space-y-3">
+                {trip.availableBatches?.map((batch) => (
+                  <div
+                    key={batch.id}
+                    onClick={() => setSelectedBatch(batch)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                      selectedBatch.id === batch.id
+                        ? 'border-brand-emerald bg-emerald-50/50 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-xs sm:text-sm font-black text-brand-navy block">
+                        {batch.dates}
+                      </span>
+                      <span className="text-[11px] font-bold text-gray-500">
+                        {batch.seatsLeft} seats remaining
+                      </span>
+                    </div>
+
+                    <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
+                      batch.status === 'Filling Fast' || batch.status === 'Almost Full'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {batch.status}
+                    </span>
                   </div>
                 ))}
               </div>
-            </section>
+            )}
           </div>
 
-          {/* Right Column: Sticky Booking Widget */}
+          {/* Right Col: Desktop Sticky Booking Widget */}
           <div className="lg:col-span-1">
-            <div className="sticky top-24 bg-white rounded-3xl p-6 md:p-8 shadow-2xl border border-gray-200 space-y-6">
-              <div className="flex items-baseline justify-between border-b border-gray-100 pb-4">
+            <div className="sticky top-28 bg-white rounded-3xl p-6 border border-gray-200/80 shadow-xl space-y-6">
+              <div className="flex items-baseline justify-between">
                 <div>
-                  <span className="text-xs text-gray-400 font-bold uppercase tracking-wider block">Starting From</span>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Starting Price</span>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-extrabold text-brand-navy">₹{perPersonPrice.toLocaleString()}</span>
-                    {trip.originalPrice && (
-                      <span className="text-sm text-gray-400 line-through">₹{trip.originalPrice.toLocaleString()}</span>
-                    )}
+                    <span className="text-2xl font-black text-brand-navy">₹{perPersonPrice.toLocaleString()}</span>
+                    <span className="text-xs text-gray-400 font-medium">/person</span>
                   </div>
                 </div>
-                <span className="bg-green-100 text-green-800 text-xs font-bold px-2.5 py-1 rounded-full">
-                  Save ₹{(trip.originalPrice - perPersonPrice).toLocaleString()}
-                </span>
+                {trip.originalPrice && (
+                  <span className="text-xs font-bold text-gray-400 line-through">
+                    ₹{(trip.originalPrice).toLocaleString()}
+                  </span>
+                )}
               </div>
 
-              {/* No-Cost EMI Badge */}
-              <div className="bg-brand-emerald/10 border border-brand-emerald/30 p-3 rounded-2xl flex items-center justify-between text-xs font-bold text-brand-navy">
-                <span>Or Easy EMI from</span>
-                <span className="text-brand-emerald font-extrabold">₹{monthlyEmi.toLocaleString()}/mo (6 mos)</span>
-              </div>
-
-              {/* Step 1: Select Batch */}
+              {/* Occupancy Selector */}
               <div>
-                <label className="block text-xs font-bold text-brand-navy uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span>1. Select Departure Batch</span>
-                  <span className="text-brand-emerald font-semibold">{selectedBatch.status}</span>
-                </label>
-                <div className="space-y-2">
-                  {trip.availableBatches.map((batch) => (
-                    <button
-                      key={batch.id}
-                      onClick={() => setSelectedBatch(batch)}
-                      className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition-all text-xs font-bold ${
-                        selectedBatch.id === batch.id
-                          ? 'border-brand-emerald bg-brand-emerald/10 text-brand-navy shadow-sm'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Calendar size={16} className="text-brand-emerald" />
-                        <span>{batch.dates}</span>
-                      </div>
-                      <span className="text-[11px] text-gray-500 font-semibold bg-white px-2 py-0.5 rounded-full border border-gray-200">
-                        {batch.seatsLeft} seats left
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Step 2: Occupancy Type */}
-              <div>
-                <label className="block text-xs font-bold text-brand-navy uppercase tracking-wider mb-2">
-                  2. Choose Occupancy Option
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider block mb-2">
+                  Room Occupancy
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { type: 'Double Sharing', label: 'Double', tag: 'Standard' },
-                    { type: 'Triple Sharing', label: 'Triple', tag: '-₹1.5k' },
-                    { type: 'Single Sharing', label: 'Single', tag: '+₹3.5k' }
-                  ].map((item) => (
+                  {['Double Sharing', 'Triple Sharing', 'Single Sharing'].map((occ) => (
                     <button
-                      key={item.type}
-                      onClick={() => setOccupancy(item.type)}
-                      className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all flex flex-col items-center justify-center ${
-                        occupancy === item.type
-                          ? 'border-brand-emerald bg-brand-navy text-white shadow-md'
-                          : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                      key={occ}
+                      onClick={() => setOccupancy(occ)}
+                      className={`p-2 rounded-xl text-[11px] font-bold transition-all ${
+                        occupancy === occ
+                          ? 'bg-brand-navy text-white shadow-sm'
+                          : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
                       }`}
                     >
-                      <span>{item.label}</span>
-                      <span className={`text-[10px] mt-0.5 ${occupancy === item.type ? 'text-brand-emerald' : 'text-gray-400'}`}>
-                        {item.tag}
-                      </span>
+                      {occ.split(' ')[0]}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Step 3: Traveler Counter */}
+              {/* Travelers Count */}
               <div>
-                <label className="block text-xs font-bold text-brand-navy uppercase tracking-wider mb-2">
-                  3. Number of Travelers
+                <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider block mb-2">
+                  Number of Travelers
                 </label>
-                <div className="flex items-center justify-between bg-brand-light p-3 rounded-2xl border border-gray-200">
-                  <span className="text-sm font-bold text-brand-navy">Adults (12+ yrs)</span>
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
+                  {[1, 2, 3, 4, 5].map((num) => (
                     <button
-                      onClick={() => setTravelers(Math.max(1, travelers - 1))}
-                      className="w-8 h-8 rounded-xl bg-white border border-gray-300 font-bold text-brand-navy flex items-center justify-center hover:bg-gray-100"
+                      key={num}
+                      onClick={() => setTravelers(num)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${
+                        travelers === num
+                          ? 'bg-brand-emerald text-white'
+                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                      }`}
                     >
-                      -
+                      {num}
                     </button>
-                    <span className="font-extrabold text-brand-navy text-base w-4 text-center">{travelers}</span>
-                    <button
-                      onClick={() => setTravelers(Math.min(selectedBatch.seatsLeft, travelers + 1))}
-                      className="w-8 h-8 rounded-xl bg-white border border-gray-300 font-bold text-brand-navy flex items-center justify-center hover:bg-gray-100"
-                    >
-                      +
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Price Calculation Summary */}
-              <div className="bg-brand-navy/5 p-4 rounded-2xl space-y-2 text-xs">
-                <div className="flex justify-between text-gray-600">
-                  <span>Base fare ({travelers} x ₹{perPersonPrice.toLocaleString()})</span>
-                  <span className="font-bold text-brand-navy">₹{totalPrice.toLocaleString()}</span>
+              {/* Total Calculation Strip */}
+              <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-1.5">
+                <div className="flex justify-between text-xs font-bold text-gray-600">
+                  <span>Selected Departure</span>
+                  <span className="text-brand-navy">{selectedBatch.dates.split(',')[0]}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Taxes & GST (5%)</span>
-                  <span className="font-bold text-emerald-600">Included</span>
+                <div className="flex justify-between text-xs font-bold text-gray-600">
+                  <span>Payable Total</span>
+                  <span className="text-base font-black text-brand-navy">₹{totalPrice.toLocaleString()}</span>
                 </div>
-                <hr className="border-gray-200 my-1" />
-                <div className="flex justify-between text-sm font-extrabold text-brand-navy">
-                  <span>Total Amount</span>
-                  <span className="text-brand-emerald text-lg">₹{totalPrice.toLocaleString()}</span>
+                <div className="flex justify-between text-[11px] font-semibold text-emerald-600 pt-1 border-t border-gray-200">
+                  <span>EMI Available</span>
+                  <span>From ₹{monthlyEmi.toLocaleString()}/mo</span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-3">
-                <button
-                  onClick={handleProceedToBook}
-                  className="w-full py-4 bg-brand-emerald text-white rounded-2xl font-extrabold text-base hover:bg-brand-teal transition-all shadow-xl shadow-brand-emerald/20 flex items-center justify-center gap-2 group"
-                >
-                  Proceed to Book <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-                </button>
+              {/* Book Now Button */}
+              <button
+                onClick={handleProceedToBook}
+                className="w-full py-4 bg-brand-emerald hover:bg-brand-teal transition-all text-white text-xs font-black uppercase tracking-wider rounded-2xl shadow-lg shadow-brand-emerald/25 flex items-center justify-center gap-2"
+              >
+                <span>Proceed to Reserve</span>
+                <ArrowRight size={16} />
+              </button>
 
-                <button
-                  onClick={openWhatsAppEnquiry}
-                  className="w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl font-extrabold text-xs hover:bg-emerald-100 transition-all flex items-center justify-center gap-2"
-                >
-                  <MessageSquare size={16} /> Chat Captain on WhatsApp
-                </button>
-              </div>
-
-              <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500 font-semibold pt-2">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck size={14} className="text-brand-emerald" /> 100% Refundable
-                </span>
-                <span className="flex items-center gap-1">
-                  <HelpCircle size={14} className="text-brand-emerald" /> Instant E-Vouchers
-                </span>
+              <div className="flex items-center justify-center gap-2 text-[11px] text-gray-400 font-medium">
+                <ShieldCheck size={14} className="text-brand-emerald" /> 100% Refund Guarantee (15 Days Prior)
               </div>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Floating Mobile Bottom Booking Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-gray-200 p-4 z-40 flex items-center justify-between shadow-2xl">
+        <div>
+          <span className="text-[10px] text-gray-400 font-bold uppercase block">Total Price ({travelers} Traveler)</span>
+          <span className="text-lg font-black text-brand-navy">₹{totalPrice.toLocaleString()}</span>
+        </div>
+
+        <button
+          onClick={handleProceedToBook}
+          className="px-6 py-3 bg-brand-emerald text-white text-xs font-black rounded-2xl shadow-md shadow-brand-emerald/25 flex items-center gap-1.5"
+        >
+          <span>Book Now</span>
+          <ArrowRight size={14} />
+        </button>
       </div>
     </div>
   );

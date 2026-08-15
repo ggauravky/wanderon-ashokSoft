@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Search, User, ChevronDown, LogOut, Compass, Calendar, Sparkles, ShieldCheck, DollarSign } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Menu, X, Search, User, ChevronDown, LogOut, Compass, 
+  Calendar, Sparkles, ShieldCheck, Ticket, CloudSun, UserCheck
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { getCurrentSeason } from '../utils/weatherSeasonEngine';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -12,13 +16,12 @@ const Navbar = () => {
   
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const isAdmin = 
-    isAuthenticated && user?.role === 'admin';
+  const season = getCurrentSeason();
 
-  const isInfluencer = 
-    isAuthenticated && 
-    ((user?.role === 'influencer' && user?.influencerStatus === 'approved') || user?.role === 'admin');
+  const isAdmin = isAuthenticated && user?.role === 'admin';
+  const isInfluencer = isAuthenticated && ((user?.role === 'influencer' && user?.influencerStatus === 'approved') || user?.role === 'admin');
 
   useEffect(() => {
     const handleScroll = () => {
@@ -38,13 +41,18 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   const navLinks = [
     { name: 'Destinations', path: '/destinations' },
-    { name: 'Weekend Trips', path: '/weekend-trips' },
+    { name: 'Trending Trips', path: '/destinations?filter=trending' },
     { name: 'Backpacking', path: '/community-trips' },
-    { name: 'Custom Trip', path: '/custom-trip' },
+    { name: 'Weekend Trips', path: '/weekend-trips' },
     { name: 'Creator Program', path: '/influencer/program' },
-    { name: 'Contact', path: '/contact' },
+    { name: 'Contact', path: '/contact' }
   ];
 
   const handleLogout = () => {
@@ -56,29 +64,43 @@ const Navbar = () => {
   return (
     <nav
       className={`fixed w-full z-50 transition-all duration-300 ${
-        isScrolled ? 'glass py-3' : 'bg-gradient-to-b from-brand-navy/80 via-brand-navy/40 to-transparent py-5'
+        isScrolled 
+          ? 'bg-white/90 backdrop-blur-xl border-b border-gray-200/80 py-3 shadow-sm' 
+          : 'bg-gradient-to-b from-brand-navy/90 via-brand-navy/40 to-transparent py-4'
       }`}
     >
       <div className="container mx-auto px-4 md:px-8">
         <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-10 h-10 rounded-xl bg-brand-emerald flex items-center justify-center text-white shadow-lg shadow-brand-emerald/30 group-hover:scale-105 transition-transform">
-              <Compass size={22} className="animate-spin-slow" />
-            </div>
-            <span className={`text-2xl font-bold tracking-tight ${isScrolled ? 'text-brand-navy' : 'text-white'}`}>
-              Wander<span className="text-brand-emerald">Luxe</span>
-            </span>
-          </Link>
+          {/* Brand Logo & Seasonal Badge */}
+          <div className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-2.5 group">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                <Compass size={22} />
+              </div>
+              <span className={`text-2xl font-black tracking-tight ${isScrolled ? 'text-brand-navy' : 'text-white'}`}>
+                Wander<span className="text-brand-emerald">Luxe</span>
+              </span>
+            </Link>
 
-          {/* Desktop Nav */}
+            {/* Micro Seasonal Indicator */}
+            <div className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] font-bold text-white/90">
+              <CloudSun size={13} className="text-brand-emerald" />
+              <span>{season.name}</span>
+            </div>
+          </div>
+
+          {/* Desktop Nav Links */}
           <div className="hidden lg:flex items-center gap-7">
             {navLinks.map((link) => (
               <Link
                 key={link.name}
                 to={link.path}
-                className={`text-sm font-medium transition-colors hover:text-brand-emerald ${
-                  link.name === 'Influencer Portal' ? 'text-brand-emerald font-bold' : isScrolled ? 'text-brand-navy' : 'text-white/90'
+                className={`text-xs font-extrabold tracking-wide uppercase transition-colors hover:text-brand-emerald ${
+                  link.name === 'Creator Program'
+                    ? 'text-brand-emerald'
+                    : isScrolled
+                    ? 'text-brand-navy'
+                    : 'text-white/90'
                 }`}
               >
                 {link.name}
@@ -86,227 +108,202 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* Actions */}
-          <div className="hidden lg:flex items-center gap-4">
+          {/* Action Area (Search, Auth, Portal) */}
+          <div className="hidden lg:flex items-center gap-3">
             <Link 
               to="/destinations" 
-              className={`p-2.5 rounded-full transition-colors ${isScrolled ? 'hover:bg-gray-100 text-brand-navy' : 'hover:bg-white/10 text-white'}`}
+              className={`p-2.5 rounded-2xl transition-colors flex items-center gap-2 text-xs font-bold ${
+                isScrolled 
+                  ? 'bg-gray-100 hover:bg-gray-200 text-brand-navy' 
+                  : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+              }`}
               title="Search trips"
             >
-              <Search size={18} />
+              <Search size={16} />
+              <span className="hidden xl:inline">Find Expeditions</span>
             </Link>
 
-            {/* Auth Dropdown or Login button */}
+            {/* Auth Menu or Sign In */}
             {isAuthenticated ? (
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 p-1.5 pr-3 rounded-full border border-brand-emerald/30 bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all text-white"
+                  className={`flex items-center gap-2 p-1.5 pr-3 rounded-2xl border transition-all ${
+                    isScrolled
+                      ? 'border-gray-200 bg-gray-50 text-brand-navy hover:bg-gray-100'
+                      : 'border-white/20 bg-white/10 text-white hover:bg-white/20'
+                  }`}
                 >
                   <img
-                    src={user.avatar}
+                    src={user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`}
                     alt={user.name}
-                    className="w-8 h-8 rounded-full border border-brand-emerald object-cover"
+                    className="w-7 h-7 rounded-xl object-cover border border-brand-emerald"
                   />
-                  <span className={`text-sm font-semibold max-w-[100px] truncate ${isScrolled ? 'text-brand-navy' : 'text-white'}`}>
-                    {user.name.split(' ')[0]}
+                  <span className="text-xs font-extrabold max-w-[100px] truncate">
+                    {user.name ? user.name.split(' ')[0] : 'Traveler'}
                   </span>
-                  <ChevronDown size={14} className={isScrolled ? 'text-brand-navy' : 'text-white'} />
+                  <ChevronDown size={14} />
                 </button>
 
                 <AnimatePresence>
                   {userDropdownOpen && (
                     <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      initial={{ opacity: 0, y: 8, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-50 text-brand-navy"
+                      exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-56 bg-white rounded-3xl shadow-2xl border border-gray-100 p-2 z-50 text-brand-navy"
                     >
-                      <div className="px-3 py-2 border-b border-gray-100 mb-1">
-                        <p className="text-xs text-gray-400">Signed in as</p>
-                        <p className="text-sm font-bold text-brand-navy truncate">{user.email}</p>
+                      <div className="p-3 border-b border-gray-100">
+                        <p className="text-xs font-bold text-brand-navy truncate">{user.name}</p>
+                        <p className="text-[11px] text-gray-500 font-mono truncate">{user.email}</p>
                       </div>
 
-                      <Link
-                        to="/profile"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-light text-brand-navy transition-colors"
-                      >
-                        <User size={16} className="text-brand-emerald" />
-                        My Profile
-                      </Link>
-
-                      <Link
-                        to="/profile"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-light text-brand-navy transition-colors"
-                      >
-                        <Calendar size={16} className="text-brand-emerald" />
-                        My Bookings
-                        {user.bookedTrips?.length > 0 && (
-                          <span className="ml-auto bg-brand-emerald text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                            {user.bookedTrips.length}
-                          </span>
-                        )}
-                      </Link>
-
-                      <Link
-                        to={isInfluencer ? "/influencer" : "/influencer/program"}
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-emerald text-white hover:bg-brand-teal transition-colors my-1"
-                      >
-                        <Sparkles size={16} />
-                        {isInfluencer ? "Influencer Dashboard" : "Creator Program"}
-                      </Link>
-
-                      {isAdmin && (
+                      <div className="py-1 space-y-0.5 text-xs font-bold">
                         <Link
-                          to="/admin"
+                          to="/profile"
                           onClick={() => setUserDropdownOpen(false)}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold bg-brand-navy text-white hover:bg-brand-emerald transition-colors my-1"
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-brand-light transition-colors text-brand-navy"
                         >
-                          <ShieldCheck size={16} className="text-brand-emerald" />
-                          Admin Panel
+                          <Ticket size={16} className="text-brand-emerald" /> My Bookings & Passes
                         </Link>
-                      )}
 
-                      <hr className="my-1 border-gray-100" />
+                        {isInfluencer && (
+                          <Link
+                            to="/influencer"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-emerald-50 text-emerald-700 transition-colors"
+                          >
+                            <Sparkles size={16} className="text-brand-emerald" /> Influencer Portal
+                          </Link>
+                        )}
 
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-red-50 text-red-600 transition-colors text-left"
-                      >
-                        <LogOut size={16} />
-                        Sign Out
-                      </button>
+                        {isAdmin && (
+                          <Link
+                            to="/admin"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 text-brand-navy transition-colors"
+                          >
+                            <ShieldCheck size={16} className="text-brand-emerald" /> Master Administration
+                          </Link>
+                        )}
+                      </div>
+
+                      <div className="pt-1 border-t border-gray-100">
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut size={16} /> Sign Out
+                        </button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <Link
                   to="/login"
-                  className={`text-sm font-semibold px-4 py-2 rounded-full transition-colors ${
-                    isScrolled ? 'text-brand-navy hover:bg-gray-100' : 'text-white hover:bg-white/10'
+                  className={`px-4 py-2 rounded-2xl text-xs font-extrabold transition-all ${
+                    isScrolled 
+                      ? 'text-brand-navy hover:bg-gray-100' 
+                      : 'text-white hover:bg-white/10'
                   }`}
                 >
                   Log In
                 </Link>
                 <Link
                   to="/signup"
-                  className="bg-brand-emerald text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-brand-teal transition-colors shadow-lg shadow-brand-emerald/20 flex items-center gap-2"
+                  className="px-4 py-2 bg-brand-emerald text-white text-xs font-extrabold rounded-2xl hover:bg-brand-teal transition-all shadow-md shadow-brand-emerald/20"
                 >
-                  <Sparkles size={16} />
-                  Sign Up
+                  Join Community
                 </Link>
               </div>
             )}
           </div>
 
-          {/* Mobile Menu Toggle */}
-          <button
-            className="lg:hidden p-2 rounded-xl"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X size={24} className={isScrolled ? 'text-brand-navy' : 'text-white'} />
-            ) : (
-              <Menu size={24} className={isScrolled ? 'text-brand-navy' : 'text-white'} />
-            )}
-          </button>
+          {/* Mobile Hamburger Button */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <Link
+              to="/destinations"
+              className={`p-2 rounded-xl ${isScrolled ? 'text-brand-navy' : 'text-white'}`}
+            >
+              <Search size={20} />
+            </Link>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className={`p-2 rounded-xl ${isScrolled ? 'text-brand-navy' : 'text-white'}`}
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Mobile Nav */}
+      {/* Mobile Drawer Menu */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-full left-0 w-full bg-white shadow-2xl border-t border-gray-100 lg:hidden"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="lg:hidden bg-brand-navy text-white border-b border-white/10 overflow-hidden px-6 py-6"
           >
-            <div className="flex flex-col px-6 py-6 space-y-4">
-              {isAuthenticated && (
-                <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
-                  <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full border border-brand-emerald" />
-                  <div>
-                    <p className="font-bold text-brand-navy">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
-                  </div>
-                </div>
-              )}
-
+            <div className="flex flex-col space-y-4">
               {navLinks.map((link) => (
                 <Link
                   key={link.name}
                   to={link.path}
-                  className="text-base font-semibold text-brand-navy hover:text-brand-emerald"
-                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-sm font-extrabold py-1 hover:text-brand-emerald transition-colors"
                 >
                   {link.name}
                 </Link>
               ))}
 
-              <hr className="border-gray-100" />
-
-              {isAuthenticated ? (
-                <>
-                  <Link
-                    to="/profile"
-                    className="flex items-center gap-2 text-brand-navy font-semibold py-2"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <User size={18} className="text-brand-emerald" /> My Bookings & Profile
-                  </Link>
-
-                  <Link
-                    to={isInfluencer ? "/influencer" : "/influencer/program"}
-                    className="flex items-center gap-2 text-brand-emerald font-extrabold py-2"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <Sparkles size={18} /> {isInfluencer ? "Influencer Dashboard" : "Creator Program"}
-                  </Link>
-
-                  {isAdmin && (
+              <div className="pt-4 border-t border-white/10 space-y-3">
+                {isAuthenticated ? (
+                  <>
                     <Link
-                      to="/admin"
-                      className="flex items-center gap-2 text-brand-navy font-extrabold py-2"
-                      onClick={() => setMobileMenuOpen(false)}
+                      to="/profile"
+                      className="flex items-center gap-2 text-xs font-bold text-emerald-400 py-1"
                     >
-                      <ShieldCheck size={18} /> Admin Control Panel
+                      <Ticket size={16} /> My Bookings & Profile ({user.name})
                     </Link>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="flex items-center gap-2 text-red-600 font-semibold py-2 text-left"
-                  >
-                    <LogOut size={18} /> Sign Out
-                  </button>
-                </>
-              ) : (
-                <div className="flex flex-col gap-2 pt-2">
-                  <Link
-                    to="/login"
-                    className="bg-brand-light text-brand-navy text-center py-3 rounded-xl font-bold border border-gray-200"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Log In
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="bg-brand-emerald text-white text-center py-3 rounded-xl font-bold shadow-lg shadow-brand-emerald/20"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Sign Up
-                  </Link>
-                </div>
-              )}
+                    {isInfluencer && (
+                      <Link to="/influencer" className="block text-xs font-bold text-white py-1">
+                        Influencer Dashboard
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <Link to="/admin" className="block text-xs font-bold text-white py-1">
+                        Admin Portal
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-2 text-xs font-bold text-red-400 py-1"
+                    >
+                      <LogOut size={16} /> Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex gap-3 pt-2">
+                    <Link
+                      to="/login"
+                      className="flex-1 py-3 text-center rounded-2xl bg-white/10 text-white text-xs font-bold"
+                    >
+                      Log In
+                    </Link>
+                    <Link
+                      to="/signup"
+                      className="flex-1 py-3 text-center rounded-2xl bg-brand-emerald text-white text-xs font-bold shadow-md"
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}

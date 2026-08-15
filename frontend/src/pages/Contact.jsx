@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getFAQSchema } from '../utils/seoSchemas';
+import { useAuth } from '../contexts/AuthContext';
 
 const Contact = () => {
-  const [name, setName] = useState('Gaurav Kumar Yadav');
-  const [email, setEmail] = useState('kumar.gaurav.yadav2007@gmail.com');
-  const [phone, setPhone] = useState('8542036499');
+  const { user } = useAuth();
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [subject, setSubject] = useState('Custom Trip Inquiry');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);

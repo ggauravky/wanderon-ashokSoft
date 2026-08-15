@@ -110,7 +110,7 @@ const About = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {TEAM_MEMBERS.map((member) => (
               <div key={member.id} className="text-center space-y-4 p-6 bg-brand-light rounded-2xl border border-gray-200">
-                <img src={member.avatar} alt={member.name} className="w-24 h-24 rounded-full object-cover border-2 border-brand-emerald mx-auto shadow-md" />
+                <img src={member.image || member.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'} alt={member.name} className="w-24 h-24 rounded-full object-cover border-2 border-brand-emerald mx-auto shadow-md" />
                 <div>
                   <h3 className="text-lg font-extrabold text-brand-navy">{member.name}</h3>
                   <p className="text-xs font-bold text-brand-emerald">{member.role}</p>
