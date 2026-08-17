@@ -1,20 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, SlidersHorizontal, MapPin, Compass, Heart, HelpCircle, 
   Sun, CloudRain, Wind, ShieldCheck, ArrowUpDown, RotateCcw,
-  Sparkles, Calendar, Clock, Star
+  Sparkles, Calendar, Clock, Star, Shuffle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import TripCard from '../components/TripCard';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
+import AIPlannerModal from '../components/AIPlannerModal';
 import { getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 import { useWeatherAndSeason } from '../hooks/useWeatherAndSeason';
 
 const Destinations = () => {
   const routerLocation = useLocation();
+  const navigate = useNavigate();
   const initialSearch = routerLocation.state?.searchQuery || '';
   const initialMonth = routerLocation.state?.monthQuery || '';
 
@@ -27,6 +29,8 @@ const Destinations = () => {
   const [selectedDuration, setSelectedDuration] = useState('All');
   const [sortBy, setSortBy] = useState('trending');
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+  const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
 
   const categories = ['All', 'Domestic', 'International', 'Backpacking', 'Weekend Trips', 'Adventure'];
   const weatherOptions = [
@@ -51,47 +55,40 @@ const Destinations = () => {
     }
   ];
 
-  const faqJsonLd = getFAQSchema(destinationFaqs);
+  const faqSchema = getFAQSchema(destinationFaqs);
 
-  // Filter trips
+  // Filter and Sort Trips
   const filteredTrips = useMemo(() => {
-    let list = trendingTrips.filter((trip) => {
+    return UPCOMING_TRIPS.filter((trip) => {
+      // Search matching
       const matchesSearch = 
         trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         trip.location.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
+      // Category matching
       const matchesCategory = 
         selectedCategory === 'All' || 
-        trip.tags?.some((t) => t.toLowerCase() === selectedCategory.toLowerCase());
-      
+        trip.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+        (selectedCategory === 'Domestic' && !trip.location.includes('Indonesia') && !trip.location.includes('Thailand')) ||
+        (selectedCategory === 'International' && (trip.location.includes('Indonesia') || trip.location.includes('Bali')));
+
+      // Price matching
       const matchesPrice = trip.price <= maxPrice;
 
-      let matchesDuration = true;
-      if (selectedDuration === 'short') matchesDuration = trip.duration.includes('2D') || trip.duration.includes('3D');
-      if (selectedDuration === 'medium') matchesDuration = trip.duration.includes('4D') || trip.duration.includes('5D') || trip.duration.includes('6D');
-      if (selectedDuration === 'long') matchesDuration = trip.duration.includes('7D') || trip.duration.includes('8D') || trip.duration.includes('9D');
+      // Weather filter matching
+      const tripWeather = getWeatherFor(trip.location);
+      const matchesWeather = 
+        selectedWeatherType === 'All' || 
+        tripWeather.iconType === selectedWeatherType;
 
-      let matchesWeather = true;
-      if (selectedWeatherType !== 'All') {
-        const w = trip.weather || getWeatherFor(trip.location);
-        matchesWeather = w.iconType === selectedWeatherType;
-      }
-
-      return matchesSearch && matchesCategory && matchesPrice && matchesDuration && matchesWeather;
+      return matchesSearch && matchesCategory && matchesPrice && matchesWeather;
+    }).sort((a, b) => {
+      if (sortBy === 'price-low') return a.price - b.price;
+      if (sortBy === 'price-high') return b.price - a.price;
+      if (sortBy === 'rating') return b.rating - a.rating;
+      return b.reviews - a.reviews; // Trending default
     });
-
-    if (sortBy === 'price-low') {
-      list.sort((a, b) => a.price - b.price);
-    } else if (sortBy === 'price-high') {
-      list.sort((a, b) => b.price - a.price);
-    } else if (sortBy === 'rating') {
-      list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    } else {
-      list.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-    }
-
-    return list;
-  }, [trendingTrips, searchTerm, selectedCategory, selectedWeatherType, maxPrice, selectedDuration, sortBy, getWeatherFor]);
+  }, [searchTerm, selectedCategory, maxPrice, selectedWeatherType, sortBy, getWeatherFor]);
 
   const handleResetFilters = () => {
     setSearchTerm('');
@@ -102,87 +99,120 @@ const Destinations = () => {
     setSortBy('trending');
   };
 
+  const handleFlexibleShuffle = () => {
+    if (filteredTrips.length > 0) {
+      const pick = filteredTrips[Math.floor(Math.random() * filteredTrips.length)];
+      navigate(`/trip/${pick.id}`);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-brand-light pt-24 pb-24">
+    <div className="min-h-screen bg-brand-light pt-24 pb-20">
       <SEOHead
-        title="Top Travel Destinations & Group Tour Packages 2026 | WanderLuxe"
-        description="Explore top tour packages for Meghalaya, Spiti Valley, Kashmir, Bali, and Ladakh. Compare prices, itineraries, best times to visit, and traveler reviews."
+        title="Explore All Tour Packages & Group Expeditions 2026 | WanderLuxe"
+        description="Browse all verified backpacking expeditions, weekend getaways, and luxury departures across Spiti, Meghalaya, Kashmir, Bali, and Goa."
         canonical="/destinations"
-        jsonLd={faqJsonLd}
+        jsonLd={faqSchema}
+      />
+
+      {/* AI Planner Modal */}
+      <AIPlannerModal
+        isOpen={isPlannerOpen}
+        onClose={() => setIsPlannerOpen(false)}
+        initialDestination={plannerDestination}
       />
 
       <div className="container mx-auto px-4 md:px-8">
         <Breadcrumbs items={[{ name: 'Destinations', path: '/destinations' }]} />
 
-        {/* Page Banner with Seasonal Highlights */}
-        <div className="bg-gradient-to-r from-brand-navy via-slate-900 to-emerald-950 rounded-3xl p-8 md:p-12 text-white mb-8 relative overflow-hidden shadow-2xl border border-slate-800">
-          <div className="relative z-10 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-xs font-black text-emerald-300 mb-4 border border-white/10">
-              <Sparkles size={14} className="text-emerald-400" />
-              <span>{season.heroTag}</span>
+        {/* Page Hero Header */}
+        <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-wider mb-2 border border-emerald-200">
+              <Compass size={14} className="text-emerald-500" />
+              Verified 2026 Batch Departures
             </div>
-            <h1 className="text-3xl md:text-5xl font-black mb-3 leading-tight">
-              Curated Expeditions & Group Departures
+            <h1 className="text-3xl md:text-5xl font-black text-slate-900 leading-tight">
+              Curated Travel Packages & Circuits
             </h1>
-            <p className="text-slate-300 text-xs md:text-sm font-medium leading-relaxed">
-              Explore handpicked journeys filtered by weather conditions, departure duration, and verified ratings.
+            <p className="text-xs md:text-sm text-slate-500 font-medium max-w-xl mt-1">
+              Filter by destination climate, travel style, duration, and group budget. All departures led by certified captains.
             </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleFlexibleShuffle}
+              className="px-4 py-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-2xl text-xs font-black text-slate-700 transition-all flex items-center gap-1.5 shadow-2xs"
+            >
+              <Shuffle size={14} className="text-emerald-500" /> I'm Flexible
+            </button>
+
+            <button
+              onClick={() => {
+                setPlannerDestination(searchTerm || 'Meghalaya');
+                setIsPlannerOpen(true);
+              }}
+              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md"
+            >
+              <Sparkles size={14} className="text-emerald-400" /> Plan with AI
+            </button>
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/80 mb-8 space-y-6">
-          {/* Top Search & Sort Row */}
-          <div className="flex flex-col md:flex-row items-center gap-4 justify-between">
-            <div className="relative w-full md:w-96">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+        {/* Search & Filter Bar */}
+        <div className="bg-white rounded-3xl p-4 md:p-6 shadow-sm border border-slate-200/80 mb-8 space-y-4">
+          <div className="flex flex-col md:flex-row items-center gap-3">
+            {/* Search Input */}
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by state or trip name..."
-                className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold text-brand-navy focus:outline-none focus:border-brand-emerald focus:bg-white transition-all"
+                placeholder="Search by state, circuit or activity (e.g. Spiti, Living Root Bridge)..."
+                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-emerald-500 text-slate-900"
               />
             </div>
 
-            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-4 py-2.5 rounded-2xl text-xs font-bold text-brand-navy w-full md:w-auto">
-                <ArrowUpDown size={15} className="text-brand-emerald shrink-0" />
-                <span className="text-gray-400">Sort:</span>
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-48">
+                <ArrowUpDown className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-transparent font-extrabold focus:outline-none cursor-pointer text-xs"
+                  className="w-full pl-10 pr-8 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 appearance-none cursor-pointer"
                 >
-                  <option value="trending">Trending This Season</option>
+                  <option value="trending">Most Trending</option>
                   <option value="rating">Highest Rated (4.8+)</option>
                   <option value="price-low">Price: Low to High</option>
                   <option value="price-high">Price: High to Low</option>
                 </select>
               </div>
 
-              {(searchTerm || selectedCategory !== 'All' || selectedWeatherType !== 'All' || selectedDuration !== 'All' || maxPrice < 60000) && (
-                <button
-                  onClick={handleResetFilters}
-                  className="p-2.5 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
-                  title="Reset all filters"
-                >
-                  <RotateCcw size={16} />
-                </button>
-              )}
+              {/* Reset Filters */}
+              <button
+                onClick={handleResetFilters}
+                className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl transition-colors shrink-0"
+                title="Reset all filters"
+              >
+                <RotateCcw size={18} />
+              </button>
             </div>
           </div>
 
-          {/* Category Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {/* Category Chips */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-black uppercase text-slate-400 mr-1">Style:</span>
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   selectedCategory === cat
-                    ? 'bg-brand-emerald text-white shadow-md shadow-brand-emerald/20'
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
                 }`}
               >
                 {cat}
@@ -190,131 +220,84 @@ const Destinations = () => {
             ))}
           </div>
 
-          {/* Secondary Filters: Weather, Duration, Price */}
-          <div className="pt-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-6 items-center">
-            {/* Weather Type */}
-            <div>
-              <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider block mb-2">
-                Weather Climate
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {weatherOptions.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setSelectedWeatherType(opt.value)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-                      selectedWeatherType === opt.value
-                        ? 'bg-brand-navy text-white'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {opt.icon && <opt.icon size={13} className="text-brand-emerald" />}
-                    <span>{opt.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Duration */}
-            <div>
-              <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider block mb-2">
-                Trip Duration
-              </label>
-              <div className="flex gap-2">
-                {[
-                  { label: 'All', value: 'All' },
-                  { label: '2-3 Days', value: 'short' },
-                  { label: '4-6 Days', value: 'medium' },
-                  { label: '7+ Days', value: 'long' }
-                ].map((d) => (
-                  <button
-                    key={d.value}
-                    onClick={() => setSelectedDuration(d.value)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                      selectedDuration === d.value
-                        ? 'bg-brand-navy text-white'
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Max Budget Slider */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-[11px] font-black text-gray-400 uppercase tracking-wider">
-                  Max Budget
-                </label>
-                <span className="text-xs font-black text-brand-navy">
-                  ₹{maxPrice.toLocaleString()}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="10000"
-                max="60000"
-                step="2000"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(Number(e.target.value))}
-                className="w-full accent-brand-emerald cursor-pointer"
-              />
-            </div>
+          {/* Climate & Weather Quick Filter */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-black uppercase text-slate-400 mr-1">Climate:</span>
+            {weatherOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setSelectedWeatherType(opt.value)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  selectedWeatherType === opt.value
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+                }`}
+              >
+                {opt.icon && <opt.icon size={13} />}
+                <span>{opt.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Results Count Strip */}
-        <div className="flex items-center justify-between mb-6 px-1">
-          <p className="text-xs font-bold text-gray-500">
-            Showing <span className="text-brand-navy font-black">{filteredTrips.length}</span> verified expeditions
-          </p>
+        {/* Results Counter */}
+        <div className="flex items-center justify-between mb-6">
+          <span className="text-xs font-extrabold text-slate-500">
+            Showing <strong className="text-slate-900">{filteredTrips.length}</strong> verified group tour packages
+          </span>
         </div>
 
-        {/* Trips Grid or Empty State */}
+        {/* Trip Grid */}
         {filteredTrips.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredTrips.map((trip) => (
               <TripCard key={trip.id} trip={trip} showWeather={true} />
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-3xl p-12 text-center border border-gray-200/80 max-w-lg mx-auto my-12 shadow-sm">
-            <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-brand-emerald flex items-center justify-center mx-auto mb-4">
+          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-sm space-y-4 max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto">
               <Compass size={32} />
             </div>
-            <h3 className="text-lg font-black text-brand-navy mb-2">No expeditions match your filters</h3>
-            <p className="text-xs text-gray-500 font-medium mb-6">
-              Try adjusting your max price, selected duration, or search term to discover available group departures.
+            <h3 className="text-xl font-black text-slate-900">No matching departures found</h3>
+            <p className="text-xs text-slate-500 font-medium">
+              We couldn't find any packages matching your exact search criteria. Try adjusting your climate or price filters, or let our AI build a custom route.
             </p>
-            <button
-              onClick={handleResetFilters}
-              className="px-6 py-3 bg-brand-emerald text-white text-xs font-black rounded-2xl hover:bg-brand-teal transition-all shadow-md shadow-brand-emerald/20"
-            >
-              Reset All Filters
-            </button>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                onClick={handleResetFilters}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold"
+              >
+                Clear All Filters
+              </button>
+              <button
+                onClick={() => {
+                  setPlannerDestination(searchTerm || 'Meghalaya');
+                  setIsPlannerOpen(true);
+                }}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5"
+              >
+                <Sparkles size={14} /> Plan with AI
+              </button>
+            </div>
           </div>
         )}
 
-        {/* FAQ Section */}
-        <div className="bg-white rounded-3xl p-8 md:p-12 shadow-sm border border-gray-200/80 max-w-4xl mx-auto">
+        {/* Destination FAQs Section for SEO & User Help */}
+        <div className="mt-20 pt-12 border-t border-slate-200/80">
           <div className="text-center max-w-xl mx-auto mb-8">
-            <span className="text-xs font-black uppercase tracking-wider text-brand-emerald">
-              Frequently Asked Questions
-            </span>
-            <h2 className="text-2xl font-black text-brand-navy mt-1">
-              Everything You Need to Know
-            </h2>
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-600">Got Questions?</span>
+            <h2 className="text-2xl font-black text-slate-900 mt-1">Frequently Asked Questions</h2>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-w-3xl mx-auto space-y-4">
             {destinationFaqs.map((faq, idx) => (
-              <div key={idx} className="p-5 rounded-2xl bg-gray-50 border border-gray-100">
-                <h3 className="text-xs sm:text-sm font-extrabold text-brand-navy mb-2">
+              <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                <h3 className="text-sm font-black text-slate-900 mb-1.5 flex items-center gap-2">
+                  <HelpCircle size={16} className="text-emerald-500 shrink-0" />
                   {faq.q}
                 </h3>
-                <p className="text-xs text-gray-600 font-medium leading-relaxed">
+                <p className="text-xs text-slate-600 font-medium leading-relaxed pl-6">
                   {faq.a}
                 </p>
               </div>
