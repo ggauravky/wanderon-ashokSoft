@@ -14,7 +14,7 @@ const DESTINATION_ITINERARY_TEMPLATES = {
     state: 'Meghalaya, India',
     bestTime: 'October to May',
     vibe: 'Misty rainforests, crystal emerald rivers, and bio-engineered root bridges.',
-    catalogTripId: 1,
+    catalogTripId: 21,
     baseDays: [
       {
         day: 1,
@@ -80,7 +80,7 @@ const DESTINATION_ITINERARY_TEMPLATES = {
     state: 'Himachal Pradesh, India',
     bestTime: 'June to October',
     vibe: 'High-altitude cold desert, 1000-year-old monasteries, and starry Chandratal night skies.',
-    catalogTripId: 2,
+    catalogTripId: 1,
     baseDays: [
       {
         day: 1,
@@ -146,7 +146,7 @@ const DESTINATION_ITINERARY_TEMPLATES = {
     state: 'Bali, Indonesia',
     bestTime: 'April to November',
     vibe: 'Emerald rice terraces, cliffside ocean temples, sunset beach clubs, and turquoise reefs.',
-    catalogTripId: 3,
+    catalogTripId: 44,
     baseDays: [
       {
         day: 1,
@@ -211,7 +211,7 @@ const DESTINATION_ITINERARY_TEMPLATES = {
     state: 'Kerala, India',
     bestTime: 'September to March',
     vibe: 'Floating luxury houseboats, emerald Munnar tea hills, and Kathakali cultural performances.',
-    catalogTripId: 4,
+    catalogTripId: 36,
     baseDays: [
       {
         day: 1,

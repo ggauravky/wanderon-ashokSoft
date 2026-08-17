@@ -22,12 +22,19 @@ export const getAdminStats = async (req, res) => {
     } catch (e) {
       console.warn('DB user count warning:', e.message);
     }
+    let activeTripsCount = 50;
+    try {
+      const dbTripCount = await Trip.countDocuments({ status: { $ne: 'inactive' } });
+      if (dbTripCount > 0) activeTripsCount = dbTripCount;
+    } catch (e) {
+      console.warn('DB trip count fallback to catalog count');
+    }
     
     // Aggregated revenue & booking metrics
     const statsData = {
       totalRevenue: 4850000,
       totalBookings: 1240,
-      activeTrips: 18,
+      activeTrips: activeTripsCount,
       newLeads: 342,
       conversionRate: '14.2%',
       totalUsers: usersCount,

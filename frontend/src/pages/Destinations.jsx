@@ -32,7 +32,7 @@ const Destinations = () => {
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
 
-  const categories = ['All', 'Domestic', 'International', 'Backpacking', 'Weekend Trips', 'Adventure'];
+  const categories = ['All', 'Domestic', 'International', 'Adventure', 'Backpacking', 'Weekend Trips', 'Nature', 'Culture'];
   const weatherOptions = [
     { label: 'All Weathers', value: 'All' },
     { label: 'Sunny & Crisp', value: 'Sun', icon: Sun },
@@ -57,20 +57,25 @@ const Destinations = () => {
 
   const faqSchema = getFAQSchema(destinationFaqs);
 
-  // Filter and Sort Trips
+  // Filter and Sort Trips with 100% Dynamic Consistency
   const filteredTrips = useMemo(() => {
     return UPCOMING_TRIPS.filter((trip) => {
-      // Search matching
+      // Search matching across title, location, destination, and tags
+      const searchClean = searchTerm.toLowerCase().trim();
       const matchesSearch = 
-        trip.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        trip.location.toLowerCase().includes(searchTerm.toLowerCase());
+        !searchClean ||
+        (trip.title || '').toLowerCase().includes(searchClean) ||
+        (trip.location || '').toLowerCase().includes(searchClean) ||
+        (trip.destination || '').toLowerCase().includes(searchClean) ||
+        (trip.shortTitle || '').toLowerCase().includes(searchClean) ||
+        (trip.tags || []).some(tag => tag.toLowerCase().includes(searchClean));
 
       // Category matching
       const matchesCategory = 
         selectedCategory === 'All' || 
-        trip.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-        (selectedCategory === 'Domestic' && !trip.location.includes('Indonesia') && !trip.location.includes('Thailand')) ||
-        (selectedCategory === 'International' && (trip.location.includes('Indonesia') || trip.location.includes('Bali')));
+        (trip.category || '').toLowerCase() === selectedCategory.toLowerCase() ||
+        (selectedCategory === 'Domestic' && trip.category !== 'International') ||
+        (selectedCategory === 'International' && trip.category === 'International');
 
       // Price matching
       const matchesPrice = trip.price <= maxPrice;

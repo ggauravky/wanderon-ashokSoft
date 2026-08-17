@@ -19,7 +19,7 @@ import SEOHead from '../components/SEOHead';
 import WeatherBadge from '../components/WeatherBadge';
 import AIPlannerModal from '../components/AIPlannerModal';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
-import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS } from '../constants/mockData';
+import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData';
 import { useWeatherAndSeason } from '../hooks/useWeatherAndSeason';
 import { getRecentlyViewedTrips } from '../utils/userHistory';
 
@@ -54,11 +54,36 @@ const Home = () => {
   };
 
   const moods = [
-    { label: 'Mountain Passes', icon: Mountain, query: 'Mountains', count: '12 Trips' },
-    { label: 'Tropical Coastal', icon: Palmtree, query: 'Beach', count: '8 Trips' },
-    { label: 'Misty Rainforests', icon: Trees, query: 'Waterfalls', count: '6 Trips' },
-    { label: 'High Altitude Treks', icon: Waves, query: 'High Altitude', count: '10 Trips' },
-    { label: 'Backpacking Circuits', icon: Compass, query: 'Backpacking', count: '14 Trips' }
+    { 
+      label: 'Mountain Passes', 
+      icon: Mountain, 
+      query: 'Mountains', 
+      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('mountain') || tag.toLowerCase().includes('himalaya'))).length} Trips` 
+    },
+    { 
+      label: 'Tropical Coastal', 
+      icon: Palmtree, 
+      query: 'Beach', 
+      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('beach') || tag.toLowerCase().includes('tropical') || tag.toLowerCase().includes('coastal'))).length} Trips` 
+    },
+    { 
+      label: 'Misty Rainforests', 
+      icon: Trees, 
+      query: 'Waterfalls', 
+      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('waterfall') || tag.toLowerCase().includes('rainforest') || tag.toLowerCase().includes('nature'))).length} Trips` 
+    },
+    { 
+      label: 'High Altitude Treks', 
+      icon: Waves, 
+      query: 'High Altitude', 
+      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('altitude') || tag.toLowerCase().includes('trek') || tag.toLowerCase().includes('adventure'))).length} Trips` 
+    },
+    { 
+      label: 'Backpacking Circuits', 
+      icon: Compass, 
+      query: 'Backpacking', 
+      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('backpacking') || t.category === 'Backpacking')).length} Trips` 
+    }
   ];
 
   const organizationSchemas = [getOrganizationSchema(), getTravelAgencySchema()];
@@ -382,28 +407,32 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
             {DESTINATIONS.map(dest => {
               const destWeather = getWeatherFor(dest.name);
+              const activeCount = getDestinationPackageCount(dest.name, UPCOMING_TRIPS);
               return (
                 <motion.div 
                   key={dest.id}
                   whileHover={{ y: -4 }}
                   onClick={() => navigate('/destinations', { state: { searchQuery: dest.name } })}
-                  className="relative rounded-3xl overflow-hidden aspect-[3/4] group cursor-pointer shadow-sm border border-slate-100"
+                  className="relative rounded-3xl overflow-hidden aspect-[4/3] group cursor-pointer shadow-sm border border-slate-100"
                 >
                   <img 
                     src={dest.image} 
                     alt={`${dest.name} travel tour package destination`} 
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-brand-navy/20 to-transparent flex flex-col justify-between p-4">
+                  <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-brand-navy/25 to-transparent flex flex-col justify-between p-4">
                     <div className="self-end">
                       <WeatherBadge weather={destWeather} size="sm" showCondition={false} />
                     </div>
                     <div>
+                      <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 block">{dest.region || dest.category}</span>
                       <h3 className="text-white font-extrabold text-base leading-tight">{dest.name}</h3>
-                      <p className="text-emerald-300 text-[11px] font-bold mt-0.5">{dest.count} Active Packages</p>
+                      <p className="text-emerald-300 text-[11px] font-bold mt-0.5">
+                        {activeCount} Active {activeCount === 1 ? 'Package' : 'Packages'}
+                      </p>
                     </div>
                   </div>
                 </motion.div>

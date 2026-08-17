@@ -139,6 +139,24 @@ export const DESTINATION_WEATHER_PROFILES = {
     bestMonths: 'Oct - Apr',
     vibe: 'Sun-kissed beaches, coastal cafes, and vibrant nightlife.'
   },
+  ladakh: {
+    temp: '15°C',
+    condition: 'Crisp High-Altitude Sun',
+    iconType: 'Sun',
+    statusTag: 'Azure Blue Skies',
+    humidity: '28%',
+    bestMonths: 'Jun - Sep',
+    vibe: 'Towering mountain passes, trans-boundary lakes, and ancient gompas.'
+  },
+  rajasthan: {
+    temp: '28°C',
+    condition: 'Warm Golden Sunshine',
+    iconType: 'Sun',
+    statusTag: 'Desert Camp Nights',
+    humidity: '35%',
+    bestMonths: 'Oct - Mar',
+    vibe: 'Majestic living forts, royal lake palaces, and golden sand dunes.'
+  },
   dubai: {
     temp: '32°C',
     condition: 'Warm Desert Sun',
@@ -174,10 +192,16 @@ export const getDestinationWeather = (locationString = '') => {
   if (locLower.includes('goa')) {
     return DESTINATION_WEATHER_PROFILES.goa;
   }
+  if (locLower.includes('ladakh') || locLower.includes('leh') || locLower.includes('zanskar') || locLower.includes('pangong')) {
+    return DESTINATION_WEATHER_PROFILES.ladakh;
+  }
+  if (locLower.includes('rajasthan') || locLower.includes('udaipur') || locLower.includes('jaisalmer') || locLower.includes('jaipur')) {
+    return DESTINATION_WEATHER_PROFILES.rajasthan;
+  }
   if (locLower.includes('dubai') || locLower.includes('uae')) {
     return DESTINATION_WEATHER_PROFILES.dubai;
   }
-  if (locLower.includes('uttarakhand') || locLower.includes('rishikesh')) {
+  if (locLower.includes('uttarakhand') || locLower.includes('rishikesh') || locLower.includes('kedarnath') || locLower.includes('auli')) {
     return DESTINATION_WEATHER_PROFILES.uttarakhand;
   }
 

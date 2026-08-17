@@ -9,40 +9,75 @@ import Coupon from '../models/Coupon.js';
 import Commission from '../models/Commission.js';
 import WalletLedger from '../models/WalletLedger.js';
 
-// Static Catalog fallback for predefined numerical IDs or static trips
+// Static Catalog fallback for all 50 predefined expeditions
 const STATIC_TRIPS_CATALOG = {
-  '1': {
-    title: 'Meghalaya Backpacking Living Root Bridges',
-    location: 'Meghalaya',
-    destination: 'Northeast India',
-    duration: '5D/4N',
-    price: 18500,
-    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-  },
-  '2': {
-    title: 'Spiti Valley Circuit High Altitude Roadtrip',
-    location: 'Spiti Valley',
-    destination: 'Himachal Pradesh',
-    duration: '7D/6N',
-    price: 22000,
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800'
-  },
-  '3': {
-    title: 'Goa Sun Beach and Party Getaway',
-    location: 'Goa',
-    destination: 'Goa Coast',
-    duration: '4D/3N',
-    price: 14500,
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e'
-  },
-  '4': {
-    title: 'Bali Island Escape Beaches and Culture',
-    location: 'Bali',
-    destination: 'Indonesia',
-    duration: '6D/5N',
-    price: 45000,
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4'
-  }
+  // Himachal Pradesh (1-12)
+  '1': { title: 'Spiti Valley Circuit: The Himalayan Odyssey', location: 'Spiti Valley, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '6N/7D', price: 22000, image: 'https://images.pexels.com/photos/6239996/pexels-photo-6239996.jpeg', slug: 'spiti-valley-circuit' },
+  '2': { title: 'Manali & Solang Valley Snow & Adventure Getaway', location: 'Manali, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '4N/5D', price: 13500, image: 'https://images.unsplash.com/photo-1586796676774-c93004ae009f?q=80&w=1200&auto=format&fit=crop', slug: 'manali-solang-adventure' },
+  '3': { title: 'Kasol, Kheerganga & Tosh Parvati Valley Backpacking', location: 'Parvati Valley, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '3N/4D', price: 9500, image: 'https://images.unsplash.com/photo-1596761611076-02720db1b4f8?q=80&w=1200&auto=format&fit=crop', slug: 'kasol-kheerganga-tosh-backpacking' },
+  '4': { title: 'Dharamshala, McLeodganj & Triund Ridge Trek', location: 'Dharamshala, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '3N/4D', price: 10500, image: 'https://images.unsplash.com/photo-1598091383021-15ddea10925d?q=80&w=1200&auto=format&fit=crop', slug: 'dharamshala-triund-trek' },
+  '5': { title: 'Jibhi & Tirthan Valley Hidden Trails Expedition', location: 'Tirthan Valley, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '3N/4D', price: 11500, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop', slug: 'jibhi-tirthan-valley' },
+  '6': { title: 'Bir Billing Paragliding & Tibetan Monastery Circuit', location: 'Bir Billing, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '3N/4D', price: 12500, image: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=1200&auto=format&fit=crop', slug: 'bir-billing-paragliding' },
+  '7': { title: 'Kinnaur Valley: Sangla, Chitkul & Kalpa Border Circuit', location: 'Kinnaur, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '5N/6D', price: 18500, image: 'https://images.unsplash.com/photo-1626714486950-c63bf1084b64?q=80&w=1200&auto=format&fit=crop', slug: 'kinnaur-chitkul-circuit' },
+  '8': { title: 'Shimla, Kufri & Mashobra Heritage Colonial Getaway', location: 'Shimla, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '3N/4D', price: 11000, image: 'https://images.unsplash.com/photo-1595815771614-ade9d652a65d?q=80&w=1200&auto=format&fit=crop', slug: 'shimla-mashobra-getaway' },
+  '9': { title: 'Dalhousie & Khajjiar Mini Switzerland Forest Circuit', location: 'Dalhousie, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '4N/5D', price: 13000, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop', slug: 'dalhousie-khajjiar-circuit' },
+  '10': { title: 'Hampta Pass & Chandratal Alpine Crossover Trek', location: 'Manali to Spiti, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '5N/6D', price: 15500, image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop', slug: 'hampta-pass-trek' },
+  '11': { title: 'Pin Parvati Pass High-Altitude Wilderness Expedition', location: 'Parvati to Spiti, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '7N/8D', price: 32000, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'pin-parvati-pass-expedition' },
+  '12': { title: 'Spiti Winter White Expedition & Snow Leopard Trail', location: 'Spiti Valley, Himachal Pradesh', destination: 'Himachal Pradesh', duration: '6N/7D', price: 28000, image: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=1200&auto=format&fit=crop', slug: 'spiti-winter-white-expedition' },
+
+  // Uttarakhand (13-20)
+  '13': { title: 'Kedarnath & Badrinath Sacred Himalayan Circuit', location: 'Kedarnath, Uttarakhand', destination: 'Uttarakhand', duration: '5N/6D', price: 19500, image: 'https://images.pexels.com/photos/442579/pexels-photo-442579.jpeg', slug: 'kedarnath-badrinath-circuit' },
+  '14': { title: 'Rishikesh Whitewater Rafting & Riverside Camping', location: 'Rishikesh, Uttarakhand', destination: 'Uttarakhand', duration: '2N/3D', price: 6500, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'rishikesh-rafting-camping' },
+  '15': { title: 'Chopta Tungnath & Chandrashila Peak Trek', location: 'Chopta, Uttarakhand', destination: 'Uttarakhand', duration: '3N/4D', price: 9500, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop', slug: 'chopta-tungnath-chandrashila' },
+  '16': { title: 'Auli Skiing, Ropeway & Valley of Flowers Trek', location: 'Auli, Uttarakhand', destination: 'Uttarakhand', duration: '5N/6D', price: 18000, image: 'https://images.unsplash.com/photo-1596761611076-02720db1b4f8?q=80&w=1200&auto=format&fit=crop', slug: 'auli-valley-of-flowers' },
+  '17': { title: 'Nainital & Jim Corbett Wilderness Tiger Safari', location: 'Corbett & Nainital, Uttarakhand', destination: 'Uttarakhand', duration: '4N/5D', price: 14500, image: 'https://images.unsplash.com/photo-1586796676774-c93004ae009f?q=80&w=1200&auto=format&fit=crop', slug: 'nainital-corbett-safari' },
+  '18': { title: 'Mussoorie, Landour & Dhanaulti Misty Hills', location: 'Mussoorie, Uttarakhand', destination: 'Uttarakhand', duration: '3N/4D', price: 11000, image: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=1200&auto=format&fit=crop', slug: 'mussoorie-landour-dhanaulti' },
+  '19': { title: 'Dayara Bugyal High-Altitude Alpine Meadow Trek', location: 'Uttarkashi, Uttarakhand', destination: 'Uttarakhand', duration: '4N/5D', price: 11500, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop', slug: 'dayara-bugyal-trek' },
+  '20': { title: 'Nag Tibba Weekend Backpacker Summit Trek', location: 'Pantwari, Uttarakhand', destination: 'Uttarakhand', duration: '2N/3D', price: 6500, image: 'https://images.unsplash.com/photo-1596761611076-02720db1b4f8?q=80&w=1200&auto=format&fit=crop', slug: 'nag-tibba-weekend-trek' },
+
+  // Meghalaya (21-26)
+  '21': { title: 'Meghalaya Backpacking: Land of Clouds & Living Root Bridges', location: 'Meghalaya, India', destination: 'Meghalaya', duration: '5N/6D', price: 18500, image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg', slug: 'meghalaya-backpacking-living-root-bridges' },
+  '22': { title: 'Cherrapunji (Sohra) Waterfalls & Cave Odyssey', location: 'Cherrapunji, Meghalaya', destination: 'Meghalaya', duration: '4N/5D', price: 16000, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'cherrapunji-waterfalls-caves' },
+  '23': { title: 'Dawki Glass River & Mawlynnong Eco Trail', location: 'Dawki, Meghalaya', destination: 'Meghalaya', duration: '3N/4D', price: 13500, image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg', slug: 'dawki-glass-river-mawlynnong' },
+  '24': { title: 'Kongthong Whistling Village & Bamboo Trail', location: 'East Khasi Hills, Meghalaya', destination: 'Meghalaya', duration: '4N/5D', price: 15500, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'kongthong-whistling-village' },
+  '25': { title: 'Jaintia Hills Krang Suri Blue Lagoon Circuit', location: 'Jowai, Meghalaya', destination: 'Meghalaya', duration: '3N/4D', price: 12500, image: 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg', slug: 'jaintia-hills-krang-suri' },
+  '26': { title: 'Garo Hills Nokrek Biosphere & Siju Cave Expedition', location: 'Garo Hills, Meghalaya', destination: 'Meghalaya', duration: '5N/6D', price: 19500, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'garo-hills-nokrek-biosphere' },
+
+  // Kashmir (27-31)
+  '27': { title: 'Kashmir Paradise: Srinagar, Gulmarg & Pahalgam', location: 'Srinagar, Kashmir', destination: 'Kashmir', duration: '5N/6D', price: 21500, image: 'https://images.unsplash.com/photo-1595815771614-ade9d652a65d?q=80&w=2070&auto=format&fit=crop', slug: 'kashmir-srinagar-gulmarg-pahalgam' },
+  '28': { title: 'Kashmir Great Lakes Alpine High Altitude Trek', location: 'Sonamarg to Naranag, Kashmir', destination: 'Kashmir', duration: '7N/8D', price: 24500, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop', slug: 'kashmir-great-lakes-trek' },
+  '29': { title: 'Sonamarg Glacier & Doodhpathri Valley of Milk', location: 'Sonamarg, Kashmir', destination: 'Kashmir', duration: '4N/5D', price: 17500, image: 'https://images.unsplash.com/photo-1595815771614-ade9d652a65d?q=80&w=2070&auto=format&fit=crop', slug: 'sonamarg-doodhpathri-kashmir' },
+  '30': { title: 'Gurez Valley Offbeat Himalayan Border Circuit', location: 'Gurez Valley, Kashmir', destination: 'Kashmir', duration: '5N/6D', price: 22500, image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?q=80&w=1200&auto=format&fit=crop', slug: 'gurez-valley-kashmir' },
+  '31': { title: 'Winter Gulmarg Skiing & Snowboarding Retreat', location: 'Gulmarg, Kashmir', destination: 'Kashmir', duration: '4N/5D', price: 26000, image: 'https://images.unsplash.com/photo-1595815771614-ade9d652a65d?q=80&w=2070&auto=format&fit=crop', slug: 'winter-gulmarg-ski-retreat' },
+
+  // Goa (32-35)
+  '32': { title: 'South Goa Heritage, Hidden Waterfalls & Secret Beaches', location: 'South Goa, India', destination: 'Goa', duration: '3N/4D', price: 12500, image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=60', slug: 'south-goa-hidden-beaches' },
+  '33': { title: 'North Goa Beachside Backpacking & Sunset Cruise', location: 'North Goa, India', destination: 'Goa', duration: '4N/5D', price: 13500, image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600&auto=format&fit=crop&q=60', slug: 'north-goa-backpacking' },
+  '34': { title: 'Gokarna & South Goa Dual Coastline Circuit', location: 'Gokarna & Goa, India', destination: 'Goa', duration: '4N/5D', price: 14500, image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=60', slug: 'gokarna-south-goa-circuit' },
+  '35': { title: 'Dudhsagar Waterfalls & Spice Plantation 4x4 Jeep Safari', location: 'Mollem, Goa', destination: 'Goa', duration: '2N/3D', price: 8500, image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=600&auto=format&fit=crop&q=60', slug: 'dudhsagar-waterfalls-safari' },
+
+  // Kerala (36-39)
+  '36': { title: 'Kerala Backwaters, Munnar & Alleppey Luxury Houseboat', location: 'Munnar & Alleppey, Kerala', destination: 'Kerala', duration: '4N/5D', price: 15500, image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?q=80&w=2069&auto=format&fit=crop', slug: 'kerala-backwaters-munnar-alleppey' },
+  '37': { title: 'Wayanad Rainforest, Bamboo Rafting & Treehouse Stay', location: 'Wayanad, Kerala', destination: 'Kerala', duration: '3N/4D', price: 13500, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'wayanad-rainforest-treehouse' },
+  '38': { title: 'Varkala Cliffside Surf, Yoga & Sunset Retreat', location: 'Varkala, Kerala', destination: 'Kerala', duration: '3N/4D', price: 11500, image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=60', slug: 'varkala-cliff-surf-retreat' },
+  '39': { title: 'Thekkady Periyar Tiger Reserve & Spice Trails', location: 'Thekkady, Kerala', destination: 'Kerala', duration: '3N/4D', price: 12000, image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?q=80&w=2069&auto=format&fit=crop', slug: 'thekkady-tiger-reserve-kerala' },
+
+  // Ladakh (40-43)
+  '40': { title: 'Ladakh Leh, Pangong Tso & Nubra Valley Circuit', location: 'Leh Ladakh, India', destination: 'Ladakh', duration: '6N/7D', price: 24500, image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&auto=format&fit=crop&q=60', slug: 'ladakh-leh-pangong-nubra' },
+  '41': { title: 'Zanskar Valley Offbeat Rugged Expedition', location: 'Zanskar, Ladakh', destination: 'Ladakh', duration: '7N/8D', price: 29500, image: 'https://images.unsplash.com/photo-1626714486950-c63bf1084b64?q=80&w=1200&auto=format&fit=crop', slug: 'zanskar-valley-expedition' },
+  '42': { title: 'Markha Valley High Altitude Trekking Odyssey', location: 'Hemis National Park, Ladakh', destination: 'Ladakh', duration: '6N/7D', price: 22000, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'markha-valley-trek' },
+  '43': { title: 'Sham Valley Apricot Blossom & Heritage Trail', location: 'Lower Ladakh, India', destination: 'Ladakh', duration: '4N/5D', price: 16500, image: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=600&auto=format&fit=crop&q=60', slug: 'sham-valley-apricot-trail' },
+
+  // Bali (44-47)
+  '44': { title: 'Bali Island & Nusa Penida Tropical Escape', location: 'Bali, Indonesia', destination: 'Bali', duration: '5N/6D', price: 45000, image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?q=80&w=1938&auto=format&fit=crop', slug: 'bali-island-nusa-penida-escape' },
+  '45': { title: 'Ubud Spiritual Retreat, Rice Terraces & Waterfall Sanctuary', location: 'Ubud, Bali, Indonesia', destination: 'Bali', duration: '4N/5D', price: 38000, image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=1200&auto=format&fit=crop', slug: 'ubud-spiritual-retreat' },
+  '46': { title: 'Gili Islands Coral Reef & Sea Turtle Snorkeling Cruise', location: 'Gili Trawangan, Indonesia', destination: 'Bali', duration: '4N/5D', price: 39000, image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200&auto=format&fit=crop', slug: 'gili-islands-snorkeling-cruise' },
+  '47': { title: 'Mount Batur Sunrise Volcano Trek & Natural Hot Springs', location: 'Kintamani, Bali, Indonesia', destination: 'Bali', duration: '3N/4D', price: 34000, image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?q=80&w=1938&auto=format&fit=crop', slug: 'mount-batur-sunrise-trek' },
+
+  // Rajasthan (48-50)
+  '48': { title: 'Udaipur & Mount Abu Royal Lakes Expedition', location: 'Udaipur, Rajasthan', destination: 'Rajasthan', duration: '4N/5D', price: 15500, image: 'https://images.unsplash.com/photo-1609137144822-77eb5782782e?w=600&auto=format&fit=crop&q=60', slug: 'udaipur-mount-abu-royal-lakes' },
+  '49': { title: 'Jaisalmer Golden Sand Dunes & Desert Camping', location: 'Jaisalmer, Rajasthan', destination: 'Rajasthan', duration: '3N/4D', price: 12500, image: 'https://images.unsplash.com/photo-1609137144822-77eb5782782e?w=600&auto=format&fit=crop&q=60', slug: 'jaisalmer-golden-desert-camp' },
+  '50': { title: 'Jaipur, Jodhpur & Pushkar Cultural Heritage Odyssey', location: 'Jaipur to Jodhpur, Rajasthan', destination: 'Rajasthan', duration: '5N/6D', price: 17500, image: 'https://images.unsplash.com/photo-1609137144822-77eb5782782e?w=600&auto=format&fit=crop&q=60', slug: 'jaipur-jodhpur-pushkar-heritage' }
 };
 
 const getRazorpayInstance = () => {

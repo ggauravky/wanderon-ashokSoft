@@ -599,9 +599,9 @@ const AdminDashboard = () => {
 
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
                 <span className="text-xs font-bold text-gray-400 uppercase">Active Departures</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{stats.activeTrips}</h3>
+                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{tripsList.filter(t => t.isActive !== false).length}</h3>
                 <span className="text-xs font-bold text-brand-emerald bg-brand-emerald/10 px-2 py-0.5 rounded mt-2 inline-block">
-                  100% On-time
+                  100% Verified Catalog
                 </span>
               </div>
 
