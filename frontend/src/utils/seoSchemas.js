@@ -104,12 +104,16 @@ export const getProductTripSchema = (trip) => {
 export const getBreadcrumbSchema = (items = []) => ({
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
-  itemListElement: items.map((item, index) => ({
-    '@type': 'ListItem',
-    position: index + 1,
-    name: item.name,
-    item: item.path.startsWith('http') ? item.path : `${SITE_URL}${item.path}`
-  }))
+  itemListElement: items
+    .filter((item) => item && item.path)
+    .map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: typeof item.path === 'string' && item.path.startsWith('http')
+        ? item.path
+        : `${SITE_URL}${item.path}`
+    }))
 });
 
 export const getFAQSchema = (faqs = []) => {

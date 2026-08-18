@@ -1,91 +1,102 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Compass, MapPin, ArrowRight, Home } from 'lucide-react';
+import { Compass, Search, ArrowRight, Sparkles, MapPin, Home } from 'lucide-react';
+import { UPCOMING_TRIPS } from '../constants/mockData';
+import TripCard from '../components/TripCard';
 import SEOHead from '../components/SEOHead';
 
 const NotFound = () => {
-  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      navigate(`/destinations?search=${encodeURIComponent(searchQuery)}`);
-    } else {
-      navigate('/destinations');
+      navigate('/destinations', { state: { searchQuery } });
     }
   };
 
+  const trendingTrips = UPCOMING_TRIPS.slice(0, 3);
+
   return (
-    <div className="min-h-screen bg-brand-light pt-28 pb-20 flex flex-col items-center justify-center px-4 text-center">
+    <div className="min-h-screen bg-brand-light pt-28 pb-24">
       <SEOHead
-        title="404 - Page Not Found | WanderLuxe Travels"
-        description="The travel page or destination itinerary you requested could not be found. Explore our popular circuits or search for your next adventure."
-        noindex={true}
+        title="404 - Route Off The Map | WanderLuxe"
+        description="The trail you are looking for has moved. Discover trending group tours and backpacking expeditions across India and Bali."
+        canonical="/404"
       />
 
-      <div className="max-w-2xl w-full bg-white rounded-3xl p-8 md:p-12 shadow-2xl border border-gray-100 space-y-6">
-        <div className="w-20 h-20 bg-emerald-100 text-brand-emerald rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-          <Compass size={44} className="animate-spin-slow" />
+      <div className="container mx-auto px-4 md:px-8 text-center max-w-4xl">
+        <div className="w-20 h-20 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-6 border border-emerald-200 shadow-sm animate-pulse">
+          <Compass size={40} />
         </div>
 
-        <span className="text-xs font-mono font-extrabold uppercase tracking-widest text-brand-emerald bg-brand-emerald/10 px-3.5 py-1 rounded-full inline-block">
-          404 - Off The Map
+        <span className="text-xs font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+          Error 404 • Trail Not Found
         </span>
 
-        <h1 className="text-3xl md:text-5xl font-extrabold text-brand-navy">
-          Looks Like You've Wandered Off Trail
+        <h1 className="text-3xl sm:text-5xl font-black text-slate-900 mt-4 mb-3">
+          Looks Like This Route Went Off The Map
         </h1>
-        <p className="text-gray-500 text-xs md:text-sm max-w-md mx-auto leading-relaxed">
-          The page or trip itinerary you are looking for doesn't exist or has moved to a new destination.
+
+        <p className="text-slate-500 text-xs sm:text-sm font-medium max-w-md mx-auto mb-8">
+          The page or departure you are looking for does not exist or has been relocated. Search for a destination below or explore our trending expeditions.
         </p>
 
-        {/* Search Input Bar */}
-        <form onSubmit={handleSearch} className="flex gap-2 max-w-md mx-auto">
-          <div className="relative flex-1">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+        {/* Quick Search */}
+        <form onSubmit={handleSearch} className="max-w-md mx-auto mb-10">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
+              placeholder="Search destinations (e.g. Spiti, Bali, Meghalaya)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Meghalaya, Spiti, Bali..."
-              className="w-full pl-11 pr-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-brand-emerald text-brand-navy"
+              className="w-full pl-11 pr-28 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 shadow-sm"
             />
+            <button
+              type="submit"
+              className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black"
+            >
+              Search
+            </button>
           </div>
-          <button
-            type="submit"
-            className="px-5 py-3 bg-brand-emerald text-white text-xs font-extrabold rounded-2xl hover:bg-brand-teal transition-all shadow-md shrink-0"
-          >
-            Search
-          </button>
         </form>
 
-        {/* Popular Destination Shortcuts */}
-        <div className="pt-4 border-t border-gray-100">
-          <span className="text-[11px] font-extrabold uppercase text-gray-400 block mb-3">Popular Travel Hubs</span>
-          <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
-            <Link to="/destinations" className="px-3.5 py-2 bg-brand-light hover:bg-brand-navy hover:text-white rounded-xl border border-gray-200 font-bold transition-all text-gray-700">
-              All Destinations
-            </Link>
-            <Link to="/weekend-trips" className="px-3.5 py-2 bg-brand-light hover:bg-brand-navy hover:text-white rounded-xl border border-gray-200 font-bold transition-all text-gray-700">
-              Weekend Getaways
-            </Link>
-            <Link to="/community-trips" className="px-3.5 py-2 bg-brand-light hover:bg-brand-navy hover:text-white rounded-xl border border-gray-200 font-bold transition-all text-gray-700">
-              Backpacking Trips
-            </Link>
-            <Link to="/custom-trip" className="px-3.5 py-2 bg-brand-light hover:bg-brand-navy hover:text-white rounded-xl border border-gray-200 font-bold transition-all text-gray-700">
-              Custom Itinerary
-            </Link>
-          </div>
-        </div>
-
-        <div className="pt-4">
+        <div className="flex justify-center gap-3 mb-16">
           <Link
             to="/"
-            className="inline-flex items-center gap-2 px-6 py-3.5 bg-brand-navy text-white text-xs font-extrabold rounded-2xl hover:bg-brand-emerald transition-all shadow-lg"
+            className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-sm"
           >
-            <Home size={16} /> Return to Homepage
+            <Home size={15} /> Return Home
           </Link>
+          <Link
+            to="/destinations"
+            className="px-6 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-black border border-emerald-200 flex items-center gap-2"
+          >
+            <Compass size={15} /> Browse 50+ Expeditions
+          </Link>
+        </div>
+
+        {/* Trending Departures Fallback */}
+        <div className="text-left pt-12 border-t border-slate-200/80">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block">
+                Trending Right Now
+              </span>
+              <h2 className="text-xl font-black text-slate-900">Popular Departures</h2>
+            </div>
+            <Link to="/destinations" className="text-xs font-black text-emerald-600 hover:underline flex items-center gap-1">
+              View All <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {trendingTrips.map((trip) => (
+              <TripCard key={trip.id} trip={trip} showWeather={true} />
+            ))}
+          </div>
         </div>
       </div>
     </div>

@@ -5,7 +5,8 @@ import {
   MapPin, Clock, Star, Calendar, Users, ShieldCheck, Check, X, 
   ChevronDown, ChevronUp, Share2, Heart, Info, ArrowRight, Compass,
   Sparkles, Camera, PhoneCall, HelpCircle, MessageSquare, CloudSun,
-  Award, CheckCircle2, ShieldAlert, Luggage, BedDouble, Utensils, Bus
+  Award, CheckCircle2, ShieldAlert, Luggage, BedDouble, Utensils, Bus,
+  Sun, CheckSquare, Square, Backpack, ThumbsUp
 } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
@@ -16,6 +17,7 @@ import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
 import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory';
+import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine';
 
 const TripDetails = () => {
   const { id } = useParams();
@@ -35,13 +37,52 @@ const TripDetails = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
 
+  // Contextual Helpers
+  const whyVisitNow = getWhyVisitNow(trip, season, weather);
+  const personaBadges = getTripPersonaBadges(trip);
+
+  // Interactive Packing Checklist state (persisted per trip)
+  const defaultChecklist = generatePackingChecklist(trip, weather, season);
+  const [packingList, setPackingList] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`wanderluxe_packing_${trip.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // Ignored
+    }
+    return defaultChecklist;
+  });
+
   // Record Trip View in Local History and check Wishlist status
   useEffect(() => {
     recordTripView(trip);
     const wishlist = getWishlistIds();
     setIsLiked(wishlist.includes(trip.id));
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    try {
+      const saved = localStorage.getItem(`wanderluxe_packing_${trip.id}`);
+      if (saved) setPackingList(JSON.parse(saved));
+      else setPackingList(generatePackingChecklist(trip, weather, season));
+    } catch (e) {
+      setPackingList(generatePackingChecklist(trip, weather, season));
+    }
   }, [trip.id]);
+
+  const handleTogglePackingItem = (itemId) => {
+    const updated = packingList.map((item) =>
+      item.id === itemId ? { ...item, defaultChecked: !item.defaultChecked } : item
+    );
+    setPackingList(updated);
+    try {
+      localStorage.setItem(`wanderluxe_packing_${trip.id}`, JSON.stringify(updated));
+    } catch (e) {
+      // Ignored
+    }
+  };
+
+  const packedCount = packingList.filter((item) => item.defaultChecked).length;
+  const totalPackingCount = packingList.length;
 
   const handleToggleWishlist = () => {
     const updated = toggleWishlistItem(trip.id);
@@ -60,7 +101,8 @@ const TripDetails = () => {
   const monthlyEmi = Math.round(totalPrice / 6);
 
   // Similar Trips (excluding current trip)
-  const similarTrips = UPCOMING_TRIPS.filter((t) => t.id !== trip.id).slice(0, 3);
+  const similarTrips = UPCOMING_TRIPS.filter((t) => t.id !== trip.id && (t.category === trip.category || t.destination === trip.destination)).slice(0, 3);
+  const fallbackSimilarTrips = similarTrips.length > 0 ? similarTrips : UPCOMING_TRIPS.filter((t) => t.id !== trip.id).slice(0, 3);
 
   const tripFaqs = [
     {
@@ -126,199 +168,290 @@ const TripDetails = () => {
           >
             <button
               onClick={() => setLightboxIndex(null)}
-              className="absolute top-6 right-6 text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              className="absolute top-6 right-6 p-2 rounded-full bg-white/20 text-white hover:bg-white/40 transition-colors"
             >
               <X size={24} />
             </button>
             <img
-              src={trip.gallery[lightboxIndex]}
-              alt={`${trip.title} enlarged photo gallery view`}
-              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+              src={trip.gallery ? trip.gallery[lightboxIndex] : trip.image}
+              alt="Expanded high-resolution view"
+              className="max-w-4xl max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="container mx-auto px-4 md:px-8">
+        {/* Navigation Breadcrumbs */}
         <Breadcrumbs
           items={[
-            { name: 'Destinations', path: '/destinations' },
-            { name: trip.location, path: '/destinations' },
-            { name: trip.title, path: `/trip/${trip.id}` }
+            { label: 'Destinations', path: '/destinations' },
+            { label: trip.location.split(',')[0], path: '/destinations' },
+            { label: trip.title, path: null }
           ]}
         />
 
-        {/* Trip Title & Quick Metadata Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="bg-emerald-50 text-emerald-700 text-xs font-black px-3 py-1 rounded-full uppercase border border-emerald-200">
-                {trip.category || 'Curated Expedition'}
+        {/* Hero Header Area */}
+        <div className="flex flex-col lg:flex-row justify-between lg:items-end gap-6 mb-8 mt-4">
+          <div className="space-y-3 max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="bg-slate-900 text-white text-xs font-black uppercase px-3 py-1 rounded-full">
+                {trip.category || 'Group Tour'}
               </span>
-              <WeatherBadge weather={weather} size="sm" />
-              {trip.trending && (
-                <span className="bg-amber-500/10 text-amber-600 text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1 border border-amber-300">
-                  <Award size={12} /> Best Seller
-                </span>
-              )}
+              <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
+                <ShieldCheck size={14} /> Certified Captain Led
+              </span>
+              <WeatherBadge weather={weather} size="sm" showCondition={true} />
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-slate-900 leading-tight">
+
+            <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 leading-tight">
               {trip.title}
             </h1>
-            <div className="flex flex-wrap items-center gap-4 text-xs font-bold text-slate-500 mt-2">
-              <span className="flex items-center gap-1"><MapPin size={14} className="text-emerald-500" /> {trip.location}</span>
-              <span className="flex items-center gap-1"><Clock size={14} className="text-emerald-500" /> {trip.duration}</span>
-              <span className="flex items-center gap-1 text-amber-500"><Star size={14} fill="currentColor" /> {trip.rating} ({trip.reviews} Verified Reviews)</span>
+
+            <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm text-slate-600 font-semibold">
+              <span className="flex items-center gap-1 text-emerald-600">
+                <MapPin size={16} /> {trip.location}
+              </span>
+              <span className="flex items-center gap-1 text-slate-500">
+                <Clock size={16} /> {trip.duration}
+              </span>
+              <span className="flex items-center gap-1 text-amber-500 font-bold">
+                <Star size={16} fill="currentColor" /> {trip.rating || 4.9} ({trip.reviews || 24} reviews)
+              </span>
             </div>
           </div>
 
-          {/* Social Share, Wishlist & AI Customizer Actions */}
-          <div className="flex items-center gap-2">
+          {/* Action Buttons: Wishlist & AI Customizer */}
+          <div className="flex items-center gap-3 self-start lg:self-end">
             <button
               onClick={() => setIsPlannerOpen(true)}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black flex items-center gap-1.5 transition-all shadow-sm"
-              title="Customize with AI Planner"
+              className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl text-xs font-black transition-all border border-emerald-200 flex items-center gap-1.5 shadow-sm"
             >
-              <Sparkles size={14} className="text-emerald-400" /> Customize with AI
+              <Sparkles size={15} /> Customize with AI
             </button>
 
             <button
               onClick={handleToggleWishlist}
-              className={`p-2.5 rounded-2xl border transition-colors flex items-center gap-1.5 text-xs font-bold ${
+              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-1.5 text-xs font-black ${
                 isLiked
-                  ? 'bg-rose-50 border-rose-200 text-rose-600'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               }`}
             >
-              <Heart size={16} fill={isLiked ? 'currentColor' : 'none'} />
-              <span>{isLiked ? 'Saved' : 'Save'}</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (navigator.share) {
-                  navigator.share({ title: trip.title, url: window.location.href });
-                } else {
-                  navigator.clipboard.writeText(window.location.href);
-                  alert('Trip link copied to clipboard!');
-                }
-              }}
-              className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-2xl transition-colors"
-            >
-              <Share2 size={16} />
+              <Heart size={16} className={isLiked ? 'fill-rose-600' : ''} />
+              <span>{isLiked ? 'Saved' : 'Wishlist'}</span>
             </button>
           </div>
         </div>
 
-        {/* Hero Photo Gallery Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-10 h-[380px] md:h-[460px] rounded-3xl overflow-hidden shadow-md">
+        {/* Gallery Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-10 h-[380px] md:h-[480px]">
           <div
             onClick={() => setLightboxIndex(0)}
-            className="md:col-span-2 h-full relative group cursor-pointer overflow-hidden"
+            className="md:col-span-2 md:row-span-2 rounded-3xl overflow-hidden cursor-pointer relative group bg-slate-200"
           >
             <img
               src={trip.image}
-              alt={`${trip.title} primary destination view`}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              alt={`${trip.title} primary hero landscape view`}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
             />
-            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors flex items-end p-6">
-              <span className="bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
-                <Camera size={13} /> View 4 Photos
-              </span>
-            </div>
+            <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+            <span className="absolute bottom-4 left-4 bg-slate-900/80 backdrop-blur-md text-white text-xs font-black px-3 py-1.5 rounded-xl">
+              View High-Res Photo (1/{trip.gallery ? trip.gallery.length : 1})
+            </span>
           </div>
 
-          <div className="hidden md:grid grid-cols-2 col-span-2 gap-3 h-full">
-            {trip.gallery.slice(0, 4).map((img, idx) => (
-              <div
-                key={idx}
-                onClick={() => setLightboxIndex(idx)}
-                className="relative group cursor-pointer overflow-hidden rounded-2xl"
-              >
-                <img
-                  src={img}
-                  alt={`${trip.title} gallery photo ${idx + 1}`}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/0 transition-colors" />
-              </div>
-            ))}
+          {(trip.gallery ? trip.gallery.slice(1, 5) : [trip.image, trip.image, trip.image, trip.image]).map((img, idx) => (
+            <div
+              key={idx}
+              onClick={() => setLightboxIndex(idx + 1)}
+              className="rounded-3xl overflow-hidden cursor-pointer relative group bg-slate-200"
+            >
+              <img
+                src={img}
+                alt={`${trip.title} gallery thumbnail photo ${idx + 2}`}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+              />
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+            </div>
+          ))}
+        </div>
+
+        {/* "Why Visit Now?" Contextual Banner */}
+        <div className="mb-10 bg-gradient-to-r from-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="space-y-1.5 max-w-2xl">
+            <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-emerald-400/30 inline-flex items-center gap-1">
+              <Sparkles size={12} /> Seasonal & Climate Intelligence
+            </span>
+            <h3 className="text-xl font-black">{whyVisitNow.title}</h3>
+            <p className="text-xs md:text-sm text-slate-300 font-medium leading-relaxed">
+              {whyVisitNow.reason}
+            </p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xl p-4 rounded-2xl border border-white/20 text-center shrink-0 w-full md:w-auto">
+            <span className="text-[10px] uppercase font-bold text-slate-300 block">Current Climate</span>
+            <div className="text-2xl font-black text-emerald-300 mt-0.5">{weather.temp}</div>
+            <span className="text-[11px] font-medium text-slate-200">{weather.condition}</span>
           </div>
         </div>
 
-        {/* Main Content Layout (Left: Detailed Info, Right: Sticky Booking Widget) */}
+        {/* Main Content Layout: Left Details vs Right Booking Widget */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          {/* Left Column: Itinerary, Stays, Highlights, FAQs */}
+          {/* Left Column: Itinerary, Persona, Packing List, Inclusions */}
           <div className="lg:col-span-2 space-y-10">
-            {/* Live Weather Forecast Card for this Trip */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <CloudSun size={24} />
-                </div>
-                <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Destination Climate</span>
-                  <h3 className="text-base font-black text-slate-900">{weather.temp} • {weather.condition}</h3>
-                  <p className="text-xs text-slate-500 font-medium">{weather.advice}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsPlannerOpen(true)}
-                className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-black transition-all border border-emerald-200 shrink-0 flex items-center gap-1"
-              >
-                <Sparkles size={13} /> Custom AI Plan
-              </button>
-            </div>
-
-            {/* Trip Highlights Grid */}
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80">
-              <h2 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2">
-                <Award className="text-emerald-500" size={22} /> Tour Highlights & Experiences
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {trip.highlights.map((h, i) => (
-                  <div key={i} className="flex items-start gap-2.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                    <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />
-                    <span className="text-xs font-bold text-slate-700 leading-snug">{h}</span>
+            {/* "Who is this trip for?" Personas */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-2">
+                Traveler Profile
+              </span>
+              <h3 className="text-lg font-black text-slate-900 mb-4">Who is this expedition perfect for?</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {personaBadges.map((p) => (
+                  <div key={p.label} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/60">
+                    <div className="text-xs font-black text-slate-900 flex items-center gap-1.5 text-emerald-600 mb-1">
+                      <ThumbsUp size={14} /> {p.label}
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium">{p.desc}</p>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Day-by-Day Expandable Itinerary */}
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80 space-y-6">
+            {/* Quick Trip Highlights Grid */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+              <h3 className="text-lg font-black text-slate-900">Expedition Overview</h3>
+              <p className="text-xs md:text-sm text-slate-600 font-medium leading-relaxed">
+                {trip.overview || 'Experience an unforgettable group departure with like-minded travelers, scenic mountain homestays, verified guides, and certified safety equipment.'}
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-100">
+                <div className="p-3 bg-slate-50 rounded-2xl text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Starting Point</span>
+                  <span className="text-xs font-black text-slate-900">{trip.startingPoint || 'Delhi / Guwahati'}</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Ending Point</span>
+                  <span className="text-xs font-black text-slate-900">{trip.endingPoint || 'Delhi / Guwahati'}</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Difficulty</span>
+                  <span className="text-xs font-black text-slate-900">{trip.grade || 'Moderate'}</span>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl text-center">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Age Group</span>
+                  <span className="text-xs font-black text-slate-900">{trip.ageGroup || '18-40 Years'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Day-by-Day Itinerary Accordion */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">Day-by-Day Expedition Itinerary</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">Carefully structured by certified captains for smooth acclimatization and photography.</p>
+                  <h3 className="text-xl font-black text-slate-900">Day-by-Day Itinerary</h3>
+                  <p className="text-xs text-slate-500 font-medium">Curated daily route, meal plans, and scenic halts</p>
                 </div>
+                <button
+                  onClick={() => setIsPlannerOpen(true)}
+                  className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                >
+                  <Sparkles size={14} /> Customize Days with AI
+                </button>
               </div>
 
               <div className="space-y-3">
-                {trip.itinerary.map((dayItem) => (
-                  <div key={dayItem.day} className="border border-slate-200/80 rounded-2xl overflow-hidden transition-all bg-slate-50/50">
-                    <button
-                      onClick={() => setOpenDay(openDay === dayItem.day ? null : dayItem.day)}
-                      className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-100 transition-colors"
+                {(trip.itinerary || [
+                  { day: 1, title: 'Arrival & Scenic Mountain Drive', desc: 'Pickup from designated point, scenic mountain drive, check into boutique hotel, welcome dinner.' },
+                  { day: 2, title: 'Guided Sightseeing & Secret Waterfalls', desc: 'Morning trail to hidden waterfalls, local cafe hopping, and sunset photography viewpoint.' },
+                  { day: 3, title: 'High Mountain Pass & Night Camping', desc: 'Drive over high-altitude passes, visit ancient monastery, stargazing around cozy bonfire.' }
+                ]).map((dayItem) => {
+                  const isOpen = openDay === dayItem.day;
+                  return (
+                    <div
+                      key={dayItem.day}
+                      className="border border-slate-200 rounded-2xl overflow-hidden transition-all"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
-                          D{dayItem.day}
-                        </span>
-                        <h3 className="text-xs sm:text-sm font-black text-slate-900">{dayItem.title}</h3>
-                      </div>
-                      {openDay === dayItem.day ? <ChevronUp size={18} className="text-slate-400" /> : <ChevronDown size={18} className="text-slate-400" />}
-                    </button>
-
-                    {openDay === dayItem.day && (
-                      <div className="p-4 pt-0 text-xs text-slate-600 font-medium leading-relaxed border-t border-slate-200/60 mt-1">
-                        <p className="pt-2">{dayItem.desc}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 bg-white p-2.5 rounded-xl border border-slate-200">
-                          <span className="flex items-center gap-1 font-bold text-slate-700"><BedDouble size={13} className="text-emerald-500" /> Boutique Resort</span>
-                          <span className="flex items-center gap-1 font-bold text-slate-700"><Utensils size={13} className="text-emerald-500" /> Breakfast Included</span>
-                          <span className="flex items-center gap-1 font-bold text-slate-700"><Bus size={13} className="text-emerald-500" /> Private Traveler</span>
+                      <button
+                        onClick={() => setOpenDay(isOpen ? null : dayItem.day)}
+                        className="w-full p-4 flex items-center justify-between text-left bg-slate-50 hover:bg-slate-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 rounded-xl bg-slate-900 text-white text-xs font-black flex items-center justify-center shrink-0">
+                            D{dayItem.day}
+                          </span>
+                          <span className="text-xs md:text-sm font-black text-slate-900">{dayItem.title}</span>
                         </div>
-                      </div>
+                        {isOpen ? <ChevronUp size={18} className="text-slate-500" /> : <ChevronDown size={18} className="text-slate-500" />}
+                      </button>
+
+                      {isOpen && (
+                        <div className="p-4 bg-white text-xs md:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100">
+                          {dayItem.desc}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Interactive Dynamic Packing Checklist */}
+            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Backpack size={20} className="text-emerald-600" />
+                    <h3 className="text-xl font-black text-slate-900">Interactive Packing Assistant</h3>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Personalized checklist for {trip.location} based on current climate ({weather.temp})
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                    {packedCount} of {totalPackingCount} Packed
+                  </span>
+                </div>
+              </div>
+
+              {/* Packing Progress Bar */}
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-emerald-500 h-full transition-all duration-300 rounded-full"
+                  style={{ width: `${Math.round((packedCount / totalPackingCount) * 100)}%` }}
+                />
+              </div>
+
+              {/* Checklist Items Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {packingList.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleTogglePackingItem(item.id)}
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                      item.defaultChecked
+                        ? 'bg-emerald-50/60 border-emerald-200 text-slate-900'
+                        : 'bg-slate-50 border-slate-200/80 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {item.defaultChecked ? (
+                        <CheckSquare size={16} className="text-emerald-600 shrink-0" />
+                      ) : (
+                        <Square size={16} className="text-slate-400 shrink-0" />
+                      )}
+                      <span className={`text-xs font-bold ${item.defaultChecked ? 'line-through text-slate-400' : ''}`}>
+                        {item.name}
+                      </span>
+                    </div>
+
+                    {item.mandatory && (
+                      <span className="text-[9px] font-black uppercase bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
+                        Must
+                      </span>
                     )}
                   </div>
                 ))}
@@ -326,124 +459,119 @@ const TripDetails = () => {
             </div>
 
             {/* Inclusions & Exclusions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-3">
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <CheckCircle2 size={18} className="text-emerald-500" /> What's Included
-                </h3>
-                <ul className="space-y-2 text-xs font-semibold text-slate-600">
-                  <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Accommodation in handpicked stays</li>
-                  <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Daily organic breakfast & dinner</li>
-                  <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> AC Tempo Traveler transfers</li>
-                  <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Certified WanderLuxe Captain</li>
-                  <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> All entry permits & toll taxes</li>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                <h4 className="text-base font-black text-emerald-700 flex items-center gap-2">
+                  <CheckCircle2 size={18} /> Inclusions
+                </h4>
+                <ul className="space-y-2 text-xs font-bold text-slate-700">
+                  <li className="flex items-center gap-2">✓ Boutique hotel stays & Swiss tents</li>
+                  <li className="flex items-center gap-2">✓ Breakfast & Dinner on all days</li>
+                  <li className="flex items-center gap-2">✓ AC / 4x4 Private Transfers</li>
+                  <li className="flex items-center gap-2">✓ Certified Trip Captain & Local Guide</li>
+                  <li className="flex items-center gap-2">✓ All Inner Line Permits & Tolls</li>
                 </ul>
               </div>
 
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-3">
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <ShieldAlert size={18} className="text-rose-500" /> What's Excluded
-                </h3>
-                <ul className="space-y-2 text-xs font-semibold text-slate-600">
-                  <li className="flex items-center gap-2"><X size={14} className="text-rose-500" /> Flights / train tickets to pickup city</li>
-                  <li className="flex items-center gap-2"><X size={14} className="text-rose-500" /> Personal expenses and lunch</li>
-                  <li className="flex items-center gap-2"><X size={14} className="text-rose-500" /> Optional extreme watersports & cliff diving</li>
-                  <li className="flex items-center gap-2"><X size={14} className="text-rose-500" /> Camera permit fees where applicable</li>
+              <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+                <h4 className="text-base font-black text-rose-700 flex items-center gap-2">
+                  <X size={18} /> Exclusions
+                </h4>
+                <ul className="space-y-2 text-xs font-bold text-slate-700">
+                  <li className="flex items-center gap-2">✗ Flights / Train to starting point</li>
+                  <li className="flex items-center gap-2">✗ Personal shopping & extra activities</li>
+                  <li className="flex items-center gap-2">✗ Lunches during transit halts</li>
+                  <li className="flex items-center gap-2">✗ Personal travel insurance</li>
                 </ul>
-              </div>
-            </div>
-
-            {/* Trip FAQs */}
-            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80 space-y-4">
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <HelpCircle size={22} className="text-emerald-500" /> Frequently Asked Questions
-              </h2>
-              <div className="space-y-3">
-                {tripFaqs.map((faq, i) => (
-                  <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
-                    <h4 className="text-xs font-black text-slate-900 mb-1">{faq.q}</h4>
-                    <p className="text-xs text-slate-600 font-medium leading-relaxed">{faq.a}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Similar Expeditions Row */}
-            <div className="space-y-4 pt-4">
-              <h2 className="text-xl font-black text-slate-900">Similar Expeditions You Might Love</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {similarTrips.map((sTrip) => (
-                  <TripCard key={sTrip.id} trip={sTrip} showWeather={false} />
-                ))}
               </div>
             </div>
           </div>
 
-          {/* Right Column: Desktop Sticky Booking Panel */}
+          {/* Right Column: Sticky Booking Widget */}
           <div className="lg:col-span-1">
-            <div className="sticky top-24 bg-white rounded-3xl p-6 shadow-xl border border-slate-200 space-y-6">
+            <div className="sticky top-28 bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-xl space-y-6">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Per Person Pricing</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 block">
+                  Authoritative Price
+                </span>
                 <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black text-slate-900">₹{perPersonPrice.toLocaleString()}</span>
-                  <span className="text-xs text-slate-400 line-through">₹{(perPersonPrice + 3500).toLocaleString()}</span>
-                  <span className="text-[11px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Save ₹3,500</span>
+                  <span className="text-3xl font-black text-slate-900">
+                    ₹{perPersonPrice.toLocaleString()}
+                  </span>
+                  <span className="text-xs font-bold text-slate-400">/ person</span>
                 </div>
-                <span className="text-xs text-slate-500 font-medium block mt-1">or from ₹{monthlyEmi.toLocaleString()}/mo with 0% No-Cost EMI</span>
+                <span className="text-[11px] font-bold text-slate-500 mt-1 block">
+                  or 6 monthly installments of <span className="text-emerald-600 font-extrabold">₹{monthlyEmi.toLocaleString()}</span> (0% EMI)
+                </span>
               </div>
 
-              {/* Select Departure Batch */}
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Select Batch Date</label>
+              {/* Batch Selector */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  Select Upcoming Departure Batch
+                </label>
                 <div className="space-y-2">
-                  {trip.availableBatches?.map((batch, i) => (
+                  {(trip.availableBatches || [
+                    { dates: '15 Sep - 20 Sep, 2026', seatsLeft: 4, status: 'Filling Fast' },
+                    { dates: '25 Sep - 30 Sep, 2026', seatsLeft: 8, status: 'Available' },
+                    { dates: '05 Oct - 10 Oct, 2026', seatsLeft: 12, status: 'Available' }
+                  ]).map((batch, idx) => (
                     <div
-                      key={i}
+                      key={idx}
                       onClick={() => setSelectedBatch(batch)}
                       className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-xs ${
                         selectedBatch.dates === batch.dates
-                          ? 'border-emerald-500 bg-emerald-50/40 text-emerald-900 font-black'
-                          : 'border-slate-200 hover:border-slate-300 font-semibold text-slate-700'
+                          ? 'border-emerald-500 bg-emerald-50/50 font-black text-slate-900 ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 hover:border-slate-300 font-bold text-slate-700'
                       }`}
                     >
-                      <span>{batch.dates}</span>
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">{batch.seatsLeft} Seats Left</span>
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="text-emerald-600" />
+                        <span>{batch.dates}</span>
+                      </div>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                        {batch.seatsLeft} seats
+                      </span>
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Occupancy Selector */}
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Room Occupancy</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  Room Occupancy Sharing
+                </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {['Single Sharing', 'Double Sharing', 'Triple Sharing'].map((occ) => (
+                  {['Double Sharing', 'Triple Sharing', 'Single Sharing'].map((occ) => (
                     <button
                       key={occ}
                       type="button"
                       onClick={() => setOccupancy(occ)}
-                      className={`p-2 rounded-xl text-[11px] font-bold border transition-all ${
+                      className={`py-2 px-1 rounded-xl text-[10px] font-black transition-all border ${
                         occupancy === occ
                           ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      {occ.split(' ')[0]}
+                      {occ.replace(' Sharing', '')}
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Travelers Counter */}
-              <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Number of Travelers</label>
-                <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-2xl">
-                  <span className="text-xs font-bold text-slate-700">{travelers} Traveler(s)</span>
-                  <div className="flex items-center gap-2">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  Number of Travelers
+                </label>
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-700">Total Travelers</span>
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setTravelers(Math.max(1, travelers - 1))}
-                      className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-100"
+                      className="w-7 h-7 rounded-xl bg-white border border-slate-200 text-xs font-black hover:bg-slate-100 flex items-center justify-center"
                     >
                       -
                     </button>
@@ -451,7 +579,7 @@ const TripDetails = () => {
                     <button
                       type="button"
                       onClick={() => setTravelers(Math.min(10, travelers + 1))}
-                      className="w-7 h-7 rounded-lg bg-white border border-slate-200 text-slate-700 font-bold flex items-center justify-center hover:bg-slate-100"
+                      className="w-7 h-7 rounded-xl bg-white border border-slate-200 text-xs font-black hover:bg-slate-100 flex items-center justify-center"
                     >
                       +
                     </button>
@@ -459,25 +587,48 @@ const TripDetails = () => {
                 </div>
               </div>
 
-              {/* Total Calculation */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-xs font-black text-slate-400 uppercase">Total Payable</span>
-                <span className="text-2xl font-black text-slate-900">₹{totalPrice.toLocaleString()}</span>
-              </div>
+              {/* Total Calculation & Proceed CTA */}
+              <div className="pt-4 border-t border-slate-100 space-y-3">
+                <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                  <span>Total Payable:</span>
+                  <span className="text-lg font-black text-slate-900">₹{totalPrice.toLocaleString()}</span>
+                </div>
 
-              {/* Booking CTA Button */}
-              <button
-                onClick={handleProceedToBooking}
-                className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
-              >
-                Proceed to Book Seat <ArrowRight size={16} />
-              </button>
+                <button
+                  onClick={handleProceedToBooking}
+                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck size={16} /> Book Now with Instant QR
+                </button>
 
-              <div className="text-[11px] text-slate-400 space-y-1.5 text-center font-medium">
-                <p className="flex items-center justify-center gap-1"><ShieldCheck size={14} className="text-emerald-500" /> Instant QR Pass Generation</p>
-                <p>100% Refund Guarantee 15 Days Before Departure</p>
+                <p className="text-[10px] text-center text-slate-400 font-bold">
+                  🔒 Razorpay Test Payment • Free date rollover up to 15 days prior
+                </p>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Similar Expeditions Section */}
+        <div className="mt-20 pt-10 border-t border-slate-200/80">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block">
+                Related Itineraries
+              </span>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900">
+                You May Also Like
+              </h2>
+            </div>
+            <Link to="/destinations" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+              Browse All <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {fallbackSimilarTrips.map((sTrip) => (
+              <TripCard key={sTrip.id} trip={sTrip} showWeather={true} />
+            ))}
           </div>
         </div>
       </div>

@@ -4,7 +4,8 @@ import {
   User, Calendar, Mail, Phone, MapPin, Ticket, ShieldCheck, 
   LogOut, QrCode, Printer, X, Sparkles, CheckCircle2, ChevronRight,
   Heart, Coins, Lock, Save, AlertCircle, ExternalLink, ShieldAlert, Award,
-  Trash2, Compass, ArrowRight, History
+  Trash2, Compass, ArrowRight, History, SlidersHorizontal, Backpack,
+  CloudSun, Clock, ThumbsUp, CheckSquare, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +15,10 @@ import {
   getSavedAIItineraries, deleteSavedAIItinerary, 
   getWishlistIds, toggleWishlistItem, getRecentlyViewedTrips 
 } from '../utils/userHistory';
+import { getPreTripDashboard, generatePackingChecklist } from '../utils/travelContextEngine';
+import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
 import TripCard from '../components/TripCard';
+import WeatherBadge from '../components/WeatherBadge';
 
 const Profile = () => {
   const { user, logout, updateProfile, cancelBooking } = useAuth();
@@ -26,10 +30,17 @@ const Profile = () => {
   const [liveBookings, setLiveBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   
-  // AI Itineraries & Wishlist State
+  // AI Itineraries, Wishlist & Preferences State
   const [savedAIPlans, setSavedAIPlans] = useState([]);
   const [wishlistTrips, setWishlistTrips] = useState([]);
   const [recentlyViewed, setRecentlyViewed] = useState([]);
+  const [userPreferences, setUserPreferences] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('wanderluxe_user_preferences') || '{}');
+    } catch (e) {
+      return {};
+    }
+  });
 
   // Profile edit state
   const [name, setName] = useState(user?.name || '');
@@ -38,13 +49,6 @@ const Profile = () => {
   const [address, setAddress] = useState(user?.address || '');
   const [avatar, setAvatar] = useState(user?.avatar || '');
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  // Security password state
-  const [currentPass, setCurrentPass] = useState('');
-  const [newPass, setNewPass] = useState('');
-  const [confirmPass, setConfirmPass] = useState('');
-  const [passSuccess, setPassSuccess] = useState(false);
 
   // Sync profile state when user session loads
   useEffect(() => {
@@ -95,163 +99,188 @@ const Profile = () => {
     setWishlistTrips(UPCOMING_TRIPS.filter((t) => updatedIds.includes(t.id)));
   };
 
+  const handleUpdatePreferences = (key, val) => {
+    const updated = { ...userPreferences, [key]: val };
+    setUserPreferences(updated);
+    try {
+      localStorage.setItem('wanderluxe_user_preferences', JSON.stringify(updated));
+    } catch (e) {
+      // Ignored
+    }
+  };
+
   if (!user) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center pt-24 px-4 text-center">
-        <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100 max-w-md w-full">
-          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <User size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Your Profile</h2>
-          <p className="text-slate-500 text-sm mb-6">Please log in to view your booked itineraries and ticket vouchers.</p>
-          <Link
-            to="/login"
-            className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-bold transition-all shadow-md block"
-          >
-            Log In Now
-          </Link>
+        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
+          <User size={32} />
         </div>
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Access Your Travel Profile</h2>
+        <p className="text-slate-500 text-xs md:text-sm max-w-sm mb-6 font-medium">
+          Login to manage your bookings, download boarding passes, view saved AI itineraries, and customize your recommendations.
+        </p>
+        <Link
+          to="/login"
+          className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md"
+        >
+          Login with Email
+        </Link>
       </div>
     );
   }
 
+  // Pre-Trip Dashboard for Confirmed Booking
+  const confirmedBooking = (liveBookings.length > 0 ? liveBookings : user.bookings || []).find(
+    (b) => b.bookingStatus === 'CONFIRMED' || b.paymentStatus === 'PAID'
+  );
+  const preTripData = confirmedBooking ? getPreTripDashboard(confirmedBooking) : null;
+
   return (
-    <div className="min-h-screen bg-brand-light pt-24 pb-20">
-      {/* Boarding Pass Modal */}
+    <div className="min-h-screen bg-brand-light pt-24 pb-24">
+      {/* Boarding Pass Ticket Modal */}
       <AnimatePresence>
         {selectedTicket && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
-            onClick={() => setSelectedTicket(null)}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
           >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative text-slate-800"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setSelectedTicket(null)}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-900 rounded-full"
-              >
-                <X size={20} />
-              </button>
-
-              <div className="text-center mb-4">
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+            <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200">
+              <div className="bg-slate-900 text-white p-6 relative">
+                <button
+                  onClick={() => setSelectedTicket(null)}
+                  className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">
                   Official Travel Boarding Pass
                 </span>
-                <h3 className="text-xl font-black text-slate-900 mt-2">WanderLuxe Expedition Voucher</h3>
+                <h3 className="text-lg font-black mt-1 leading-snug">{selectedTicket.tripTitle || selectedTicket.tripSnapshot?.title}</h3>
+                <span className="text-xs text-slate-400 font-bold">{selectedTicket.batchDates || selectedTicket.batchDate}</span>
               </div>
 
-              <div className="bg-slate-900 text-white p-5 rounded-2xl mb-4 space-y-3">
-                <div className="flex justify-between items-start">
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center text-xs">
                   <div>
-                    <span className="text-xs text-emerald-400 font-bold block">Expedition</span>
-                    <p className="font-black text-base">{selectedTicket.tripTitle || selectedTicket.tripSnapshot?.title}</p>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Booking ID</span>
+                    <span className="font-mono font-black text-slate-900">{selectedTicket.bookingId || selectedTicket.id}</span>
                   </div>
-                  <span className="bg-white/20 text-white font-mono text-xs px-2.5 py-1 rounded-lg">
-                    {selectedTicket.bookingId || selectedTicket.id}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-white/50 block text-[10px]">Travel Batch</span>
-                    <span className="font-semibold">{selectedTicket.batchDate || selectedTicket.tripSnapshot?.batchDates}</span>
-                  </div>
-                  <div>
-                    <span className="text-white/50 block text-[10px]">Passenger</span>
-                    <span className="font-semibold">{selectedTicket.leadTraveler?.name || user.name}</span>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Status</span>
+                    <span className="font-black text-emerald-600">CONFIRMED</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-white/10 text-[11px]">
-                  <span className="text-white/80">Status: <strong className="text-emerald-400 font-bold">Confirmed</strong></span>
-                  <QrCode size={36} className="text-white" />
+                <div className="p-4 bg-slate-50 rounded-2xl flex flex-col items-center justify-center space-y-2 border border-slate-100">
+                  <div className="w-40 h-40 bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center">
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(selectedTicket.bookingId || selectedTicket.id)}`} 
+                      alt="Booking QR Code Pass" 
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-slate-500">Scan at boarding pickup point</span>
                 </div>
+
+                <button
+                  onClick={() => window.print()}
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  <Printer size={15} /> Print / Save Voucher PDF
+                </button>
               </div>
-
-              <button
-                onClick={() => window.print()}
-                className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 text-xs"
-              >
-                <Printer size={16} /> Print Pass / Save PDF
-              </button>
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="container mx-auto px-4 md:px-8">
-        {/* User Banner Header */}
-        <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200/80 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <img
-              src={user.avatar}
-              alt={user.name}
-              className="w-20 h-20 rounded-full border-4 border-emerald-500 object-cover shadow-md shrink-0"
-            />
+        {/* Pre-Trip Countdown Dashboard (if confirmed booking exists) */}
+        {preTripData && (
+          <div className="mb-10 bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-slate-800">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <span className="bg-emerald-500 text-white text-[10px] font-black uppercase px-3 py-0.5 rounded-full">
+                    Pre-Trip Command Center
+                  </span>
+                  <span className="text-emerald-400 text-xs font-black">
+                    {preTripData.daysRemaining} Days to Departure
+                  </span>
+                </div>
+                <h2 className="text-xl md:text-3xl font-black">{preTripData.tripTitle}</h2>
+                <p className="text-xs text-slate-300 font-medium">
+                  Departure Date: <span className="text-white font-bold">{preTripData.departureDateFormatted}</span> • Boarding Point: <span className="text-white font-bold">{preTripData.pickupPoint}</span>
+                </p>
+                <div className="flex items-center gap-4 text-xs pt-2">
+                  <span className="text-slate-300">Captain: <strong className="text-white">{preTripData.captainName}</strong></span>
+                  <span className="text-slate-300">Contact: <strong className="text-emerald-300">{preTripData.captainPhone}</strong></span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full lg:w-auto">
+                <button
+                  onClick={() => setSelectedTicket(confirmedBooking)}
+                  className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+                >
+                  <QrCode size={16} /> Boarding QR Pass
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Header Card */}
+        <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 font-black text-xl flex items-center justify-center border-2 border-emerald-500 shrink-0">
+              {user.name ? user.name[0].toUpperCase() : 'U'}
+            </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl md:text-3xl font-black text-slate-900">{user.name}</h1>
-                <span className="bg-emerald-50 text-emerald-700 text-xs font-black px-3 py-0.5 rounded-full border border-emerald-200">
-                  {user.role === 'admin' ? 'Admin Access' : user.role === 'influencer' ? 'Creator Partner' : 'Verified Traveler'}
+                <h1 className="text-xl font-black text-slate-900">{user.name || 'WanderLuxe Explorer'}</h1>
+                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                  {user.role || 'Member'}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium flex flex-wrap items-center gap-3 mt-1.5">
-                <span className="flex items-center gap-1"><Mail size={14} /> {user.email}</span>
-                {user.phone && <span className="flex items-center gap-1"><Phone size={14} /> {user.phone}</span>}
-                {user.address && <span className="flex items-center gap-1"><MapPin size={14} /> {user.address}</span>}
-              </p>
+              <p className="text-xs text-slate-400 font-medium">{user.email}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {user.role === 'admin' && (
-              <Link
-                to="/admin"
-                className="px-4 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-2xl hover:bg-slate-800 transition-all flex items-center gap-2 shadow-md"
-              >
-                <ShieldCheck size={16} /> Admin Panel
-              </Link>
-            )}
-
-            <button
-              onClick={logout}
-              className="px-4 py-2.5 bg-slate-100 text-slate-700 font-bold text-xs rounded-2xl hover:bg-slate-200 transition-all flex items-center gap-1.5"
-            >
-              <LogOut size={16} /> Log Out
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              logout();
+              navigate('/');
+            }}
+            className="px-4 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-black transition-colors flex items-center gap-1.5"
+          >
+            <LogOut size={14} /> Log Out
+          </button>
         </div>
 
-        {/* Profile Tabs Navigation */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-6 border-b border-slate-200">
+        {/* Tab Navigation */}
+        <div className="flex flex-wrap items-center gap-2 mb-8 border-b border-slate-200/80 pb-3">
           {[
-            { id: 'bookings', label: 'My Bookings', icon: Ticket, count: liveBookings.length },
-            { id: 'ai_plans', label: 'My AI Itineraries', icon: Sparkles, count: savedAIPlans.length },
-            { id: 'wishlist', label: 'Saved Wishlist', icon: Heart, count: wishlistTrips.length },
-            { id: 'history', label: 'Recently Viewed', icon: History, count: recentlyViewed.length },
-            { id: 'edit_profile', label: 'Profile Settings', icon: User }
+            { id: 'bookings', label: 'My Bookings', count: liveBookings.length || user.bookings?.length || 0 },
+            { id: 'preferences', label: 'Travel Preferences', count: null },
+            { id: 'ai-plans', label: 'Saved AI Plans', count: savedAIPlans.length },
+            { id: 'wishlist', label: 'My Wishlist', count: wishlistTrips.length },
+            { id: 'history', label: 'Recently Viewed', count: recentlyViewed.length }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 shrink-0 ${
+              className={`px-4 py-2 rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 ${
                 activeTab === tab.id
                   ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  : 'bg-white border border-slate-200/80 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <tab.icon size={15} className={activeTab === tab.id ? 'text-emerald-400' : 'text-slate-400'} />
               <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span className={`text-[10px] px-2 py-0.2 rounded-full font-bold ${
+              {tab.count !== null && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
                   activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {tab.count}
@@ -261,140 +290,190 @@ const Profile = () => {
           ))}
         </div>
 
-        {/* Tab 1: Bookings & Passes */}
+        {/* TAB 1: MY BOOKINGS */}
         {activeTab === 'bookings' && (
-          <div className="space-y-6">
-            {loadingBookings ? (
-              <div className="py-16 text-center text-slate-400 font-bold text-xs">
-                Fetching confirmed reservations from database...
-              </div>
-            ) : liveBookings.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {liveBookings.map((b) => (
-                  <div key={b._id || b.bookingId} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                          {b.bookingStatus || 'CONFIRMED'}
-                        </span>
-                        <h3 className="text-base font-black text-slate-900 mt-2">{b.tripSnapshot?.title || 'Expedition'}</h3>
-                        <span className="text-xs text-slate-400 font-mono">ID: {b.bookingId || b._id}</span>
-                      </div>
-                      <span className="text-lg font-black text-slate-900">₹{(b.pricing?.finalAmount || b.paidAmount || 18500).toLocaleString()}</span>
-                    </div>
+          <div className="space-y-4">
+            {(liveBookings.length > 0 ? liveBookings : user.bookings || []).length > 0 ? (
+              (liveBookings.length > 0 ? liveBookings : user.bookings || []).map((booking, idx) => (
+                <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 block">
+                      ID: {booking.bookingId || booking.id || `WLX-2026-${idx}`}
+                    </span>
+                    <h3 className="text-base font-black text-slate-900">
+                      {booking.tripTitle || booking.tripSnapshot?.title || 'Himalayan Tour Package'}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Dates: <strong className="text-slate-800">{booking.batchDates || booking.batchDate || '15 Sep - 20 Sep, 2026'}</strong> • Travelers: <strong className="text-slate-800">{booking.travelersCount || booking.travelers || 1}</strong>
+                    </p>
+                  </div>
 
-                    <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                      <p><strong>Batch:</strong> {b.tripSnapshot?.batchDates || 'Scheduled Batch'}</p>
-                      <p><strong>Lead Traveler:</strong> {b.leadTraveler?.name || user.name}</p>
-                    </div>
-
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {booking.bookingStatus || 'CONFIRMED'}
+                    </span>
                     <button
-                      onClick={() => setSelectedTicket(b)}
-                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                      onClick={() => setSelectedTicket(booking)}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black flex items-center gap-1.5"
                     >
-                      <QrCode size={16} /> View Boarding Pass
+                      <QrCode size={14} /> Boarding Pass
                     </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))
             ) : (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 max-w-md mx-auto space-y-3">
-                <Ticket size={36} className="text-slate-300 mx-auto" />
-                <h3 className="text-lg font-black text-slate-900">No Active Bookings</h3>
-                <p className="text-xs text-slate-500 font-medium">You haven't reserved any group departures yet. Browse our curated itineraries to start your journey.</p>
-                <Link to="/destinations" className="inline-block px-5 py-2.5 bg-emerald-500 text-white text-xs font-black rounded-xl hover:bg-emerald-600">
-                  Explore Destinations
+              <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center max-w-md mx-auto space-y-4">
+                <Ticket size={32} className="mx-auto text-slate-300" />
+                <h3 className="text-base font-black text-slate-900">No active bookings yet</h3>
+                <p className="text-xs text-slate-500 font-medium">Browse our curated expeditions and book your next adventure.</p>
+                <Link to="/destinations" className="inline-block px-5 py-2.5 bg-emerald-500 text-white rounded-xl text-xs font-black">
+                  Explore 50+ Packages
                 </Link>
               </div>
             )}
           </div>
         )}
 
-        {/* Tab 2: Saved AI Itineraries */}
-        {activeTab === 'ai_plans' && (
-          <div className="space-y-6">
+        {/* TAB 2: TRAVEL PREFERENCES */}
+        {activeTab === 'preferences' && (
+          <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Personalize Your Travel Recommendations</h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                We use these preferences to tailor the Home hero and ranking algorithm.
+              </p>
+            </div>
+
+            {/* Preferred Mood */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase text-slate-400 block">Favorite Travel Style / Mood</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {['Mountains', 'Beach', 'Waterfalls', 'Adventure', 'Backpacking', 'Culture'].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleUpdatePreferences('mood', m)}
+                    className={`py-2.5 px-3 rounded-2xl text-xs font-black transition-all border text-left flex items-center justify-between ${
+                      userPreferences.mood === m
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{m}</span>
+                    {userPreferences.mood === m && <CheckCircle2 size={14} className="text-emerald-600" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Budget Tier */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase text-slate-400 block">Target Budget Tier</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: 'Budget', value: 10000, desc: 'Under ₹10,000' },
+                  { label: 'Balanced', value: 20000, desc: 'Under ₹20,000' },
+                  { label: 'Luxury', value: 50000, desc: '₹30,000+' }
+                ].map((tier) => (
+                  <button
+                    key={tier.label}
+                    type="button"
+                    onClick={() => handleUpdatePreferences('maxBudget', tier.value)}
+                    className={`p-3 rounded-2xl text-left border transition-all ${
+                      userPreferences.maxBudget === tier.value
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="text-xs font-black block">{tier.label}</span>
+                    <span className="text-[10px] text-slate-500 font-bold">{tier.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-600">Preferences auto-saved</span>
+              <button
+                onClick={() => {
+                  setUserPreferences({});
+                  localStorage.removeItem('wanderluxe_user_preferences');
+                }}
+                className="text-xs font-black text-rose-600 hover:underline"
+              >
+                Reset Preferences
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: SAVED AI ITINERARIES */}
+        {activeTab === 'ai-plans' && (
+          <div className="space-y-4">
             {savedAIPlans.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {savedAIPlans.map((plan) => (
-                  <div key={plan.id} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                          {plan.daysCount} Days • {plan.mood}
-                        </span>
-                        <h3 className="text-base font-black text-slate-900 mt-2">{plan.title}</h3>
-                        <span className="text-xs text-slate-400">{plan.tagline}</span>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteAIPlan(plan.id)}
-                        className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-rose-50 transition-colors"
-                        title="Delete itinerary"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-
-                    <div className="text-xs text-slate-600 space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <span className="text-[10px] font-black text-slate-400 uppercase block">Daily Route Highlights</span>
-                      {plan.itineraryDays?.slice(0, 3).map((d) => (
-                        <div key={d.day} className="flex items-baseline gap-2">
-                          <strong className="text-slate-900 shrink-0">Day {d.day}:</strong>
-                          <span className="truncate text-slate-600">{d.title}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-xs font-bold text-slate-700">Est: ₹{plan.totalEstimatedCost?.toLocaleString()}</span>
-                      {plan.matchedCatalogTrip && (
-                        <Link
-                          to={`/trip/${plan.matchedCatalogTrip.id}`}
-                          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1"
-                        >
-                          Book Similar Tour <ArrowRight size={13} />
-                        </Link>
-                      )}
-                    </div>
+              savedAIPlans.map((plan) => (
+                <div key={plan.id} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {plan.daysCount} Days • {plan.mood}
+                    </span>
+                    <h3 className="text-base font-black text-slate-900 mt-1">{plan.title}</h3>
+                    <p className="text-xs text-slate-500 font-medium">{plan.tagline}</p>
                   </div>
-                ))}
-              </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigate('/destinations', { state: { searchQuery: plan.destination } })}
+                      className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black hover:bg-emerald-600"
+                    >
+                      Find Packages
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAIPlan(plan.id)}
+                      className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
             ) : (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 max-w-md mx-auto space-y-3">
-                <Sparkles size={36} className="text-slate-300 mx-auto" />
-                <h3 className="text-lg font-black text-slate-900">No Saved AI Itineraries</h3>
-                <p className="text-xs text-slate-500 font-medium">Use our AI Travel Planner on the Home or Destinations page to design custom day-by-day travel routes and save them here.</p>
-                <Link to="/" className="inline-block px-5 py-2.5 bg-slate-900 text-white text-xs font-black rounded-xl hover:bg-slate-800">
-                  Launch AI Planner
+              <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center max-w-md mx-auto space-y-4">
+                <Sparkles size={32} className="mx-auto text-emerald-400" />
+                <h3 className="text-base font-black text-slate-900">No saved AI itineraries</h3>
+                <p className="text-xs text-slate-500 font-medium">Generate custom multi-day plans with our AI Travel Intelligence tool.</p>
+                <Link to="/" className="inline-block px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black">
+                  Create AI Itinerary on Home
                 </Link>
               </div>
             )}
           </div>
         )}
 
-        {/* Tab 3: Saved Wishlist */}
+        {/* TAB 4: MY WISHLIST */}
         {activeTab === 'wishlist' && (
-          <div className="space-y-6">
+          <div>
             {wishlistTrips.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {wishlistTrips.map((trip) => (
                   <div key={trip.id} className="relative group">
                     <TripCard trip={trip} showWeather={true} />
                     <button
                       onClick={() => handleRemoveWishlist(trip.id)}
-                      className="absolute top-3 right-3 z-20 p-2 bg-white/90 rounded-full text-rose-500 hover:bg-white transition-colors shadow-md"
-                      title="Remove from saved"
+                      className="absolute top-3 right-3 z-20 p-2 bg-rose-500 text-white rounded-full shadow-md hover:bg-rose-600 transition-colors"
+                      title="Remove from wishlist"
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 max-w-md mx-auto space-y-3">
-                <Heart size={36} className="text-slate-300 mx-auto" />
-                <h3 className="text-lg font-black text-slate-900">Your Wishlist is Empty</h3>
-                <p className="text-xs text-slate-500 font-medium">Click the heart icon on any tour package or expedition to save it to your personal wishlist.</p>
-                <Link to="/destinations" className="inline-block px-5 py-2.5 bg-emerald-500 text-white text-xs font-black rounded-xl hover:bg-emerald-600">
+              <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center max-w-md mx-auto space-y-4">
+                <Heart size={32} className="mx-auto text-slate-300" />
+                <h3 className="text-base font-black text-slate-900">Your wishlist is empty</h3>
+                <p className="text-xs text-slate-500 font-medium">Click the heart icon on any expedition to save it for later.</p>
+                <Link to="/destinations" className="inline-block px-5 py-2.5 bg-emerald-500 text-white rounded-xl text-xs font-black">
                   Browse Expeditions
                 </Link>
               </div>
@@ -402,89 +481,22 @@ const Profile = () => {
           </div>
         )}
 
-        {/* Tab 4: Recently Viewed */}
+        {/* TAB 5: RECENTLY VIEWED */}
         {activeTab === 'history' && (
-          <div className="space-y-6">
+          <div>
             {recentlyViewed.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {recentlyViewed.map((trip) => (
-                  <TripCard key={trip.id} trip={trip} showWeather={false} />
+                  <TripCard key={trip.id} trip={trip} showWeather={true} customBadge="Recently Viewed" />
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 max-w-md mx-auto space-y-3">
-                <History size={36} className="text-slate-300 mx-auto" />
-                <h3 className="text-lg font-black text-slate-900">No Browsing History</h3>
-                <p className="text-xs text-slate-500 font-medium">Trips you explore will automatically appear here for fast reference.</p>
+              <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center max-w-md mx-auto space-y-4">
+                <History size={32} className="mx-auto text-slate-300" />
+                <h3 className="text-base font-black text-slate-900">No recent views</h3>
+                <p className="text-xs text-slate-500 font-medium">Trips you explore will appear here for easy continuation.</p>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Tab 5: Profile Settings */}
-        {activeTab === 'edit_profile' && (
-          <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 max-w-2xl mx-auto space-y-6">
-            <h2 className="text-xl font-black text-slate-900">Personal Traveler Information</h2>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                setIsUpdating(true);
-                await updateProfile({ name, phone, address, avatar });
-                setIsUpdating(false);
-                setSaveSuccess(true);
-                setTimeout(() => setSaveSuccess(false), 3000);
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">Full Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">Email (Account Locked)</label>
-                <input
-                  type="email"
-                  value={email}
-                  disabled
-                  className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-500 cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">Mobile Phone</label>
-                <input
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-400 mb-1.5">City & State</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isUpdating}
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2"
-              >
-                <Save size={16} /> {isUpdating ? 'Saving...' : saveSuccess ? 'Profile Updated!' : 'Save Changes'}
-              </button>
-            </form>
           </div>
         )}
       </div>

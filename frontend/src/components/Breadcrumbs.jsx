@@ -4,9 +4,14 @@ import { ChevronRight, Home } from 'lucide-react';
 import { getBreadcrumbSchema } from '../utils/seoSchemas';
 
 const Breadcrumbs = ({ items = [] }) => {
+  const normalizedItems = (items || []).map((item) => ({
+    name: item.name || item.label || 'Page',
+    path: item.path || null
+  }));
+
   const fullItems = [
     { name: 'Home', path: '/' },
-    ...items
+    ...normalizedItems
   ];
 
   const schemaData = getBreadcrumbSchema(fullItems);

@@ -71,6 +71,10 @@ function App() {
             
             {/* Public Catalog Routes */}
             <Route path="destinations" element={<Destinations />} />
+            <Route path="destinationspage" element={<Destinations />} />
+            <Route path="destination" element={<Destinations />} />
+            <Route path="packages" element={<Destinations />} />
+            <Route path="trips" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
             <Route path="international" element={<Destinations />} />
             <Route path="community-trips" element={<Destinations />} />
