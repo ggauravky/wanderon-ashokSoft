@@ -491,6 +491,131 @@ export const getBookingById = async (req, res) => {
   }
 };
 
+// @desc    Get Structured Boarding Pass Document Data (Protected - Owner or Admin only)
+// @route   GET /api/bookings/:bookingId/boarding-pass
+// @access  Private
+export const getBoardingPassData = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required.' });
+    }
+
+    const query = [{ bookingId }];
+    if (mongoose.Types.ObjectId.isValid(bookingId)) {
+      query.push({ _id: bookingId });
+    }
+
+    const booking = await Booking.findOne({ $or: query });
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    // Access Control: Only owner or admin can access boarding pass
+    const isOwner = booking.userId && booking.userId.toString() === userId.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: 'Access denied: You do not have permission to view this boarding pass.' });
+    }
+
+    // Must be confirmed and paid
+    if (booking.bookingStatus !== 'CONFIRMED' || booking.payment.status !== 'PAID') {
+      return res.status(400).json({ 
+        message: `Boarding Pass is only available for confirmed and paid bookings. Current status: ${booking.bookingStatus} (${booking.payment.status})`,
+        bookingStatus: booking.bookingStatus,
+        paymentStatus: booking.payment.status
+      });
+    }
+
+    // Ensure high-resolution QR code dataUrl exists
+    let qrDataUrl = booking.qrCode?.dataUrl;
+    if (!qrDataUrl) {
+      const qrPayload = JSON.stringify({
+        bookingId: booking.bookingId,
+        token: booking.qrCode?.verificationToken,
+        trip: booking.tripSnapshot.title,
+        travelers: booking.numberOfTravelers,
+        batchDate: booking.tripSnapshot.batchDate,
+        lead: booking.customer.name,
+        status: 'CONFIRMED'
+      });
+
+      try {
+        qrDataUrl = await QRCode.toDataURL(qrPayload, {
+          width: 360,
+          margin: 2,
+          color: {
+            dark: '#0b132b',
+            light: '#ffffff'
+          }
+        });
+        booking.qrCode.dataUrl = qrDataUrl;
+        await booking.save();
+      } catch (qrErr) {
+        console.warn('QR regeneration error:', qrErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      boardingPass: {
+        bookingId: booking.bookingId,
+        bookingStatus: booking.bookingStatus,
+        confirmedAt: booking.payment.paidAt || booking.updatedAt || booking.createdAt,
+        trip: {
+          tripId: booking.tripId,
+          title: booking.tripSnapshot.title,
+          destination: booking.tripSnapshot.destination || booking.tripSnapshot.location || 'India',
+          duration: booking.tripSnapshot.duration,
+          batchDate: booking.tripSnapshot.batchDate,
+          pickupPoint: booking.tripSnapshot.pickupPoint || 'Airport Arrival Terminal / Main Meeting Point',
+          image: booking.tripSnapshot.image
+        },
+        leadTraveler: {
+          name: booking.customer.name,
+          email: booking.customer.email,
+          phone: booking.customer.phone,
+          age: booking.customer.age,
+          gender: booking.customer.gender
+        },
+        coTravelers: booking.travelers || [],
+        numberOfTravelers: booking.numberOfTravelers,
+        occupancy: booking.occupancy || 'Double Sharing',
+        pricing: {
+          basePricePerPerson: booking.pricing.basePricePerPerson,
+          subtotal: booking.pricing.subtotal,
+          discount: booking.pricing.discount,
+          couponCode: booking.pricing.couponCode,
+          finalAmount: booking.pricing.finalAmount,
+          currency: booking.pricing.currency || 'INR'
+        },
+        payment: {
+          status: booking.payment.status,
+          razorpayPaymentId: booking.payment.razorpayPaymentId || 'rzp_test_verified',
+          paidAt: booking.payment.paidAt || booking.updatedAt
+        },
+        qrCode: {
+          dataUrl: qrDataUrl || booking.qrCode?.dataUrl,
+          verificationToken: booking.qrCode?.verificationToken,
+          verificationUrl: booking.qrCode?.verificationUrl || `https://wanderluxe.in/booking/verify/${booking.qrCode?.verificationToken}`
+        },
+        supportContact: {
+          phone: '+91 85420 36499',
+          email: 'support@wanderluxe.in',
+          captainName: 'Gaurav Kumar Yadav (Certified Expedition Lead)'
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Get Boarding Pass Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error fetching boarding pass' });
+  }
+};
+
 // @desc    Public QR Code Verification Endpoint (Safe Summary, No Secrets)
 // @route   GET /api/bookings/verify/:token
 // @access  Public

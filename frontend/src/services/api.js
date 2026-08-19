@@ -389,6 +389,19 @@ export const getBookingByIdApi = async (bookingId) => {
   return data;
 };
 
+export const getBoardingPassApi = async (bookingId) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/boarding-pass`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch boarding pass document');
+  }
+  return data.boardingPass || data;
+};
+
 export const verifyBookingTokenApi = async (token) => {
   const response = await fetch(`${API_BASE_URL}/bookings/verify/${token}`, {
     method: 'GET',

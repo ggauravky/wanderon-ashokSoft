@@ -19,6 +19,7 @@ import { getPreTripDashboard, generatePackingChecklist } from '../utils/travelCo
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
 import TripCard from '../components/TripCard';
 import WeatherBadge from '../components/WeatherBadge';
+import BoardingPassModal from '../components/BoardingPassModal';
 
 const Profile = () => {
   const { user, logout, updateProfile, cancelBooking } = useAuth();
@@ -137,64 +138,13 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-24">
-      {/* Boarding Pass Ticket Modal */}
-      <AnimatePresence>
-        {selectedTicket && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <div className="bg-white rounded-3xl max-w-md w-full overflow-hidden shadow-2xl border border-slate-200">
-              <div className="bg-slate-900 text-white p-6 relative">
-                <button
-                  onClick={() => setSelectedTicket(null)}
-                  className="absolute top-4 right-4 text-slate-400 hover:text-white"
-                >
-                  <X size={20} />
-                </button>
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">
-                  Official Travel Boarding Pass
-                </span>
-                <h3 className="text-lg font-black mt-1 leading-snug">{selectedTicket.tripTitle || selectedTicket.tripSnapshot?.title}</h3>
-                <span className="text-xs text-slate-400 font-bold">{selectedTicket.batchDates || selectedTicket.batchDate}</span>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="flex justify-between items-center text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Booking ID</span>
-                    <span className="font-mono font-black text-slate-900">{selectedTicket.bookingId || selectedTicket.id}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Status</span>
-                    <span className="font-black text-emerald-600">CONFIRMED</span>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl flex flex-col items-center justify-center space-y-2 border border-slate-100">
-                  <div className="w-40 h-40 bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center">
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(selectedTicket.bookingId || selectedTicket.id)}`} 
-                      alt="Booking QR Code Pass" 
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono font-bold text-slate-500">Scan at boarding pickup point</span>
-                </div>
-
-                <button
-                  onClick={() => window.print()}
-                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2"
-                >
-                  <Printer size={15} /> Print / Save Voucher PDF
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Dedicated Boarding Pass Travel Document Modal */}
+      <BoardingPassModal
+        isOpen={!!selectedTicket}
+        onClose={() => setSelectedTicket(null)}
+        bookingId={selectedTicket?.bookingId || selectedTicket?.id}
+        initialBookingData={selectedTicket}
+      />
 
       <div className="container mx-auto px-4 md:px-8">
         {/* Pre-Trip Countdown Dashboard (if confirmed booking exists) */}
@@ -295,28 +245,48 @@ const Profile = () => {
           <div className="space-y-4">
             {(liveBookings.length > 0 ? liveBookings : user.bookings || []).length > 0 ? (
               (liveBookings.length > 0 ? liveBookings : user.bookings || []).map((booking, idx) => (
-                <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-mono font-bold text-slate-400 block">
-                      ID: {booking.bookingId || booking.id || `WLX-2026-${idx}`}
-                    </span>
-                    <h3 className="text-base font-black text-slate-900">
+                <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:border-emerald-500/30 transition-all">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                        PNR: {booking.bookingId || booking.id || `WLX-2026-${idx}`}
+                      </span>
+                      <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> {booking.bookingStatus || 'CONFIRMED'}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base md:text-lg font-black text-slate-900 leading-tight">
                       {booking.tripTitle || booking.tripSnapshot?.title || 'Himalayan Tour Package'}
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium">
-                      Dates: <strong className="text-slate-800">{booking.batchDates || booking.batchDate || '15 Sep - 20 Sep, 2026'}</strong> • Travelers: <strong className="text-slate-800">{booking.travelersCount || booking.travelers || 1}</strong>
-                    </p>
+
+                    <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 font-medium">
+                      <span>Batch: <strong className="text-slate-800">{booking.batchDates || booking.batchDate || booking.tripSnapshot?.batchDate || '15 Sep - 20 Sep 2026'}</strong></span>
+                      <span>•</span>
+                      <span>Travelers: <strong className="text-slate-800">{booking.travelersCount || booking.numberOfTravelers || booking.travelers?.length || 1}</strong></span>
+                      {booking.pricing?.finalAmount && (
+                        <>
+                          <span>•</span>
+                          <span>Total Paid: <strong className="text-emerald-700 font-bold">₹{booking.pricing.finalAmount.toLocaleString()}</strong></span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {booking.bookingStatus || 'CONFIRMED'}
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto shrink-0">
+                    <Link
+                      to={`/booking/confirmation/${booking.bookingId || booking.id}`}
+                      className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all text-center"
+                    >
+                      Trip Voucher
+                    </Link>
+
                     <button
                       onClick={() => setSelectedTicket(booking)}
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black flex items-center gap-1.5"
+                      className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-950 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm"
                     >
-                      <QrCode size={14} /> Boarding Pass
+                      <QrCode size={15} className="text-emerald-400" />
+                      Boarding Pass
                     </button>
                   </div>
                 </div>

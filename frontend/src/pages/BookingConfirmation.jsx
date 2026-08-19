@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   CheckCircle2, Calendar, MapPin, Users, Ticket, ArrowRight, 
-  Printer, ShieldCheck, QrCode, Sparkles, Copy, Check, Clock, Phone, Mail
+  Printer, ShieldCheck, QrCode, Sparkles, Copy, Check, Clock, Phone, Mail, Download
 } from 'lucide-react';
 import { getBookingByIdApi } from '../services/api';
+import BoardingPassModal from '../components/BoardingPassModal';
 
 const BookingConfirmation = () => {
   const { bookingId } = useParams();
@@ -14,6 +15,7 @@ const BookingConfirmation = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showPassModal, setShowPassModal] = useState(false);
 
   useEffect(() => {
     const fetchBooking = async () => {
@@ -39,10 +41,6 @@ const BookingConfirmation = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   if (loading) {
@@ -137,12 +135,12 @@ const BookingConfirmation = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
-                onClick={handlePrint}
-                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/20 flex items-center gap-2 transition-all"
+                onClick={() => setShowPassModal(true)}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl border border-emerald-400 flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
               >
-                <Printer size={15} /> Print / PDF Ticket
+                <QrCode size={15} /> Official Boarding Pass
               </button>
             </div>
           </div>
@@ -292,13 +290,21 @@ const BookingConfirmation = () => {
           </Link>
 
           <Link
-            to="/trips"
+            to="/destinations"
             className="w-full sm:w-auto px-6 py-3.5 bg-white text-brand-navy text-xs font-bold rounded-2xl hover:bg-gray-100 transition-all border border-gray-200 flex items-center justify-center gap-2"
           >
             Explore More Destinations
           </Link>
         </div>
       </div>
+
+      {/* Dedicated Boarding Pass Travel Document Modal */}
+      <BoardingPassModal
+        isOpen={showPassModal}
+        onClose={() => setShowPassModal(false)}
+        bookingId={booking?.bookingId}
+        initialBookingData={booking}
+      />
     </div>
   );
 };
