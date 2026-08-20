@@ -64,7 +64,7 @@ const Checkout = () => {
   // Update lead info if user object loads asynchronously
   useEffect(() => {
     if (user) {
-      if (!leadName) setName(user.name || '');
+      if (!leadName) setLeadName(user.name || '');
       if (!leadEmail) setLeadEmail(user.email || '');
       if (!leadPhone) setLeadPhone(user.phone || '');
     }

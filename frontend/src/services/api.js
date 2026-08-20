@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const getHeaders = () => {
   const token = localStorage.getItem('wanderluxe_token');
@@ -414,3 +414,103 @@ export const verifyBookingTokenApi = async (token) => {
   }
   return data;
 };
+
+// ==========================================
+// TRIPS, LEADS, REVIEWS & DYNAMIC PAGES APIS
+// ==========================================
+
+export const getTripsApi = async (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  const response = await fetch(`${API_BASE_URL}/trips${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch trips');
+  }
+  return data.data || data;
+};
+
+export const getTripByIdOrSlugApi = async (idOrSlug) => {
+  const response = await fetch(`${API_BASE_URL}/trips/${idOrSlug}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch trip details');
+  }
+  return data.data || data;
+};
+
+export const createLeadApi = async (leadData) => {
+  const response = await fetch(`${API_BASE_URL}/leads`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(leadData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to submit inquiry lead');
+  }
+  return data;
+};
+
+export const getAdminLeadsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/leads`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch leads');
+  }
+  return data.data || data;
+};
+
+export const updateLeadStatusApi = async (leadId, statusPayload) => {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/status`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(statusPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update lead status');
+  }
+  return data.data || data;
+};
+
+export const getTripReviewsApi = async (tripId) => {
+  const response = await fetch(`${API_BASE_URL}/reviews/trip/${tripId}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch reviews');
+  }
+  return data.data || data;
+};
+
+export const createReviewApi = async (reviewPayload) => {
+  const response = await fetch(`${API_BASE_URL}/reviews`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(reviewPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to submit review');
+  }
+  return data.data || data;
+};
+

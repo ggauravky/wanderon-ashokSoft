@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import User from '../models/User.js';
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
 
 export const protect = async (req, res, next) => {
   let token;
@@ -19,8 +20,42 @@ export const protect = async (req, res, next) => {
         process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026'
       );
 
-      if (mongoose.connection && mongoose.connection.readyState === 1) {
-        req.user = await User.findById(decoded.id).select('-password');
+      // Attempt to load user from MongoDB database
+      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+        try {
+          req.user = await User.findById(decoded.id).select('-password');
+        } catch (dbErr) {
+          console.warn('User lookup in DB failed, using token payload fallback:', dbErr.message);
+        }
+      }
+
+      // Memory Fallback / Admin / Influencer mock tokens
+      if (!req.user) {
+        if (decoded.email === ADMIN_EMAIL || decoded.id === 'usr_admin') {
+          req.user = {
+            _id: 'usr_admin',
+            name: 'Gaurav Kumar Yadav (Admin)',
+            email: ADMIN_EMAIL,
+            role: 'admin',
+            influencerStatus: 'approved'
+          };
+        } else if (decoded.email === INFLUENCER_EMAIL || decoded.id === 'usr_influencer') {
+          req.user = {
+            _id: 'usr_influencer',
+            name: 'Gaurav Kumar Yadav (Influencer)',
+            email: INFLUENCER_EMAIL,
+            role: 'influencer',
+            influencerStatus: 'approved'
+          };
+        } else if (decoded.id) {
+          req.user = {
+            _id: decoded.id,
+            name: decoded.name || 'WanderLuxe Traveler',
+            email: decoded.email || 'user@wanderluxe.in',
+            role: decoded.role || 'user',
+            influencerStatus: decoded.influencerStatus || 'none'
+          };
+        }
       }
 
       if (!req.user) {

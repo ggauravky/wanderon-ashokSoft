@@ -89,6 +89,18 @@ const bookingSchema = new mongoose.Schema(
       couponCode: { type: String, default: '' },
       commissionRate: { type: Number, default: 0 },
       commissionAmount: { type: Number, default: 0 }
+    },
+    whatsappNotification: {
+      sent: { type: Boolean, default: false },
+      sentAt: { type: Date },
+      status: {
+        type: String,
+        enum: ['NOT_SENT', 'SENT', 'SIMULATED_SENT', 'FAILED'],
+        default: 'NOT_SENT'
+      },
+      messageSid: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      error: { type: String, default: '' }
     }
   },
   { timestamps: true }

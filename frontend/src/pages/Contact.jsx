@@ -5,6 +5,7 @@ import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getFAQSchema } from '../utils/seoSchemas';
 import { useAuth } from '../contexts/AuthContext';
+import { createLeadApi } from '../services/api';
 
 const Contact = () => {
   const { user } = useAuth();
@@ -14,12 +15,27 @@ const Contact = () => {
   const [subject, setSubject] = useState('Custom Trip Inquiry');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name || !email || !message) return;
-    setSubmitted(true);
+    setIsSubmitting(true);
+    try {
+      await createLeadApi({
+        name,
+        email,
+        phone: phone || '+91 8542036499',
+        destination: subject,
+        message
+      });
+    } catch (err) {
+      console.warn('Lead submission fallback:', err.message);
+    } finally {
+      setIsSubmitting(false);
+      setSubmitted(true);
+    }
   };
 
   const faqs = [
