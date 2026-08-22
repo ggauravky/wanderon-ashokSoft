@@ -5,8 +5,7 @@ import {
   Download, Printer, Share2, ArrowRight, Sun, CheckCircle2, 
   Luggage, ShieldCheck, ChevronDown, ChevronUp
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import AIItineraryDocument from '../components/AIItineraryDocument';
@@ -22,6 +21,7 @@ const SharedItinerary = () => {
   const [openDay, setOpenDay] = useState(1);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [pdfTemplate, setPdfTemplate] = useState('classic');
 
   const docRef = useRef(null);
 
@@ -52,22 +52,13 @@ const SharedItinerary = () => {
     if (!docRef.current || downloadingPdf) return;
     try {
       setDownloadingPdf(true);
-      const canvas = await html2canvas(docRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       const safeName = (itinerary?.destination || 'Trip').replace(/[^a-zA-Z0-9]/g, '-');
-      pdf.save(`WanderLuxe-Itinerary-${safeName}.pdf`);
+      const filename = `WanderLuxe-Itinerary-${safeName}-${pdfTemplate}.pdf`;
+      await exportElementToPdf(docRef.current, {
+        filename,
+        scale: 3,
+        orientation: 'portrait'
+      });
     } catch (e) {
       console.error('PDF export error:', e);
     } finally {
@@ -77,26 +68,7 @@ const SharedItinerary = () => {
 
   const handlePrint = () => {
     if (!docRef.current) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${itinerary?.title || 'Travel Itinerary'}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body class="p-8">
-          ${docRef.current.innerHTML}
-          <script>
-            setTimeout(() => {
-              window.print();
-              window.close();
-            }, 500);
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    printElementDirectly(docRef.current, itinerary?.title || 'WanderLuxe Travel Itinerary');
   };
 
   if (loading) {
@@ -140,9 +112,9 @@ const SharedItinerary = () => {
         initialDestination={itinerary.destination}
       />
 
-      {/* Hidden Offscreen Printable A4 Document */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <AIItineraryDocument ref={docRef} itinerary={itinerary} template="classic" />
+      {/* Hidden Offscreen Printable High-Fidelity A4 Document */}
+      <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -100, width: '794px', background: '#ffffff' }}>
+        <AIItineraryDocument ref={docRef} itinerary={itinerary} template={pdfTemplate} />
       </div>
 
       <div className="container mx-auto px-4 md:px-8 max-w-4xl">
@@ -156,9 +128,29 @@ const SharedItinerary = () => {
         {/* Plan Header Card */}
         <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm mt-4 mb-8 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="bg-emerald-50 text-emerald-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-emerald-200">
-              {itinerary.duration || itinerary.daysCount || 5} Days • {itinerary.travelStyle || itinerary.mood || 'Adventure'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="bg-emerald-50 text-emerald-700 text-xs font-black uppercase px-3 py-1 rounded-full border border-emerald-200">
+                {itinerary.duration || itinerary.daysCount || 5} Days • {itinerary.travelStyle || itinerary.mood || 'Adventure'}
+              </span>
+              
+              {/* PDF Document Style Selector */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                {['classic', 'visual', 'compact'].map((tpl) => (
+                  <button
+                    key={tpl}
+                    onClick={() => setPdfTemplate(tpl)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                      pdfTemplate === tpl
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {tpl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDownloadPdf}
@@ -166,7 +158,7 @@ const SharedItinerary = () => {
                 className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
               >
                 <Download size={13} />
-                <span>{downloadingPdf ? 'Exporting...' : 'PDF'}</span>
+                <span>{downloadingPdf ? 'Exporting HD...' : `Download ${pdfTemplate.toUpperCase()} PDF`}</span>
               </button>
               <button
                 onClick={handlePrint}

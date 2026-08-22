@@ -7,8 +7,7 @@ import {
   Download, Share2, AlertCircle, Sunrise, Moon, Utensils, BedDouble
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 import { saveAIItinerary } from '../utils/userHistory';
 import { saveAIItineraryApi } from '../services/api';
@@ -124,22 +123,13 @@ const AIPlannerModal = ({
     if (!docRef.current || downloadingPdf) return;
     try {
       setDownloadingPdf(true);
-      const canvas = await html2canvas(docRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       const cleanName = (generatedPlan?.destination || destination || 'Trip').replace(/[^a-zA-Z0-9]/g, '-');
-      pdf.save(`WanderLuxe-${cleanName}-${days}-Days-Itinerary.pdf`);
+      const filename = `WanderLuxe-${cleanName}-${days}-Days-${pdfTemplate}-Itinerary.pdf`;
+      await exportElementToPdf(docRef.current, {
+        filename,
+        scale: 3,
+        orientation: 'portrait'
+      });
     } catch (e) {
       console.error('PDF export error:', e);
     } finally {
@@ -149,35 +139,16 @@ const AIPlannerModal = ({
 
   const handlePrint = () => {
     if (!docRef.current) return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${generatedPlan?.title || 'Travel Itinerary'}</title>
-          <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body class="p-8">
-          ${docRef.current.innerHTML}
-          <script>
-            setTimeout(() => {
-              window.print();
-              window.close();
-            }, 500);
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    printElementDirectly(docRef.current, generatedPlan?.title || 'WanderLuxe Travel Itinerary');
   };
 
   const daysList = generatedPlan?.days || generatedPlan?.itineraryDays || [];
 
   return (
     <>
-      {/* Hidden Offscreen Printable A4 Document */}
+      {/* Hidden Offscreen Printable High-Fidelity A4 Document */}
       {generatedPlan && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -100, width: '794px', background: '#ffffff' }}>
           <AIItineraryDocument ref={docRef} itinerary={generatedPlan} template={pdfTemplate} />
         </div>
       )}
