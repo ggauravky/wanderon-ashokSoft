@@ -24,6 +24,7 @@ import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerRoute from './components/InfluencerRoute';
 import CreatorTrip from './pages/CreatorTrip';
 import CreatorStorefront from './pages/CreatorStorefront';
+import SharedItinerary from './pages/SharedItinerary';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 import ScrollToTop from './components/ScrollToTop';
@@ -43,6 +44,7 @@ function App() {
             <Route path="booking/confirmation/:bookingId" element={<BookingConfirmation />} />
             <Route path="bookings/:bookingId" element={<BookingConfirmation />} />
             <Route path="booking/verify/:token" element={<BookingVerify />} />
+            <Route path="itinerary/shared/:shareToken" element={<SharedItinerary />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Admin Routes */}

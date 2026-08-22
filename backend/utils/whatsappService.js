@@ -3,7 +3,7 @@
  * Supports Twilio WhatsApp API & Graceful Simulation Mode
  */
 
-export const formatWhatsAppMessage = (booking, frontendUrl = 'http://localhost:5173') => {
+export const formatWhatsAppMessage = (booking, frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in') => {
   const customerName = booking.customer?.name || 'Valued Traveler';
   const bookingId = booking.bookingId || 'WLX-CONFIRMED';
   const tripTitle = booking.tripSnapshot?.title || 'WanderLuxe Expedition';
@@ -63,7 +63,7 @@ export const generateWhatsAppWebLink = (phone, textMessage) => {
  */
 export const sendWhatsAppTicketAndReceipt = async (booking) => {
   const phone = booking.customer?.phone || '';
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in';
   const messageBody = formatWhatsAppMessage(booking, frontendUrl);
 
   const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;

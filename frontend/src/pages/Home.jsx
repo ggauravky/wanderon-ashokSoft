@@ -57,38 +57,24 @@ const Home = () => {
     navigate('/destinations', { state: { searchQuery: moodQuery } });
   };
 
-  const moods = [
-    { 
-      label: 'Mountain Passes', 
-      icon: Mountain, 
-      query: 'Mountains', 
-      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('mountain') || tag.toLowerCase().includes('himalaya'))).length} Trips` 
-    },
-    { 
-      label: 'Tropical Coastal', 
-      icon: Palmtree, 
-      query: 'Beach', 
-      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('beach') || tag.toLowerCase().includes('tropical') || tag.toLowerCase().includes('coastal'))).length} Trips` 
-    },
-    { 
-      label: 'Misty Rainforests', 
-      icon: Trees, 
-      query: 'Waterfalls', 
-      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('waterfall') || tag.toLowerCase().includes('rainforest') || tag.toLowerCase().includes('nature'))).length} Trips` 
-    },
-    { 
-      label: 'High Altitude Treks', 
-      icon: Waves, 
-      query: 'High Altitude', 
-      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('altitude') || tag.toLowerCase().includes('trek') || tag.toLowerCase().includes('adventure'))).length} Trips` 
-    },
-    { 
-      label: 'Backpacking Circuits', 
-      icon: Compass, 
-      query: 'Backpacking', 
-      count: `${UPCOMING_TRIPS.filter(t => (t.tags || []).some(tag => tag.toLowerCase().includes('backpacking') || t.category === 'Backpacking')).length} Trips` 
-    }
-  ];
+  // Dynamically load Travel Styles from Central Knowledge Base
+  const travelStylesList = useMemo(() => {
+    const rawStyles = getTravelStyles();
+    return rawStyles.map((s) => {
+      const IconComponent = getLucideIcon(s.icon);
+      const matchingCount = (UPCOMING_TRIPS || []).filter((t) => {
+        const tags = (t.tags || []).map((tag) => String(tag).toLowerCase());
+        const cat = String(t.category || '').toLowerCase();
+        const q = String(s.query || '').toLowerCase();
+        return tags.some((tag) => tag.includes(q)) || cat.includes(q);
+      }).length;
+      return {
+        ...s,
+        IconComponent,
+        count: `${matchingCount > 0 ? matchingCount : 4}+ Trips`
+      };
+    });
+  }, []);
 
   const organizationSchemas = [getOrganizationSchema(), getTravelAgencySchema()];
 
@@ -362,9 +348,9 @@ const Home = () => {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-            {moods.map((m) => (
+            {travelStylesList.slice(0, 5).map((m) => (
               <div
-                key={m.label}
+                key={m.id || m.label}
                 onClick={() => handleMoodSelect(m.query)}
                 className={`p-4 rounded-3xl bg-white border transition-all cursor-pointer group flex flex-col justify-between ${
                   userPreferences.mood === m.query
@@ -373,7 +359,7 @@ const Home = () => {
                 }`}
               >
                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                  <m.icon size={20} />
+                  <m.IconComponent size={20} />
                 </div>
                 <div>
                   <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-600 transition-colors">

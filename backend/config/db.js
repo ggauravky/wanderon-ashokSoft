@@ -8,8 +8,9 @@ const connectDB = async () => {
   isConnecting = true;
 
   try {
-    if (!process.env.MONGO_URI) {
-      console.warn("⚠️ MONGO_URI is missing in .env. Running in memory-resilient mode.");
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    if (!mongoUri) {
+      console.warn("⚠️ MONGO_URI is missing in environment. Running in memory-resilient mode.");
       isConnecting = false;
       return;
     }
@@ -24,7 +25,7 @@ const connectDB = async () => {
     // Disable Mongoose bufferCommands so queries fail-fast to in-memory store if DB is unreachable
     mongoose.set("bufferCommands", false);
 
-    await mongoose.connect(process.env.MONGO_URI, {
+    await mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 15000,
       connectTimeoutMS: 15000,
       socketTimeoutMS: 45000

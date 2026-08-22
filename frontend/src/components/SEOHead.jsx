@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 
 const SITE_NAME = 'WanderLuxe';
-const DEFAULT_DOMAIN = 'https://wanderluxe.in';
+const DEFAULT_DOMAIN = import.meta.env.VITE_SITE_URL || 'https://wanderluxe.in';
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&q=80&w=1200';
 
 const SEOHead = ({

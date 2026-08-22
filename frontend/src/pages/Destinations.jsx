@@ -9,7 +9,7 @@ import SEOHead from '../components/SEOHead.jsx';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
-import { getDestinationWeather } from '../utils/weatherSeasonEngine.js';
+import { getDestinationWeather, getTravelStyles, getDestinations } from '../services/travelKnowledgeService.js';
 
 const Destinations = () => {
   const location = useLocation();
@@ -23,6 +23,11 @@ const Destinations = () => {
   const [durationFilter, setDurationFilter] = useState('all');
   const [climateFilter, setClimateFilter] = useState('all');
   const [sortBy, setSortBy] = useState('recommended');
+
+  const categories = useMemo(() => {
+    const styles = getTravelStyles().map(s => s.query || s.label);
+    return ['All', 'Domestic', 'International', ...new Set(styles), 'Weekend Trips'];
+  }, []);
 
   useEffect(() => {
     try {
@@ -73,8 +78,6 @@ const Destinations = () => {
       console.warn('URL param parse fallback:', e?.message);
     }
   }, [location.pathname, location.search, location.state]);
-
-  const categories = ['All', 'Domestic', 'International', 'Adventure', 'Backpacking', 'Weekend Trips', 'Nature', 'Culture'];
 
   const filteredTrips = useMemo(() => {
     try {

@@ -236,7 +236,7 @@ export const getTripByIdOrSlug = async (req, res) => {
 
     if (!trip) {
       trip = INITIAL_TRIPS_CATALOG.find(
-        (t) => t.slug === cleanId || String(t._id || '') === cleanId
+        (t, idx) => t.slug === cleanId || String(t.id || '') === cleanId || String(t._id || '') === cleanId || String(idx + 1) === cleanId
       );
     }
 

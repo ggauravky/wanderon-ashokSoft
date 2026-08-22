@@ -1,9 +1,17 @@
 // ================================================================
 // CENTRAL TRAVEL CONTEXT & RECOMMENDATION ENGINE
+// Consumes Central Travel Knowledge Base
 // ================================================================
 
-import { getCurrentSeason, getDestinationWeather } from './weatherSeasonEngine.js';
-import { getRecentlyViewedTrips, getWishlistIds, getSavedAIItineraries } from './userHistory.js';
+import { 
+  getSeasonContext, 
+  getDestinationWeather, 
+  getActiveOccasionContext as getCentralOccasionContext,
+  getPackingRecommendations,
+  getDestinationBySlug,
+  normalizeDestinationSlug
+} from '../services/travelKnowledgeService.js';
+import { getRecentlyViewedTrips, getWishlistIds } from './userHistory.js';
 
 /**
  * 1. Time-of-Day Context
@@ -83,114 +91,10 @@ export const getDayOfWeekContext = (date = new Date()) => {
 };
 
 /**
- * 3. Occasion & Calendar Travel Windows
- * Dynamic planning windows (30 days inspiration, 7 days high-priority)
+ * 3. Occasion & Calendar Travel Windows from Central Knowledge
  */
-export const OCCASION_CALENDAR = [
-  {
-    id: 'monsoon_magic',
-    name: 'Monsoon Waterfall Season',
-    tagline: 'Lush green valleys & roaring rainforest waterfalls',
-    startDate: { month: 6, day: 15 },
-    endDate: { month: 8, day: 31 },
-    leadDays: 30,
-    bannerBg: 'from-emerald-900 to-slate-900',
-    bannerText: 'Misty Rainforests & Roaring Waterfalls in Meghalaya & Western Ghats',
-    recommendedCategories: ['Nature', 'Backpacking'],
-    featuredLocations: ['Meghalaya', 'Kerala', 'Goa']
-  },
-  {
-    id: 'independence_long_weekend',
-    name: 'Independence Day Long Weekend',
-    tagline: 'Take 1 day off, get a 4-day mountain getaway',
-    startDate: { month: 8, day: 10 },
-    endDate: { month: 8, day: 18 },
-    leadDays: 25,
-    bannerBg: 'from-amber-900 to-slate-900',
-    bannerText: 'Long Weekend Alert: 3-4 Day Mountain & Beach Getaways Booking Fast!',
-    recommendedCategories: ['Weekend Trips', 'Adventure'],
-    featuredLocations: ['Himachal Pradesh', 'Uttarakhand', 'Goa']
-  },
-  {
-    id: 'autumn_long_weekend',
-    name: 'Autumn Long Weekend & Gandhi Jayanti',
-    tagline: 'Crisp mountain visibility & clear blue skies',
-    startDate: { month: 9, day: 25 },
-    endDate: { month: 10, day: 5 },
-    leadDays: 30,
-    bannerBg: 'from-teal-900 to-slate-900',
-    bannerText: 'Autumn Clear Skies: Ideal time for Spiti, Kashmir & Dawki Glass River',
-    recommendedCategories: ['Adventure', 'Backpacking'],
-    featuredLocations: ['Kashmir', 'Meghalaya', 'Ladakh']
-  },
-  {
-    id: 'diwali_festive_holidays',
-    name: 'Diwali Festive Getaways',
-    tagline: 'Celebrate the festival of lights amidst starry mountain skies',
-    startDate: { month: 10, day: 20 },
-    endDate: { month: 11, day: 15 },
-    leadDays: 35,
-    bannerBg: 'from-orange-950 to-slate-900',
-    bannerText: 'Festive Holiday Departures: Royal Rajasthan & Golden Sands Getaways',
-    recommendedCategories: ['Culture', 'Nature'],
-    featuredLocations: ['Rajasthan', 'Kerala', 'Bali']
-  },
-  {
-    id: 'winter_new_year',
-    name: 'Winter Snow & New Year Expeditions',
-    tagline: 'Ring in the New Year under snow peaks or tropical beaches',
-    startDate: { month: 12, day: 15 },
-    endDate: { month: 1, day: 10 },
-    leadDays: 45,
-    bannerBg: 'from-indigo-950 to-slate-900',
-    bannerText: 'Winter White Snow Expeditions & Tropical Bali Escapes Open for Booking',
-    recommendedCategories: ['Adventure', 'International'],
-    featuredLocations: ['Kashmir', 'Himachal Pradesh', 'Bali']
-  },
-  {
-    id: 'valentine_spring',
-    name: 'Valentine’s & Spring Blossom Escapes',
-    tagline: 'Romantic retreats, tea gardens, and blooming valleys',
-    startDate: { month: 2, day: 1 },
-    endDate: { month: 2, day: 20 },
-    leadDays: 30,
-    bannerBg: 'from-rose-950 to-slate-900',
-    bannerText: 'Spring Blossom & Couple-Friendly Retreats in Munnar, Udaipur & Bali',
-    recommendedCategories: ['Nature', 'Culture', 'International'],
-    featuredLocations: ['Kerala', 'Rajasthan', 'Bali']
-  },
-  {
-    id: 'holi_getaway',
-    name: 'Holi Long Weekend',
-    tagline: 'Colors, camping, and riverside music festivals',
-    startDate: { month: 3, day: 10 },
-    endDate: { month: 3, day: 28 },
-    leadDays: 25,
-    bannerBg: 'from-fuchsia-950 to-slate-900',
-    bannerText: 'Holi Long Weekend: Riverside Camping & Mountain Music Escapes',
-    recommendedCategories: ['Weekend Trips', 'Adventure'],
-    featuredLocations: ['Uttarakhand', 'Himachal Pradesh', 'Rajasthan']
-  }
-];
-
 export const getActiveOccasionContext = (date = new Date()) => {
-  const currentMonth = date.getMonth() + 1;
-  const currentDay = date.getDate();
-
-  for (const occasion of OCCASION_CALENDAR) {
-    // Check if within active or lead window
-    const isInMonthRange = 
-      (occasion.startDate.month <= occasion.endDate.month)
-        ? (currentMonth >= occasion.startDate.month && currentMonth <= occasion.endDate.month)
-        : (currentMonth >= occasion.startDate.month || currentMonth <= occasion.endDate.month);
-
-    if (isInMonthRange) {
-      return occasion;
-    }
-  }
-
-  // Fallback to seasonal occasion
-  return OCCASION_CALENDAR[0];
+  return getCentralOccasionContext(date);
 };
 
 /**
@@ -198,13 +102,12 @@ export const getActiveOccasionContext = (date = new Date()) => {
  */
 export const calculateContextualRecommendations = (trips = [], userPreferences = {}) => {
   try {
-    const currentSeason = getCurrentSeason() || { recommendedTypes: [] };
+    const currentSeason = getSeasonContext() || { recommendedTypes: [] };
     const activeOccasion = getActiveOccasionContext() || { featuredLocations: [], name: 'Season' };
     const dayContext = getDayOfWeekContext() || { type: 'weekday_planning' };
     const recentlyViewed = getRecentlyViewedTrips() || [];
     const wishlistIds = getWishlistIds() || [];
 
-    // Extract recent locations and categories for collaborative intent
     const recentLocations = (recentlyViewed || [])
       .filter(Boolean)
       .map((t) => (typeof t === 'object' && t?.location ? String(t.location).toLowerCase() : ''))
@@ -221,7 +124,7 @@ export const calculateContextualRecommendations = (trips = [], userPreferences =
       const tripCat = String(trip.category || '').toLowerCase();
       const tripTags = (Array.isArray(trip.tags) ? trip.tags : []).map((t) => String(t || '').toLowerCase());
 
-      // Signal 1: Wishlist similarity (+35)
+      // Signal 1: Wishlist match (+35)
       if (wishlistIds.some((id) => String(id) === String(trip.id))) {
         score += 35;
         explainableBadge = 'Saved in Wishlist';
@@ -265,7 +168,7 @@ export const calculateContextualRecommendations = (trips = [], userPreferences =
       }
 
       // Signal 7: Weather condition check (+10)
-      const weather = getDestinationWeather(trip.location || '');
+      const weather = getDestinationWeather(trip.location || trip.destination || '');
       if (weather && weather.condition && (String(weather.condition).toLowerCase().includes('sunny') || String(weather.condition).toLowerCase().includes('pleasant'))) {
         score += 10;
         if (!explainableBadge) explainableBadge = 'Great Weather Now';
@@ -298,69 +201,29 @@ export const calculateContextualRecommendations = (trips = [], userPreferences =
 
 /**
  * 5. Interactive Dynamic Packing Checklist Generator
+ * Sourced directly from Central Travel Knowledge Base
  */
 export const generatePackingChecklist = (trip, weather, season) => {
-  const locLower = (trip.location || '').toLowerCase();
-  const isCold = locLower.includes('spiti') || locLower.includes('ladakh') || locLower.includes('kashmir') || locLower.includes('auli') || (weather && weather.temp && parseInt(weather.temp) < 16);
-  const isRain = locLower.includes('meghalaya') || locLower.includes('kerala') || (weather && weather.condition && weather.condition.toLowerCase().includes('rain'));
-  const isBeach = locLower.includes('goa') || locLower.includes('bali') || locLower.includes('varkala');
-  const isTrek = (trip.tags || []).some((t) => t.toLowerCase().includes('trek') || t.toLowerCase().includes('altitude'));
+  const loc = trip?.location || trip?.destination || '';
+  const isTrekking = (trip?.tags || []).some((t) => String(t).toLowerCase().includes('trek') || String(t).toLowerCase().includes('altitude'));
+  const rawItems = getPackingRecommendations(loc, weather, season, isTrekking);
 
-  const items = [
-    { id: 'p1', category: 'Essential Documents', name: 'Government Photo ID (Aadhaar / Passport)', mandatory: true, defaultChecked: true },
-    { id: 'p2', category: 'Essential Documents', name: 'WanderLuxe Booking Pass & QR Voucher', mandatory: true, defaultChecked: true },
-    { id: 'p3', category: 'Clothing', name: 'Comfortable Quick-Dry T-Shirts (3-4 pairs)', mandatory: false, defaultChecked: false },
-    { id: 'p4', category: 'Clothing', name: 'Trail Cargo Pants / Track Pants', mandatory: false, defaultChecked: false }
-  ];
-
-  if (isCold) {
-    items.push(
-      { id: 'p5', category: 'Cold Weather Gear', name: 'Heavy Down Jacket (-5°C to 10°C rated)', mandatory: true, defaultChecked: false },
-      { id: 'p6', category: 'Cold Weather Gear', name: 'Thermal Base Layer (Top & Bottom)', mandatory: true, defaultChecked: false },
-      { id: 'p7', category: 'Cold Weather Gear', name: 'Woolen Beanie Cap & Neck Gaiter', mandatory: true, defaultChecked: false },
-      { id: 'p8', category: 'Cold Weather Gear', name: 'Waterproof Fleece Gloves', mandatory: true, defaultChecked: false }
-    );
-  }
-
-  if (isRain) {
-    items.push(
-      { id: 'p9', category: 'Monsoon Essentials', name: 'Breathable Rain Poncho / Waterproof Jacket', mandatory: true, defaultChecked: false },
-      { id: 'p10', category: 'Monsoon Essentials', name: 'Waterproof Phone Case Pouch', mandatory: true, defaultChecked: false },
-      { id: 'p11', category: 'Monsoon Essentials', name: 'Quick-Dry Microfiber Towel', mandatory: false, defaultChecked: false }
-    );
-  }
-
-  if (isBeach) {
-    items.push(
-      { id: 'p12', category: 'Coastal Essentials', name: 'UV Polarized Sunglasses & Reef-Safe Sunscreen SPF 50+', mandatory: true, defaultChecked: false },
-      { id: 'p13', category: 'Coastal Essentials', name: 'Swimwear & Beach Flip-Flops', mandatory: false, defaultChecked: false },
-      { id: 'p14', category: 'Coastal Essentials', name: 'Waterproof Dry Bag (10L / 15L)', mandatory: false, defaultChecked: false }
-    );
-  }
-
-  if (isTrek) {
-    items.push(
-      { id: 'p15', category: 'Trekking Gear', name: 'Ankle-Support Waterproof Trekking Shoes', mandatory: true, defaultChecked: false },
-      { id: 'p16', category: 'Trekking Gear', name: 'Trekking Pole & Headlamp / Flashlight', mandatory: false, defaultChecked: false },
-      { id: 'p17', category: 'Trekking Gear', name: '1L Reusable Insulated Water Flask', mandatory: true, defaultChecked: false },
-      { id: 'p18', category: 'Medical & Hydration', name: 'Electrolyte ORS Sachets & Personal Medications', mandatory: true, defaultChecked: false }
-    );
-  } else {
-    items.push(
-      { id: 'p19', category: 'Footwear & Care', name: 'Comfortable Walking Sneakers / Trail Shoes', mandatory: true, defaultChecked: false },
-      { id: 'p20', category: 'Electronics', name: '10,000mAh Power Bank & Universal Charger', mandatory: true, defaultChecked: false }
-    );
-  }
-
-  return items;
+  return rawItems.map((item, idx) => ({
+    id: item.id || `p-${idx + 1}`,
+    category: item.category || 'Travel Gear',
+    name: item.name || item.label || 'Item',
+    mandatory: Boolean(item.mandatory),
+    defaultChecked: Boolean(item.mandatory && idx < 2),
+    icon: item.icon
+  }));
 };
 
 /**
  * 6. "Who is this trip for?" Persona Analyzer
  */
 export const getTripPersonaBadges = (trip) => {
-  const cat = (trip.category || '').toLowerCase();
-  const tags = (trip.tags || []).map((t) => t.toLowerCase());
+  const cat = String(trip?.category || '').toLowerCase();
+  const tags = (trip?.tags || []).map((t) => String(t).toLowerCase());
 
   const personas = [];
   if (tags.includes('backpacking') || cat === 'backpacking') {
@@ -375,7 +238,7 @@ export const getTripPersonaBadges = (trip) => {
   if (tags.includes('culture') || tags.includes('royal') || tags.includes('heritage')) {
     personas.push({ label: 'Cultural Explorers', desc: 'Heritage walks & authentic local cuisine' });
   }
-  if (trip.grade === 'Easy' || trip.ageGroup === 'All Ages') {
+  if (trip?.grade === 'Easy' || trip?.ageGroup === 'All Ages') {
     personas.push({ label: 'Relaxed Getaway', desc: 'Comfortable pace for everyone' });
   }
 
@@ -383,39 +246,16 @@ export const getTripPersonaBadges = (trip) => {
 };
 
 /**
- * 7. "Why Visit Now?" Contextual Callout
+ * 7. "Why Visit Now?" Contextual Callout (from Central Knowledge)
  */
 export const getWhyVisitNow = (trip, season, weather) => {
-  const locLower = (trip.location || '').toLowerCase();
+  const loc = trip?.location || trip?.destination || '';
+  const destMeta = getDestinationBySlug(loc);
 
-  if (locLower.includes('meghalaya')) {
+  if (destMeta && destMeta.aiContext?.travelNotes && destMeta.aiContext.travelNotes.length > 0) {
     return {
-      title: 'Optimal Water Clarity & Waterfall Plunge',
-      reason: 'Natural turquoise pools and living root bridge trails are at peak beauty with pleasant temperatures.'
-    };
-  }
-  if (locLower.includes('spiti') || locLower.includes('ladakh')) {
-    return {
-      title: 'Clear High Mountain Passes & Galaxy Views',
-      reason: 'High altitude mountain passes are open with unhindered crystal clear skies for stargazing at Chandratal and Pangong.'
-    };
-  }
-  if (locLower.includes('bali')) {
-    return {
-      title: 'Warm Tropical Waves & Golden Sunsets',
-      reason: 'Peak tropical surf season with calm turquoise waters for Nusa Penida island speedboat tours.'
-    };
-  }
-  if (locLower.includes('kerala')) {
-    return {
-      title: 'Misty Tea Hills & Serene Houseboats',
-      reason: 'Gentle coastal breeze and fresh green tea plantations in Munnar make for ideal houseboat sailing.'
-    };
-  }
-  if (locLower.includes('goa')) {
-    return {
-      title: 'Secret Beaches & Waterfalls Season',
-      reason: 'Pleasant coastal climate with lively beach cafes and open catamaran sailing.'
+      title: `${season.name.split(' ')[0]} Travel Window: ${destMeta.name}`,
+      reason: destMeta.aiContext.travelNotes[0]
     };
   }
 
@@ -434,7 +274,6 @@ export const getPreTripDashboard = (booking) => {
   const targetDateStr = booking.batchDate || booking.tripSnapshot?.batchDates || '2026-09-15';
   const now = new Date();
   
-  // Approximate parsing of batch date e.g. "20 Aug - 26 Aug, 2026"
   let departureDate = new Date(2026, 7, 20); // Default fallback
   try {
     const yearMatch = targetDateStr.match(/\d{4}/);
@@ -469,4 +308,15 @@ export const getPreTripDashboard = (booking) => {
     bookingId: booking.bookingId || booking.id || 'WLX-2026-CONFIRMED',
     status: booking.bookingStatus || 'CONFIRMED'
   };
+};
+
+export default {
+  getTimeOfDayContext,
+  getDayOfWeekContext,
+  getActiveOccasionContext,
+  calculateContextualRecommendations,
+  generatePackingChecklist,
+  getTripPersonaBadges,
+  getWhyVisitNow,
+  getPreTripDashboard
 };

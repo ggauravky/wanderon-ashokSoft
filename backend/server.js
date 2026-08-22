@@ -13,6 +13,7 @@ import pageRoutes from './routes/pageRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import seoRoutes from './routes/seoRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import aiItineraryRoutes from './routes/aiItineraryRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -22,15 +23,25 @@ connectDB();
 
 const app = express();
 
-// Dynamic CORS Middleware: Allows all localhost / 127.0.0.1 ports (5173, 5174, 5175, 3000, etc.)
+// Dynamic CORS Middleware: Supports Localhost, Vercel Production/Preview, and Custom Domains
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    // Allow any localhost or 127.0.0.1 port or configured frontend URL
-    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === process.env.FRONTEND_URL) {
+    
+    // Allow any localhost / 127.0.0.1 port
+    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    return callback(null, true); // Permissive in development
+    // Allow any Vercel deployment (*.vercel.app)
+    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
+    // Allow configured production frontend URLs
+    if (origin === process.env.FRONTEND_URL || origin === process.env.CLIENT_URL) {
+      return callback(null, true);
+    }
+
+    return callback(null, true); // Permissive fallback to prevent CORS blocks
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -38,6 +49,25 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Dedicated Production Health Check Endpoints (For Render / Monitoring)
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    service: 'WanderLuxe REST Backend API',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString() 
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    service: 'WanderLuxe REST Backend API',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString() 
+  });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -51,13 +81,19 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/seo', seoRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/ai', aiItineraryRoutes);
 
 // Public Sitemap & Robots.txt Direct Access
 app.use('/sitemap.xml', seoRoutes);
 app.use('/robots.txt', seoRoutes);
 
 app.get('/', (req, res) => {
-  res.json({ status: 'OK', message: 'WanderLuxe REST API Server is Active 🚀' });
+  res.json({ 
+    status: 'OK', 
+    message: 'WanderLuxe REST API Server is Active 🚀',
+    docs: '/api/trips',
+    health: '/health'
+  });
 });
 
 // Error handling middleware

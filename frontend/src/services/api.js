@@ -514,3 +514,89 @@ export const createReviewApi = async (reviewPayload) => {
   return data.data || data;
 };
 
+// ================================================================
+// AI ITINERARY & SHARING API HELPERS
+// ================================================================
+
+export const generateAIItineraryApi = async (params) => {
+  const response = await fetch(`${API_BASE_URL}/ai/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to generate AI itinerary');
+  }
+  return data.data;
+};
+
+export const saveAIItineraryApi = async (itineraryData) => {
+  const response = await fetch(`${API_BASE_URL}/ai/save`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(itineraryData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to save itinerary');
+  }
+  return data.data;
+};
+
+export const getMySavedItinerariesApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/ai/my-itineraries`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch saved itineraries');
+  }
+  return data.data || [];
+};
+
+export const deleteSavedItineraryApi = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete itinerary');
+  }
+  return data;
+};
+
+export const toggleShareItineraryApi = async (id, enable = true) => {
+  const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}/share`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ enable })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to toggle share settings');
+  }
+  return data;
+};
+
+export const getPublicSharedItineraryApi = async (shareToken) => {
+  const response = await fetch(`${API_BASE_URL}/ai/shared/${shareToken}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to load shared itinerary');
+  }
+  return data.data;
+};
+
+

@@ -562,7 +562,7 @@ export const getBoardingPassData = async (req, res) => {
       qrCode: {
         dataUrl: qrDataUrl || '',
         verificationToken: booking.qrCode?.verificationToken || '',
-        verificationUrl: booking.qrCode?.verificationUrl || `http://localhost:5173/verify/${booking.bookingId}`
+        verificationUrl: booking.qrCode?.verificationUrl || `${process.env.FRONTEND_URL || 'https://wanderluxe.in'}/booking/verify/${booking.qrCode?.verificationToken || booking.bookingId}`
       },
       supportContact: {
         phone: '+91 8542036499',
