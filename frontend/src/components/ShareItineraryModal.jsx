@@ -5,7 +5,8 @@ import {
   ToggleLeft, ToggleRight, Loader2, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toggleShareItineraryApi, saveAIItineraryApi } from '../services/api';
+import { toggleShareItineraryApi } from '../services/api';
+import { prepareShareableItinerary, copyToClipboard, getWhatsAppShareUrl } from '../services/itineraryShareService';
 
 const ShareItineraryModal = ({ 
   isOpen, 
@@ -17,52 +18,53 @@ const ShareItineraryModal = ({
   if (!isOpen || !itinerary) return null;
 
   const [copied, setCopied] = useState(false);
-  const [isPublic, setIsPublic] = useState(itinerary.isPublic || false);
+  const [isPublic, setIsPublic] = useState(itinerary.isPublic !== false);
   const [shareToken, setShareToken] = useState(itinerary.shareToken || null);
+  const [shareUrl, setShareUrl] = useState('');
+  const [isPreparing, setIsPreparing] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
-  const baseUrl = window.location.origin;
-
-  // Initialize or enable share token on modal open
+  // Prepare and persist share token on mount/open
   useEffect(() => {
-    const ensureShareEnabled = async () => {
-      if (!isOpen) return;
+    let isMounted = true;
 
-      const planId = itinerary._id || (String(itinerary.id).length === 24 ? itinerary.id : null);
-
-      if (planId) {
-        if (!shareToken || !isPublic) {
-          try {
-            setIsUpdating(true);
-            const res = await toggleShareItineraryApi(planId, true);
-            setIsPublic(true);
-            if (res.shareToken) {
-              setShareToken(res.shareToken);
-              if (onItineraryUpdated) {
-                onItineraryUpdated({ ...itinerary, isPublic: true, shareToken: res.shareToken });
-              }
-            }
-          } catch (err) {
-            console.warn('Share auto-enable notice:', err.message);
-          } finally {
-            setIsUpdating(false);
+    const initShare = async () => {
+      try {
+        setIsPreparing(true);
+        const { plan, shareToken: token, shareUrl: url } = await prepareShareableItinerary(itinerary);
+        if (isMounted) {
+          setShareToken(token);
+          setShareUrl(url);
+          setIsPublic(plan.isPublic !== false);
+          if (onItineraryUpdated) {
+            onItineraryUpdated(plan);
           }
         }
+      } catch (err) {
+        console.warn('Share preparation notice:', err.message);
+        if (isMounted) {
+          const fallbackUrl = `${window.location.origin}/itinerary/shared/${itinerary.shareToken || 'preview'}`;
+          setShareUrl(fallbackUrl);
+        }
+      } finally {
+        if (isMounted) setIsPreparing(false);
       }
     };
 
-    ensureShareEnabled();
-  }, [isOpen, itinerary._id, itinerary.id]);
+    if (isOpen) {
+      initShare();
+    }
 
-  const shareableUrl = shareToken 
-    ? `${baseUrl}/itinerary/shared/${shareToken}`
-    : `${baseUrl}/destinations?search=${encodeURIComponent(itinerary.destination || 'India')}`;
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, itinerary._id, itinerary.id]);
 
   const handleTogglePublic = async () => {
     const planId = itinerary._id || (String(itinerary.id).length === 24 ? itinerary.id : null);
     if (!planId) {
-      setStatusMessage('Please save the itinerary to your profile first to create a public link.');
+      setStatusMessage('Please save the itinerary to your profile first to manage privacy.');
       return;
     }
 
@@ -73,6 +75,7 @@ const ShareItineraryModal = ({
       setIsPublic(res.isPublic);
       if (res.shareToken) {
         setShareToken(res.shareToken);
+        setShareUrl(`${window.location.origin}/itinerary/shared/${res.shareToken}`);
       }
       if (onItineraryUpdated) {
         onItineraryUpdated({ ...itinerary, isPublic: res.isPublic, shareToken: res.shareToken || shareToken });
@@ -87,26 +90,27 @@ const ShareItineraryModal = ({
   };
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareableUrl);
+    if (!shareUrl) return;
+    const success = await copyToClipboard(shareUrl);
+    if (success) {
       setCopied(true);
       setStatusMessage('Secure link copied to clipboard!');
       setTimeout(() => {
         setCopied(false);
         setStatusMessage('');
       }, 2500);
-    } catch (err) {
-      console.warn('Clipboard write failed:', err);
     }
   };
 
   const handleNativeShare = async () => {
+    if (!shareUrl) return;
+
     if (navigator.share) {
       try {
         await navigator.share({
           title: itinerary.title || 'WanderLuxe Travel Plan',
           text: `Check out my ${itinerary.duration || itinerary.daysCount || 5}-day ${itinerary.destination} travel itinerary on WanderLuxe!`,
-          url: shareableUrl
+          url: shareUrl
         });
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -119,20 +123,22 @@ const ShareItineraryModal = ({
   };
 
   const handleWhatsAppShare = () => {
-    const text = encodeURIComponent(
-      `Check out my ${itinerary.duration || itinerary.daysCount || 5}-Day ${itinerary.destination} travel plan on WanderLuxe!\n\n${shareableUrl}`
-    );
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+    if (!shareUrl) return;
+    const waUrl = getWhatsAppShareUrl(itinerary, shareUrl);
+    window.open(waUrl, '_blank');
   };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div 
+        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+        onClick={onClose}
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-slate-100 text-slate-800"
+          className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl relative border border-slate-100 text-slate-800"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Close Button */}
@@ -163,6 +169,7 @@ const ShareItineraryModal = ({
             {/* WhatsApp Share */}
             <button
               onClick={handleWhatsAppShare}
+              disabled={isPreparing}
               className="p-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 border border-emerald-200 shadow-2xs"
             >
               <MessageCircle size={17} className="text-emerald-600" />
@@ -172,10 +179,11 @@ const ShareItineraryModal = ({
             {/* Native Web Share */}
             <button
               onClick={handleNativeShare}
+              disabled={isPreparing}
               className="p-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm"
             >
               <Share2 size={16} />
-              <span>Share Link</span>
+              <span>{isPreparing ? 'Preparing...' : 'Share Link'}</span>
             </button>
           </div>
 
@@ -188,7 +196,7 @@ const ShareItineraryModal = ({
               </div>
               <button
                 onClick={handleTogglePublic}
-                disabled={isUpdating}
+                disabled={isUpdating || isPreparing}
                 className="text-[11px] font-black text-emerald-600 hover:text-emerald-700 underline"
               >
                 {isUpdating ? 'Updating...' : (isPublic ? 'Stop Sharing' : 'Enable Link')}
@@ -199,11 +207,12 @@ const ShareItineraryModal = ({
               <input
                 type="text"
                 readOnly
-                value={shareableUrl}
+                value={isPreparing ? 'Generating secure share link...' : shareUrl}
                 className="w-full text-xs text-slate-700 bg-transparent outline-none truncate font-mono"
               />
               <button
                 onClick={handleCopyLink}
+                disabled={isPreparing}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1 shrink-0 ${
                   copied
                     ? 'bg-emerald-600 text-white'
@@ -216,7 +225,7 @@ const ShareItineraryModal = ({
             </div>
 
             {statusMessage && (
-              <p className="text-[11px] text-emerald-700 font-medium text-center">
+              <p className="text-[11px] text-emerald-700 font-bold text-center">
                 {statusMessage}
               </p>
             )}
