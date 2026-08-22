@@ -44,6 +44,10 @@ const itinerarySchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  destinationSlug: {
+    type: String,
+    default: ''
+  },
   duration: {
     type: Number,
     required: true,
@@ -134,6 +138,10 @@ const itinerarySchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// Indexes for fast lookup
+itinerarySchema.index({ user: 1, createdAt: -1 });
+itinerarySchema.index({ userEmail: 1 });
 
 const Itinerary = mongoose.model('Itinerary', itinerarySchema);
 export default Itinerary;

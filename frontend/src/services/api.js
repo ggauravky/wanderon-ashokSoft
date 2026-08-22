@@ -546,6 +546,33 @@ export const saveAIItineraryApi = async (itineraryData) => {
   return data.data;
 };
 
+export const updateAIItineraryApi = async (id, itineraryData) => {
+  const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(itineraryData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update itinerary');
+  }
+  return data.data;
+};
+
+export const getAIItineraryByIdApi = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch itinerary');
+  }
+  return data.data;
+};
+
 export const getMySavedItinerariesApi = async () => {
   const response = await fetch(`${API_BASE_URL}/ai/my-itineraries`, {
     method: 'GET',
@@ -595,6 +622,20 @@ export const getPublicSharedItineraryApi = async (shareToken) => {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to load shared itinerary');
+  }
+  return data.data;
+};
+
+export const regenerateDayApi = async (payload) => {
+  const response = await fetch(`${API_BASE_URL}/ai/regenerate-day`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to regenerate day');
   }
   return data.data;
 };

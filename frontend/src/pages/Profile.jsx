@@ -8,8 +8,7 @@ import {
   CloudSun, Clock, ThumbsUp, CheckSquare, Square, Download, Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { exportElementToPdf } from '../utils/pdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 import { getMyBookingsApi, getMySavedItinerariesApi, deleteSavedItineraryApi } from '../services/api';
@@ -42,7 +41,7 @@ const Profile = () => {
   const [activePdfPlan, setActivePdfPlan] = useState(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
-  const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
+  const [selectedPlanForEdit, setSelectedPlanForEdit] = useState(null);
   const profileDocRef = useRef(null);
   const [wishlistTrips, setWishlistTrips] = useState([]);
   const [recentlyViewed, setRecentlyViewed] = useState([]);
@@ -73,13 +72,27 @@ const Profile = () => {
     }
   }, [user]);
 
-  // Load Local Saved Plans, Wishlists & History
+  // Load Saved Plans from MongoDB Server + Local Fallback
   useEffect(() => {
-    setSavedAIPlans(getSavedAIItineraries());
+    const fetchAIPlans = async () => {
+      if (!user) return;
+      try {
+        const serverPlans = await getMySavedItinerariesApi();
+        if (Array.isArray(serverPlans) && serverPlans.length > 0) {
+          setSavedAIPlans(serverPlans);
+          return;
+        }
+      } catch (err) {
+        console.warn('Server saved plans fetch notice:', err.message);
+      }
+      setSavedAIPlans(getSavedAIItineraries());
+    };
+
+    fetchAIPlans();
     const wishlistIds = getWishlistIds();
     setWishlistTrips(UPCOMING_TRIPS.filter((t) => wishlistIds.includes(t.id)));
     setRecentlyViewed(getRecentlyViewedTrips());
-  }, [activeTab]);
+  }, [user, activeTab]);
 
   // Fetch real database bookings from MongoDB
   useEffect(() => {
@@ -101,9 +114,40 @@ const Profile = () => {
     fetchBookings();
   }, [user]);
 
-  const handleDeleteAIPlan = (planId) => {
-    const updated = deleteSavedAIItinerary(planId);
-    setSavedAIPlans(updated);
+  const handleDeleteAIPlan = async (planId) => {
+    if (!window.confirm('Are you sure you want to delete this saved itinerary?')) return;
+    try {
+      if (planId && String(planId).length === 24) {
+        await deleteSavedItineraryApi(planId);
+      }
+    } catch (err) {
+      console.warn('Server delete note:', err.message);
+    }
+    deleteSavedAIItinerary(planId);
+    setSavedAIPlans((prev) => prev.filter((p) => (p.id || p._id) !== planId));
+  };
+
+  const handleDownloadProfilePdf = async (plan) => {
+    setActivePdfPlan(plan);
+    setTimeout(async () => {
+      if (!profileDocRef.current) return;
+      try {
+        setDownloadingPdf(true);
+        const cleanName = (plan.destination || 'Trip').replace(/[^a-zA-Z0-9]/g, '-');
+        const filename = `WanderLuxe-${cleanName}-Itinerary.pdf`;
+        await exportElementToPdf(profileDocRef.current, {
+          filename,
+          scale: 3,
+          orientation: 'portrait'
+        });
+      } catch (e) {
+        console.error('Profile PDF export error:', e);
+        alert('Failed to generate PDF document.');
+      } finally {
+        setDownloadingPdf(false);
+        setActivePdfPlan(null);
+      }
+    }, 200);
   };
 
   const handleRemoveWishlist = (tripId) => {
@@ -160,8 +204,21 @@ const Profile = () => {
       {/* AI Planner Modal for viewing/re-planning saved trips */}
       <AIPlannerModal
         isOpen={isPlannerOpen}
-        onClose={() => setIsPlannerOpen(false)}
-        initialDestination={plannerDestination}
+        onClose={() => {
+          setIsPlannerOpen(false);
+          setSelectedPlanForEdit(null);
+        }}
+        initialPlan={selectedPlanForEdit}
+        initialDestination={selectedPlanForEdit?.destination || 'Meghalaya'}
+        onItinerarySaved={(updatedPlan) => {
+          setSavedAIPlans((prev) => {
+            const exists = prev.some((p) => (p._id || p.id) === (updatedPlan._id || updatedPlan.id));
+            if (exists) {
+              return prev.map((p) => ((p._id || p.id) === (updatedPlan._id || updatedPlan.id) ? updatedPlan : p));
+            }
+            return [updatedPlan, ...prev];
+          });
+        }}
       />
 
       {/* Share Itinerary Modal */}
@@ -169,11 +226,12 @@ const Profile = () => {
         isOpen={!!activeSharePlan}
         onClose={() => setActiveSharePlan(null)}
         itinerary={activeSharePlan}
+        onDownloadPdf={() => handleDownloadProfilePdf(activeSharePlan)}
       />
 
-      {/* Hidden Offscreen PDF Document for Profile-level export */}
+      {/* Hidden Offscreen High-Definition PDF Document for Profile-level export */}
       {activePdfPlan && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -100, width: '794px', background: '#ffffff' }}>
           <AIItineraryDocument ref={profileDocRef} itinerary={activePdfPlan} template="classic" />
         </div>
       )}
@@ -435,12 +493,12 @@ const Profile = () => {
                   <div className="flex flex-wrap items-center gap-2 w-full md:w-auto shrink-0">
                     <button
                       onClick={() => {
-                        setPlannerDestination(plan.destination);
+                        setSelectedPlanForEdit(plan);
                         setIsPlannerOpen(true);
                       }}
-                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border border-emerald-200"
+                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-200"
                     >
-                      <Sparkles size={13} /> View Plan
+                      <Sparkles size={13} /> View / Edit Plan
                     </button>
 
                     <button
@@ -452,45 +510,17 @@ const Profile = () => {
                     </button>
 
                     <button
-                      onClick={async () => {
-                        setActivePdfPlan(plan);
-                        setTimeout(async () => {
-                          if (!profileDocRef.current) return;
-                          try {
-                            setDownloadingPdf(true);
-                            const canvas = await html2canvas(profileDocRef.current, { scale: 2, useCORS: true, logging: false });
-                            const imgData = canvas.toDataURL('image/png');
-                            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                            const pdfWidth = pdf.internal.pageSize.getWidth();
-                            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                            const cleanName = (plan.destination || 'Trip').replace(/[^a-zA-Z0-9]/g, '-');
-                            pdf.save(`WanderLuxe-${cleanName}-Itinerary.pdf`);
-                          } catch (e) {
-                            console.error('PDF export error:', e);
-                          } finally {
-                            setDownloadingPdf(false);
-                            setActivePdfPlan(null);
-                          }
-                        }, 250);
-                      }}
+                      onClick={() => handleDownloadProfilePdf(plan)}
+                      disabled={downloadingPdf}
                       className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
                       title="Download PDF"
                     >
-                      <Download size={13} /> PDF
+                      <Download size={13} /> {downloadingPdf ? 'Exporting...' : 'PDF'}
                     </button>
 
                     <button
-                      onClick={async () => {
-                        const targetId = plan.id || plan._id;
-                        handleDeleteAIPlan(targetId);
-                        try {
-                          await deleteSavedItineraryApi(targetId);
-                        } catch (e) {
-                          // Ignored
-                        }
-                      }}
-                      className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                      onClick={() => handleDeleteAIPlan(plan.id || plan._id)}
+                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
                       title="Delete Plan"
                     >
                       <Trash2 size={15} />

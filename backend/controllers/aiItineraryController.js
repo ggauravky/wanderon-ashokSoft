@@ -1,12 +1,14 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import Itinerary from '../models/Itinerary.js';
 import Trip from '../models/Trip.js';
 import { 
   getDestinationBySlug, 
   getSeasonContext, 
   getDestinationWeather, 
-  buildAITravelContext 
+  buildAITravelContext,
+  normalizeDestinationSlug
 } from '../services/travelKnowledgeService.js';
 
 /**
@@ -52,7 +54,7 @@ function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
       days.push({
         day: i + 1,
         title: `Day ${i + 1}: ${att1.name} & ${att2.name}`,
-        morning: [{ time: '09:00 AM', activity: `${att1.name} Guided Tour`, location: att1.location || destination, description: `Explore ${att1.name} during early morning light.`, estimatedCost: '₹300 - ₹600', travelTime: '1.5 hrs' }],
+        morning: [{ time: '09:00 AM', activity: `${att1.name} Guided Tour`, location: att1.location || destination, description: `Explore ${att1.name} during morning hours.`, estimatedCost: '₹300 - ₹600', travelTime: '1.5 hrs' }],
         afternoon: [{ time: '01:30 PM', activity: `${att2.name} Excursion`, location: att2.location || destination, description: `Scenic sightseeing and regional lunch around ${att2.location || destination}.`, estimatedCost: '₹400 - ₹700', travelTime: '1 hr' }],
         evening: [{ time: '06:00 PM', activity: `Sunset Walk & Local Cafe`, location: destination, description: 'Relaxed evening cafe visit and cultural photography.', estimatedCost: '₹400 - ₹800', travelTime: 'Walking' }],
         stay: `${destination} Boutique Hotel or Homestay`,
@@ -114,7 +116,7 @@ function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
 }
 
 /**
- * @desc Generate an AI Travel Itinerary using Google Gemini or Fallback Engine
+ * @desc Generate an AI Travel Itinerary using Google Gemini or Central Travel Intelligence
  * @route POST /api/ai/generate
  * @access Public
  */
@@ -278,7 +280,7 @@ JSON SCHEMA:
 };
 
 /**
- * @desc Save generated AI itinerary to MongoDB
+ * @desc Save OR Update generated AI itinerary to MongoDB (Prevents Duplicates)
  * @route POST /api/ai/save
  * @access Private (or Session-backed)
  */
@@ -294,12 +296,55 @@ export const saveItineraryController = async (req, res) => {
       : null;
     const userEmail = req.user?.email || '';
 
+    const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
+
+    // 1. If document already has an _id, update existing document instead of creating a duplicate
+    if (targetId) {
+      let existingDoc = await Itinerary.findById(targetId);
+      if (existingDoc) {
+        // Ownership check
+        if (existingDoc.user && existingDoc.user.toString() !== userId?.toString() && existingDoc.userEmail !== userEmail && req.user?.role !== 'admin') {
+          return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
+        }
+
+        existingDoc.title = itineraryData.title;
+        existingDoc.tagline = itineraryData.tagline || existingDoc.tagline;
+        existingDoc.destination = itineraryData.destination;
+        existingDoc.destinationSlug = normalizeDestinationSlug(itineraryData.destination);
+        existingDoc.duration = itineraryData.duration || itineraryData.daysCount || existingDoc.duration;
+        existingDoc.travelers = itineraryData.travelers || existingDoc.travelers;
+        existingDoc.travelStyle = itineraryData.travelStyle || itineraryData.mood || existingDoc.travelStyle;
+        existingDoc.pace = itineraryData.pace || existingDoc.pace;
+        existingDoc.budgetLevel = itineraryData.budgetLevel || existingDoc.budgetLevel;
+        existingDoc.totalEstimatedCost = itineraryData.totalEstimatedCost || existingDoc.totalEstimatedCost;
+        existingDoc.weather = itineraryData.weather || existingDoc.weather;
+        existingDoc.bestTimeToVisit = itineraryData.bestTimeToVisit || existingDoc.bestTimeToVisit;
+        existingDoc.days = itineraryData.days || itineraryData.itineraryDays || existingDoc.days;
+        existingDoc.staySuggestions = itineraryData.staySuggestions || existingDoc.staySuggestions;
+        existingDoc.foodSuggestions = itineraryData.foodSuggestions || existingDoc.foodSuggestions;
+        existingDoc.packingList = itineraryData.packingList || itineraryData.packingSuggestions || existingDoc.packingList;
+        existingDoc.localTips = itineraryData.localTips || existingDoc.localTips;
+        existingDoc.budgetBreakdown = itineraryData.budgetBreakdown || existingDoc.budgetBreakdown;
+        existingDoc.source = 'customized';
+
+        await existingDoc.save();
+
+        return res.json({
+          success: true,
+          message: 'Itinerary updated successfully.',
+          data: existingDoc
+        });
+      }
+    }
+
+    // 2. Create new Itinerary document with stable MongoDB _id
     const newDoc = new Itinerary({
       user: userId,
       userEmail,
       title: itineraryData.title,
       tagline: itineraryData.tagline || '',
       destination: itineraryData.destination,
+      destinationSlug: normalizeDestinationSlug(itineraryData.destination),
       duration: itineraryData.duration || itineraryData.daysCount || 5,
       travelers: itineraryData.travelers || 2,
       travelStyle: itineraryData.travelStyle || itineraryData.mood || 'Adventure',
@@ -329,6 +374,91 @@ export const saveItineraryController = async (req, res) => {
   } catch (error) {
     console.error('Save Itinerary Error:', error);
     res.status(500).json({ success: false, message: 'Could not save itinerary to database.' });
+  }
+};
+
+/**
+ * @desc Update a saved itinerary by ID
+ * @route PUT /api/ai/itinerary/:id
+ * @access Private
+ */
+export const updateItineraryController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const doc = await Itinerary.findById(id);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Itinerary not found.' });
+    }
+
+    // Ownership check
+    const userEmail = req.user?.email || '';
+    const userId = req.user?._id?.toString();
+    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
+    }
+
+    if (updateData.title) doc.title = updateData.title;
+    if (updateData.tagline) doc.tagline = updateData.tagline;
+    if (updateData.days) doc.days = updateData.days;
+    if (updateData.travelers) doc.travelers = updateData.travelers;
+    if (updateData.travelStyle) doc.travelStyle = updateData.travelStyle;
+    if (updateData.pace) doc.pace = updateData.pace;
+    if (updateData.budgetLevel) doc.budgetLevel = updateData.budgetLevel;
+    if (updateData.totalEstimatedCost) doc.totalEstimatedCost = updateData.totalEstimatedCost;
+    if (updateData.staySuggestions) doc.staySuggestions = updateData.staySuggestions;
+    if (updateData.foodSuggestions) doc.foodSuggestions = updateData.foodSuggestions;
+    if (updateData.packingList) doc.packingList = updateData.packingList;
+    if (updateData.localTips) doc.localTips = updateData.localTips;
+    if (updateData.budgetBreakdown) doc.budgetBreakdown = updateData.budgetBreakdown;
+    doc.source = 'customized';
+
+    await doc.save();
+
+    res.json({
+      success: true,
+      message: 'Itinerary updated successfully.',
+      data: doc
+    });
+  } catch (error) {
+    console.error('Update Itinerary Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update itinerary.' });
+  }
+};
+
+/**
+ * @desc Get single itinerary by ID
+ * @route GET /api/ai/itinerary/:id
+ * @access Private (or Public if shared)
+ */
+export const getItineraryByIdController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = await Itinerary.findById(id);
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Itinerary not found.' });
+    }
+
+    // If public, allow read
+    if (doc.isPublic) {
+      return res.json({ success: true, data: doc });
+    }
+
+    // Ownership check
+    const userEmail = req.user?.email || '';
+    const userId = req.user?._id?.toString();
+    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Not authorized to view this private itinerary.' });
+    }
+
+    res.json({
+      success: true,
+      data: doc
+    });
+  } catch (error) {
+    console.error('Get Itinerary By ID Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to retrieve itinerary.' });
   }
 };
 
@@ -395,7 +525,7 @@ export const deleteItineraryController = async (req, res) => {
 };
 
 /**
- * @desc Enable/Disable public sharing for an itinerary & create unique share token
+ * @desc Enable/Disable public sharing for an itinerary & create unique cryptographic share token
  * @route POST /api/ai/itinerary/:id/share
  * @access Private
  */
@@ -413,12 +543,12 @@ export const toggleShareItineraryController = async (req, res) => {
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
     if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized to share this itinerary.' });
+      return res.status(403).json({ success: false, message: 'Not authorized to modify share settings for this itinerary.' });
     }
 
     if (enable) {
       if (!doc.shareToken) {
-        doc.shareToken = crypto.randomBytes(8).toString('hex');
+        doc.shareToken = crypto.randomBytes(12).toString('hex');
       }
       doc.isPublic = true;
     } else {
@@ -468,5 +598,41 @@ export const getPublicSharedItineraryController = async (req, res) => {
   } catch (error) {
     console.error('Get Public Shared Itinerary Error:', error);
     res.status(500).json({ success: false, message: 'Failed to load shared itinerary.' });
+  }
+};
+
+/**
+ * @desc Regenerate a single specific day in an itinerary
+ * @route POST /api/ai/regenerate-day
+ * @access Public
+ */
+export const regenerateDayController = async (req, res) => {
+  try {
+    const { destination, dayNumber = 1, mood = 'Adventure', pace = 'Balanced', adjustmentType = 'refresh' } = req.body;
+    const destMeta = getDestinationBySlug(destination);
+    const attractions = destMeta.attractions || [];
+
+    const offset = (Number(dayNumber) * 2 + (adjustmentType === 'cheaper' ? 1 : 0)) % attractions.length;
+    const att1 = attractions[offset] || { name: `${destMeta.name} Scenic Point`, location: destMeta.name };
+    const att2 = attractions[(offset + 1) % attractions.length] || { name: `${destMeta.name} Cultural Exploration`, location: destMeta.name };
+
+    const regeneratedDay = {
+      day: Number(dayNumber),
+      title: `Day ${dayNumber}: ${att1.name} & ${att2.name}`,
+      morning: [{ time: '09:00 AM', activity: `${att1.name} Excursion`, location: att1.location || destMeta.name, description: `Enjoy morning discovery at ${att1.name}.`, estimatedCost: '₹300 - ₹500', travelTime: '1 hr' }],
+      afternoon: [{ time: '01:30 PM', activity: `${att2.name} Exploration`, location: att2.location || destMeta.name, description: `Explore ${att2.name} followed by regional lunch.`, estimatedCost: '₹400 - ₹600', travelTime: '1 hr' }],
+      evening: [{ time: '06:00 PM', activity: 'Sunset View & Local Cafe', location: destMeta.name, description: 'Evening leisure, photography, and local dining.', estimatedCost: '₹400 - ₹700', travelTime: 'Walking' }],
+      stay: `${destMeta.name} Boutique Stay / Resort`,
+      dailyCost: '₹3,500 - ₹4,800',
+      tips: destMeta.aiContext?.planningHints || ['Enjoy a relaxed pace.']
+    };
+
+    res.json({
+      success: true,
+      data: regeneratedDay
+    });
+  } catch (error) {
+    console.error('Regenerate Day Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to regenerate day.' });
   }
 };
