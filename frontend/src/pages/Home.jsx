@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -20,6 +20,7 @@ import AIPlannerModal from '../components/AIPlannerModal';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData';
 import { useTravelContext } from '../hooks/useTravelContext';
+import { getTravelStyles, getLucideIcon } from '../services/travelKnowledgeService';
 
 const Home = () => {
   const navigate = useNavigate();
