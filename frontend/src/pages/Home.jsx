@@ -20,7 +20,7 @@ import AIPlannerModal from '../components/AIPlannerModal';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData';
 import { useTravelContext } from '../hooks/useTravelContext';
-import { getTravelStyles, getLucideIcon } from '../services/travelKnowledgeService';
+import { getTravelStyles, getLucideIcon } from '../services/travelKnowledgeService.js';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -39,13 +39,15 @@ const Home = () => {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    navigate('/destinations', { 
-      state: { 
-        searchQuery,
-        budgetFilter,
-        durationFilter
-      } 
-    });
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('q', searchQuery);
+    if (budgetFilter && budgetFilter !== 'all') {
+      const budgetMap = { under10k: 'under15k', under20k: '15k_25k', luxury: 'above35k' };
+      params.set('budget', budgetMap[budgetFilter] || budgetFilter);
+    }
+    if (durationFilter && durationFilter !== 'all') params.set('dur', durationFilter);
+    const queryString = params.toString();
+    navigate(`/trips${queryString ? `?${queryString}` : ''}`);
   };
 
   const openAIPlannerFor = (dest = 'Meghalaya') => {
@@ -54,8 +56,14 @@ const Home = () => {
   };
 
   const handleMoodSelect = (moodQuery) => {
-    updatePreferences({ mood: moodQuery });
-    navigate('/destinations', { state: { searchQuery: moodQuery } });
+    const qLower = (moodQuery || '').toLowerCase();
+    if (qLower.includes('adventure')) navigate('/adventure-treks');
+    else if (qLower.includes('backpack')) navigate('/backpacking-trips');
+    else if (qLower.includes('weekend')) navigate('/weekend-trips');
+    else if (qLower.includes('romantic') || qLower.includes('honeymoon')) navigate('/romantic-escapes');
+    else if (qLower.includes('culture') || qLower.includes('heritage')) navigate('/culture-heritage');
+    else if (qLower.includes('community') || qLower.includes('group')) navigate('/community-trips');
+    else navigate(`/trips?q=${encodeURIComponent(moodQuery)}`);
   };
 
   // Dynamically load Travel Styles from Central Knowledge Base
@@ -438,7 +446,7 @@ const Home = () => {
                 <motion.div 
                   key={dest.id}
                   whileHover={{ y: -4 }}
-                  onClick={() => navigate('/destinations', { state: { searchQuery: dest.name } })}
+                  onClick={() => navigate(`/trips/${dest.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)}
                   className="relative rounded-3xl overflow-hidden aspect-[4/3] group cursor-pointer shadow-sm border border-slate-100"
                 >
                   <img 

@@ -11,8 +11,11 @@ const SEOHead = ({
   noindex = false,
   ogImage = DEFAULT_IMAGE,
   ogType = 'website',
-  jsonLd = null
+  jsonLd = null,
+  schemaJson = null
 }) => {
+  const activeJsonLd = jsonLd || schemaJson;
+
   useEffect(() => {
     // 1. Update Title
     const finalTitle = title.includes(SITE_NAME) ? title : `${title} | ${SITE_NAME}`;
@@ -61,18 +64,18 @@ const SEOHead = ({
 
     // 3. Inject JSON-LD Script
     let scriptEl = document.querySelector('script[id="json-ld-seo"]');
-    if (jsonLd) {
+    if (activeJsonLd) {
       if (!scriptEl) {
         scriptEl = document.createElement('script');
         scriptEl.id = 'json-ld-seo';
         scriptEl.type = 'application/ld+json';
         document.head.appendChild(scriptEl);
       }
-      scriptEl.textContent = JSON.stringify(jsonLd);
+      scriptEl.textContent = JSON.stringify(activeJsonLd);
     } else if (scriptEl) {
       scriptEl.remove();
     }
-  }, [title, description, canonical, noindex, ogImage, ogType, jsonLd]);
+  }, [title, description, canonical, noindex, ogImage, ogType, activeJsonLd]);
 
   return null;
 };

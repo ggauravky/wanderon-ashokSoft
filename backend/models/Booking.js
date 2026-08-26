@@ -52,6 +52,11 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       default: 'Double Sharing'
     },
+    paymentPlan: {
+      type: { type: String, enum: ['FULL', 'PARTIAL'], default: 'FULL' },
+      depositPercent: { type: Number, default: 10 },
+      balanceDueDays: { type: Number, default: 6 }
+    },
     pricing: {
       basePricePerPerson: { type: Number, required: true },
       subtotal: { type: Number, required: true },
@@ -59,6 +64,10 @@ const bookingSchema = new mongoose.Schema(
       couponCode: { type: String, default: '' },
       taxes: { type: Number, default: 0 },
       finalAmount: { type: Number, required: true },
+      amountPaid: { type: Number, default: 0 },
+      amountOutstanding: { type: Number, default: 0 },
+      balanceDueDate: { type: Date },
+      isOverdue: { type: Boolean, default: false },
       currency: { type: String, default: 'INR' }
     },
     payment: {
@@ -73,12 +82,28 @@ const bookingSchema = new mongoose.Schema(
       razorpaySignature: { type: String },
       paidAt: { type: Date }
     },
+    paymentStatus: {
+      type: String,
+      enum: ['UNPAID', 'PARTIALLY_PAID', 'PAID', 'FAILED', 'REFUNDED'],
+      default: 'UNPAID'
+    },
     bookingStatus: {
       type: String,
-      enum: ['PENDING_PAYMENT', 'CONFIRMED', 'CANCELLED', 'FAILED'],
+      enum: ['DRAFT', 'PENDING_PAYMENT', 'PROVISIONALLY_CONFIRMED', 'CONFIRMED', 'CANCELLED', 'FAILED'],
       default: 'PENDING_PAYMENT',
       index: true
     },
+    payments: [
+      {
+        provider: { type: String, default: 'razorpay' },
+        orderId: { type: String, required: true },
+        paymentId: { type: String },
+        amount: { type: Number, required: true },
+        type: { type: String, enum: ['DEPOSIT', 'BALANCE', 'FULL'], required: true },
+        verifiedAt: { type: Date },
+        signature: { type: String }
+      }
+    ],
     qrCode: {
       dataUrl: { type: String, default: '' },
       verificationToken: { type: String, index: true },

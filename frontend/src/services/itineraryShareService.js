@@ -1,4 +1,4 @@
-import { saveAIItineraryApi, toggleShareItineraryApi } from './api';
+import { saveAIItineraryApi, toggleShareItineraryApi } from './api.js';
 
 /**
  * Robust Centralized Share Service for AI Travel Itineraries
@@ -9,7 +9,7 @@ import { saveAIItineraryApi, toggleShareItineraryApi } from './api';
 /**
  * Ensures an itinerary is persisted to MongoDB and has an active cryptographic shareToken
  */
-export const prepareShareableItinerary = async (itinerary) => {
+export async function prepareShareableItinerary(itinerary) {
   if (!itinerary) {
     throw new Error('No itinerary data available to share.');
   }
@@ -61,12 +61,12 @@ export const prepareShareableItinerary = async (itinerary) => {
     shareToken: activePlan.shareToken,
     shareUrl
   };
-};
+}
 
 /**
  * Copies text to clipboard with modern API and fallback support
  */
-export const copyToClipboard = async (text) => {
+export async function copyToClipboard(text) {
   if (!text) return false;
 
   if (navigator.clipboard && window.isSecureContext) {
@@ -95,20 +95,21 @@ export const copyToClipboard = async (text) => {
     console.error('Fallback clipboard copy failed:', err);
     return false;
   }
-};
+}
 
 /**
  * Builds formatted WhatsApp share URL
  */
-export const getWhatsAppShareUrl = (itinerary, shareUrl) => {
+export function getWhatsAppShareUrl(itinerary, shareUrl) {
   const destination = itinerary?.destination || 'Destination';
   const duration = itinerary?.duration || itinerary?.daysCount || (itinerary?.days?.length || 5);
   const message = `Check out my ${duration}-Day ${destination} travel itinerary on WanderLuxe!\n\n${shareUrl}`;
   return `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
-};
+}
 
 export default {
   prepareShareableItinerary,
   copyToClipboard,
   getWhatsAppShareUrl
 };
+

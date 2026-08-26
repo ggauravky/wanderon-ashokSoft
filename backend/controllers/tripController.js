@@ -43,7 +43,8 @@ export const getTrips = async (req, res) => {
   try {
     const { 
       search, destination, category, mood, 
-      minPrice, maxPrice, sort, includeDrafts 
+      minPrice, maxPrice, sort, includeDrafts,
+      country, tag, duration, preset 
     } = req.query;
 
     const filter = {};
@@ -58,8 +59,24 @@ export const getTrips = async (req, res) => {
       filter.destination = new RegExp(destination, 'i');
     }
 
+    if (country && country !== 'All') {
+      if (country.toLowerCase() === 'india' || country.toLowerCase() === 'domestic') {
+        filter.destination = { $nin: [/bali/i, /indonesia/i] };
+      } else if (country.toLowerCase() === 'international') {
+        filter.$or = [{ destination: /bali/i }, { category: /international/i }];
+      }
+    }
+
     if (category && category !== 'All') {
       filter.category = new RegExp(category, 'i');
+    }
+
+    if (tag) {
+      filter.tags = new RegExp(tag, 'i');
+    }
+
+    if (duration === 'weekend') {
+      filter.duration = new RegExp('2N|3D|3N/4D', 'i');
     }
 
     if (mood && mood !== 'All') {
@@ -142,9 +159,19 @@ export const getTrips = async (req, res) => {
     if (trips.length === 0) {
       const staticList = getStaticKnowledgeTrips();
       trips = staticList.filter(t => {
-        if (destination && destination !== 'All' && !new RegExp(destination, 'i').test(t.destination || t.location)) return false;
+        const dest = (t.destination || t.location || '').toLowerCase();
+        if (destination && destination !== 'All' && destination !== 'all' && !new RegExp(destination, 'i').test(t.destination || t.location)) return false;
+        if (country && country !== 'All') {
+          if (country.toLowerCase() === 'india' || country.toLowerCase() === 'domestic') {
+            if (dest.includes('bali') || dest.includes('indonesia')) return false;
+          } else if (country.toLowerCase() === 'international') {
+            if (!dest.includes('bali') && !dest.includes('indonesia') && !/international/i.test(t.category)) return false;
+          }
+        }
         if (category && category !== 'All' && !new RegExp(category, 'i').test(t.category)) return false;
-        if (search && !new RegExp(search, 'i').test(`${t.title} ${t.location} ${t.destination}`)) return false;
+        if (tag && !new RegExp(tag, 'i').test(Array.isArray(t.tags) ? t.tags.join(' ') : '')) return false;
+        if (duration === 'weekend' && !/2N|3D|3N\/4D/i.test(t.duration || '')) return false;
+        if (search && !new RegExp(search, 'i').test(`${t.title} ${t.location} ${t.destination} ${t.overview}`)) return false;
         return true;
       });
     }
@@ -267,6 +294,13 @@ export const createTrip = async (req, res) => {
       bestMonths: Array.isArray(req.body.bestMonths) ? req.body.bestMonths : [],
       nextBatch: req.body.nextBatch || '15 Sep',
       availableDates: Array.isArray(req.body.availableDates) ? req.body.availableDates : [],
+      batches: Array.isArray(req.body.batches) ? req.body.batches : [],
+      sharingPricing: req.body.sharingPricing || {
+        doubleSharing: Number(price),
+        tripleSharing: Math.max(1000, Number(price) - 1500),
+        singleSharing: Number(price) + 3500
+      },
+      pickupPoints: Array.isArray(req.body.pickupPoints) ? req.body.pickupPoints : ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)'],
       capacity: req.body.capacity ? Number(req.body.capacity) : 20,
       shortDescription: req.body.shortDescription || overview || '',
       overview: overview || req.body.shortDescription || '',

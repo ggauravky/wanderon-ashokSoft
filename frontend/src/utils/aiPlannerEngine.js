@@ -9,8 +9,8 @@ import {
   getSeasonContext, 
   getDestinationWeather,
   buildAITravelContext
-} from '../services/travelKnowledgeService';
-import { generateAIItineraryApi } from '../services/api';
+} from '../services/travelKnowledgeService.js';
+import { generateAIItineraryApi } from '../services/api.js';
 
 /**
  * Generate a complete, intelligent, personalized travel itinerary

@@ -6,6 +6,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import TripDetails from './pages/TripDetails';
+import BookingDates from './pages/BookingDates';
 import Checkout from './pages/Checkout';
 import Profile from './pages/Profile';
 import BookingConfirmation from './pages/BookingConfirmation';
@@ -41,6 +42,9 @@ function App() {
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
             <Route path="trip/:id" element={<TripDetails />} />
+            <Route path="book/:tripSlug" element={<BookingDates />} />
+            <Route path="book/:tripSlug/dates" element={<BookingDates />} />
+            <Route path="book/:tripSlug/travelers" element={<Checkout />} />
             <Route path="checkout" element={<Checkout />} />
             <Route path="booking/confirmation/:bookingId" element={<BookingConfirmation />} />
             <Route path="bookings/:bookingId" element={<BookingConfirmation />} />
@@ -72,16 +76,25 @@ function App() {
             <Route path="creators/:username" element={<CreatorStorefront />} />
             <Route path="creators/:username/:tripSlug" element={<CreatorTrip />} />
             
-            {/* Public Catalog Routes */}
+            {/* Travel Discovery & Catalog Routes (Phase C1 Unified Listing Engine) */}
             <Route path="destinations" element={<Destinations />} />
+            <Route path="destinations/:destinationSlug" element={<Destinations />} />
             <Route path="destinationspage" element={<Destinations />} />
             <Route path="destination" element={<Destinations />} />
             <Route path="packages" element={<Destinations />} />
             <Route path="trips" element={<Destinations />} />
+            <Route path="trips/india" element={<Destinations />} />
+            <Route path="trips/international" element={<Destinations />} />
+            <Route path="trips/:destinationSlug" element={<Destinations />} />
             <Route path="domestic" element={<Destinations />} />
             <Route path="international" element={<Destinations />} />
             <Route path="community-trips" element={<Destinations />} />
+            <Route path="group-trips" element={<Destinations />} />
             <Route path="weekend-trips" element={<Destinations />} />
+            <Route path="backpacking-trips" element={<Destinations />} />
+            <Route path="adventure-treks" element={<Destinations />} />
+            <Route path="romantic-escapes" element={<Destinations />} />
+            <Route path="culture-heritage" element={<Destinations />} />
             <Route path="fixed-departures" element={<Destinations />} />
             <Route path="custom-trip" element={<Contact />} />
             <Route path="contact" element={<Contact />} />

@@ -3,7 +3,7 @@ import {
   loginApi, registerApi, influencerLoginApi, influencerApplyApi, getMeApi, 
   updateProfileApi, addBookingApi, cancelBookingApi, getInfluencerApplicationsApi, 
   approveInfluencerApplicationApi, rejectInfluencerApplicationApi 
-} from '../services/api';
+} from '../services/api.js';
 
 const AuthContext = createContext();
 

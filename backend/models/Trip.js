@@ -113,6 +113,35 @@ const tripSchema = new mongoose.Schema(
       type: Array,
       default: []
     },
+    batches: [
+      {
+        batchId: { type: String },
+        startDate: { type: Date },
+        endDate: { type: Date },
+        dates: { type: String, required: true },
+        capacity: { type: Number, default: 20 },
+        bookedSeats: { type: Number, default: 0 },
+        status: {
+          type: String,
+          enum: ['available', 'filling_fast', 'sold_out'],
+          default: 'available'
+        },
+        pricing: {
+          tripleSharing: { type: Number },
+          doubleSharing: { type: Number },
+          singleSharing: { type: Number }
+        }
+      }
+    ],
+    sharingPricing: {
+      tripleSharing: { type: Number },
+      doubleSharing: { type: Number },
+      singleSharing: { type: Number }
+    },
+    pickupPoints: {
+      type: [String],
+      default: ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)']
+    },
     capacity: {
       type: Number,
       default: 20

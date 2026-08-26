@@ -12,11 +12,12 @@ import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator'
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 import { saveAIItinerary } from '../utils/userHistory';
 import { 
+  generateAIItineraryApi, 
   saveAIItineraryApi, 
   updateAIItineraryApi, 
   regenerateDayApi 
-} from '../services/api';
-import { getDestinations, getTravelStyles } from '../services/travelKnowledgeService';
+} from '../services/api.js';
+import { getDestinations, getTravelStyles } from '../services/travelKnowledgeService.js';
 import { useAuth } from '../contexts/AuthContext';
 import AIItineraryDocument from './AIItineraryDocument';
 import ShareItineraryModal from './ShareItineraryModal';

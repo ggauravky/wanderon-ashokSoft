@@ -73,18 +73,30 @@ export const getAdminStats = async (req, res) => {
         pendingBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: { $in: ['PENDING_PAYMENT', 'PENDING'] } });
         cancelledBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: 'CANCELLED' });
 
-        // 6. Verified Revenue (Only PAID / CONFIRMED bookings)
+        // 6. Verified Revenue (Collected Cash from PAID and PARTIALLY_PAID bookings)
         const revenueAgg = await Booking.aggregate([
           {
             $match: {
               ...dateFilter,
-              $or: [{ 'payment.status': 'PAID' }, { bookingStatus: 'CONFIRMED' }]
+              $or: [
+                { 'payment.status': 'PAID' },
+                { paymentStatus: { $in: ['PAID', 'PARTIALLY_PAID'] } },
+                { bookingStatus: { $in: ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'] } }
+              ]
             }
           },
           {
             $group: {
               _id: null,
-              totalAmount: { $sum: '$pricing.finalAmount' }
+              totalAmount: {
+                $sum: {
+                  $cond: [
+                    { $gt: ['$pricing.amountPaid', 0] },
+                    '$pricing.amountPaid',
+                    { $ifNull: ['$pricing.finalAmount', 0] }
+                  ]
+                }
+              }
             }
           }
         ]);
@@ -95,7 +107,11 @@ export const getAdminStats = async (req, res) => {
         const monthlyAgg = await Booking.aggregate([
           {
             $match: {
-              $or: [{ 'payment.status': 'PAID' }, { bookingStatus: 'CONFIRMED' }]
+              $or: [
+                { 'payment.status': 'PAID' },
+                { paymentStatus: { $in: ['PAID', 'PARTIALLY_PAID'] } },
+                { bookingStatus: { $in: ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'] } }
+              ]
             }
           },
           {
@@ -104,7 +120,15 @@ export const getAdminStats = async (req, res) => {
                 year: { $year: '$createdAt' },
                 month: { $month: '$createdAt' }
               },
-              revenue: { $sum: '$pricing.finalAmount' },
+              revenue: {
+                $sum: {
+                  $cond: [
+                    { $gt: ['$pricing.amountPaid', 0] },
+                    '$pricing.amountPaid',
+                    { $ifNull: ['$pricing.finalAmount', 0] }
+                  ]
+                }
+              },
               bookings: { $sum: 1 }
             }
           },

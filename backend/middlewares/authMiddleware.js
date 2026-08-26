@@ -102,3 +102,47 @@ export const influencerOnly = (req, res, next) => {
     });
   }
 };
+
+// @desc Optional authentication middleware: Populates req.user if Bearer token present, but does not reject guests
+export const optionalAuth = async (req, res, next) => {
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      const token = req.headers.authorization.split(' ')[1];
+      const decoded = jwt.verify(
+        token, 
+        process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026'
+      );
+
+      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+        try {
+          req.user = await User.findById(decoded.id).select('-password');
+        } catch (dbErr) {
+          console.warn('Optional user DB lookup fallback:', dbErr.message);
+        }
+      }
+
+      if (!req.user) {
+        if (decoded.email === ADMIN_EMAIL || decoded.id === 'usr_admin') {
+          req.user = {
+            _id: 'usr_admin',
+            name: 'Gaurav Kumar Yadav (Admin)',
+            email: ADMIN_EMAIL,
+            role: 'admin'
+          };
+        } else if (decoded.id) {
+          req.user = {
+            _id: decoded.id,
+            name: decoded.name || 'Traveler',
+            email: decoded.email,
+            role: decoded.role || 'user'
+          };
+        }
+      }
+    } catch (err) {
+      // Graceful fallback for invalid/expired token on optional endpoints
+      req.user = null;
+    }
+  }
+  next();
+};
+

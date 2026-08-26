@@ -14,13 +14,15 @@ const Signup = () => {
 
   const { isAuthenticated, signup } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || location.state?.from || '/profile';
 
   // Redirect authenticated user away from signup page
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/profile', { replace: true });
+      navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -35,7 +37,7 @@ const Signup = () => {
     try {
       await signup(name, email, phone, password);
       setLoading(false);
-      navigate('/profile', { replace: true });
+      navigate(from, { replace: true });
     } catch (err) {
       setLoading(false);
       setError(err.message || 'Registration failed. Please try again.');

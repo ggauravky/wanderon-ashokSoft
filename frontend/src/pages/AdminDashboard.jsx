@@ -15,9 +15,9 @@ import {
   deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi,
   getAdminTripsApi, createTripApi, updateTripApi, deleteTripApi, uploadImageApi,
   getAllAdminPagesApi, createPageApi, updatePageApi, deletePageApi,
-  getAdminLeadsApi, updateLeadStatusApi, updateTripSeoApi
-} from '../services/api';
-import { getDestinations, getTravelStyles } from '../services/travelKnowledgeService';
+  getAdminLeadsApi, updateLeadStatusApi
+} from '../services/api.js';
+import { getDestinations } from '../services/travelKnowledgeService.js';
 
 const AdminDashboard = () => {
   const { 
@@ -89,6 +89,16 @@ const AdminDashboard = () => {
     bestMonths: ['October', 'November', 'December', 'March', 'April', 'May'],
     nextBatch: '15 Sep - 19 Sep',
     capacity: 20,
+    batches: [
+      { batchId: 'b_1', dates: '15 Sep - 20 Sep, 2026', capacity: 20, bookedSeats: 0, status: 'available' },
+      { batchId: 'b_2', dates: '25 Sep - 30 Sep, 2026', capacity: 20, bookedSeats: 0, status: 'available' }
+    ],
+    sharingPricing: {
+      doubleSharing: '',
+      tripleSharing: '',
+      singleSharing: ''
+    },
+    pickupPoints: ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)'],
     shortDescription: '',
     overview: '',
     itinerary: [
@@ -153,6 +163,8 @@ const AdminDashboard = () => {
   const [leads, setLeads] = useState([]);
   const [bookingSearch, setBookingSearch] = useState('');
   const [leadSearch, setLeadSearch] = useState('');
+  const [leadStatusFilter, setLeadStatusFilter] = useState('all');
+  const [leadTypeFilter, setLeadTypeFilter] = useState('all');
 
   // ==========================================
   // 5. COUPONS & USERS STATE
@@ -273,6 +285,19 @@ const AdminDashboard = () => {
       bestMonths: trip.bestMonths || ['October', 'November', 'December'],
       nextBatch: trip.nextBatch || '15 Sep - 19 Sep',
       capacity: trip.capacity || 20,
+      batches: Array.isArray(trip.batches) && trip.batches.length > 0
+        ? trip.batches
+        : (Array.isArray(trip.availableBatches) && trip.availableBatches.length > 0 ? trip.availableBatches : [
+            { batchId: 'b_1', dates: trip.nextBatch || '15 Sep - 20 Sep, 2026', capacity: 20, bookedSeats: 0, status: 'available' }
+          ]),
+      sharingPricing: trip.sharingPricing || {
+        doubleSharing: trip.price || '',
+        tripleSharing: trip.price ? Math.max(1000, Number(trip.price) - 1500) : '',
+        singleSharing: trip.price ? Number(trip.price) + 3500 : ''
+      },
+      pickupPoints: Array.isArray(trip.pickupPoints) && trip.pickupPoints.length > 0
+        ? trip.pickupPoints
+        : ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)'],
       shortDescription: trip.shortDescription || trip.overview || '',
       overview: trip.overview || trip.shortDescription || '',
       itinerary: Array.isArray(trip.itinerary) && trip.itinerary.length > 0 ? trip.itinerary : [
@@ -356,6 +381,37 @@ const AdminDashboard = () => {
     } finally {
       setUploadingImage(false);
     }
+  };
+
+  // Batch Helpers
+  const handleAddTripBatch = () => {
+    const currentBatches = Array.isArray(tripForm.batches) ? tripForm.batches : [];
+    setTripForm({
+      ...tripForm,
+      batches: [
+        ...currentBatches,
+        {
+          batchId: `b_${Date.now()}`,
+          dates: '01 Oct - 06 Oct, 2026',
+          capacity: Number(tripForm.capacity) || 20,
+          bookedSeats: 0,
+          status: 'available',
+          pricing: {
+            doubleSharing: tripForm.price || '',
+            tripleSharing: tripForm.price ? Math.max(1000, Number(tripForm.price) - 1500) : '',
+            singleSharing: tripForm.price ? Number(tripForm.price) + 3500 : ''
+          }
+        }
+      ]
+    });
+  };
+
+  const handleRemoveTripBatch = (index) => {
+    const currentBatches = Array.isArray(tripForm.batches) ? tripForm.batches : [];
+    setTripForm({
+      ...tripForm,
+      batches: currentBatches.filter((_, idx) => idx !== index)
+    });
   };
 
   // Itinerary Helper
@@ -509,6 +565,21 @@ const AdminDashboard = () => {
                         (t.destination || '').toLowerCase().includes(tripSearch.toLowerCase());
     const matchStatus = tripStatusFilter === 'all' || t.status === tripStatusFilter;
     return matchSearch && matchStatus;
+  });
+
+  const filteredLeads = leads.filter(l => {
+    const q = (leadSearch || '').toLowerCase().trim();
+    const matchSearch = !q || 
+      (l.name || '').toLowerCase().includes(q) ||
+      (l.email || '').toLowerCase().includes(q) ||
+      (l.phone || '').toLowerCase().includes(q) ||
+      (l.destination || '').toLowerCase().includes(q) ||
+      (l.tripTitle || '').toLowerCase().includes(q);
+
+    const matchStatus = leadStatusFilter === 'all' || l.status === leadStatusFilter;
+    const matchType = leadTypeFilter === 'all' || (l.leadType || 'trip_enquiry') === leadTypeFilter;
+
+    return matchSearch && matchStatus && matchType;
   });
 
   const popularDestinationsList = getDestinations().map(d => d.name);
@@ -988,61 +1059,212 @@ const AdminDashboard = () => {
 
             {/* CRM Leads Table */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <MessageSquare size={20} className="text-emerald-600" /> CRM Customer Inquiries & Leads ({leads.length})
-                </h3>
-                <span className="text-xs text-slate-400 font-bold">Contact & Custom Itinerary Inquiries</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <MessageSquare size={20} className="text-emerald-600" /> CRM Customer Inquiries & Callback Requests ({leads.length})
+                  </h3>
+                  <p className="text-xs text-slate-400 font-bold">
+                    Real-time MongoDB inquiries, trip consultations, and scheduled callback requests
+                  </p>
+                </div>
+
+                {/* Filter Controls Bar */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={leadSearch}
+                      onChange={(e) => setLeadSearch(e.target.value)}
+                      placeholder="Search name, phone, trip..."
+                      className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none w-44 sm:w-56 focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <select
+                    value={leadTypeFilter}
+                    onChange={(e) => setLeadTypeFilter(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="all">All Lead Types</option>
+                    <option value="callback_request">📞 Callback Requests</option>
+                    <option value="trip_enquiry">✉️ Trip Enquiries</option>
+                    <option value="general">💬 General Contact</option>
+                  </select>
+
+                  <select
+                    value={leadStatusFilter}
+                    onChange={(e) => setLeadStatusFilter(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="NEW">NEW</option>
+                    <option value="CONTACTED">CONTACTED</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="QUALIFIED">QUALIFIED</option>
+                    <option value="CONVERTED">CONVERTED</option>
+                    <option value="LOST">LOST</option>
+                  </select>
+                </div>
               </div>
 
               <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
-                    <tr>
-                      <th className="p-4">Lead Name & Contact</th>
-                      <th className="p-4">Destination & Month</th>
-                      <th className="p-4">Travelers</th>
-                      <th className="p-4">Message</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Update Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {leads.map((l) => (
-                      <tr key={l._id || l.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4">
-                          <div className="font-bold text-slate-900">{l.name}</div>
-                          <div className="text-[11px] text-slate-400 font-mono">{l.email} • {l.phone}</div>
-                        </td>
-                        <td className="p-4 font-bold text-slate-800">{l.destination} ({l.travelMonth})</td>
-                        <td className="p-4 font-bold text-slate-600">{l.travelersCount || 2} Pax</td>
-                        <td className="p-4 text-slate-500 max-w-xs truncate">{l.message || 'Custom trip inquiry'}</td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
-                            l.status === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' :
-                            l.status === 'CONTACTED' ? 'bg-blue-100 text-blue-800' :
-                            l.status === 'LOST' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                          }`}>
-                            {l.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <select
-                            value={l.status}
-                            onChange={(e) => handleUpdateLeadStatus(l._id || l.id, e.target.value)}
-                            className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 outline-none"
-                          >
-                            <option value="NEW">NEW</option>
-                            <option value="CONTACTED">CONTACTED</option>
-                            <option value="IN_PROGRESS">IN_PROGRESS</option>
-                            <option value="CONVERTED">CONVERTED</option>
-                            <option value="LOST">LOST</option>
-                          </select>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[900px]">
+                    <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                      <tr>
+                        <th className="p-4">Type & Rec'd</th>
+                        <th className="p-4">Traveler & Quick Contact</th>
+                        <th className="p-4">Trip Package</th>
+                        <th className="p-4">Preferred Call Window</th>
+                        <th className="p-4">Travelers / Message</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right">Update Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {filteredLeads.length > 0 ? (
+                        filteredLeads.map((l) => {
+                          const cleanPhone = String(l.phone || '').replace(/\D/g, '');
+                          const waLink = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(`Hi ${l.name || 'Traveler'}, this is regarding your inquiry for ${l.tripTitle || l.destination || 'WanderLuxe'}. How can we assist you today?`)}`;
+
+                          return (
+                            <tr key={l._id || l.id} className="hover:bg-slate-50 transition-colors">
+                              {/* Lead Type */}
+                              <td className="p-4">
+                                <div className="space-y-1">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase inline-flex items-center gap-1 ${
+                                    l.leadType === 'callback_request' ? 'bg-indigo-100 text-indigo-800' :
+                                    l.leadType === 'trip_enquiry' ? 'bg-emerald-100 text-emerald-800' :
+                                    'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {l.leadType === 'callback_request' ? '📞 Callback' :
+                                     l.leadType === 'trip_enquiry' ? '✉️ Trip Inquiry' : '💬 General'}
+                                  </span>
+                                  <div className="text-[10px] text-slate-400 font-mono">
+                                    {l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Recent'}
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Traveler Contact */}
+                              <td className="p-4">
+                                <div className="space-y-1">
+                                  <div className="font-bold text-slate-900">{l.name}</div>
+                                  <div className="text-[11px] text-slate-400 font-mono">{l.email}</div>
+                                  <div className="flex items-center gap-2 pt-0.5">
+                                    <a
+                                      href={`tel:${l.phone}`}
+                                      className="text-[10px] font-bold text-slate-700 hover:text-emerald-600 flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-lg transition-colors"
+                                      title="Call Traveler"
+                                    >
+                                      <Phone size={10} /> {l.phone}
+                                    </a>
+                                    <a
+                                      href={waLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg transition-colors"
+                                      title="Open WhatsApp Chat"
+                                    >
+                                      <MessageSquare size={10} /> WhatsApp
+                                    </a>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Trip Reference */}
+                              <td className="p-4">
+                                <div className="space-y-0.5 max-w-[200px]">
+                                  <div className="font-bold text-slate-800 truncate" title={l.tripTitle || l.destination}>
+                                    {l.tripTitle || l.destination || 'Custom Expedition'}
+                                  </div>
+                                  {l.travelDate && (
+                                    <div className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                                      <Calendar size={10} /> {l.travelDate}
+                                    </div>
+                                  )}
+                                  <div className="text-[10px] text-slate-400 font-medium">
+                                    Source: <span className="font-mono text-slate-600">{l.source || 'trip_page'}</span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Scheduled Call Window */}
+                              <td className="p-4">
+                                {l.preferredCallDate || l.preferredCallWindow ? (
+                                  <div className="space-y-0.5">
+                                    <div className="font-black text-slate-900 flex items-center gap-1">
+                                      <Clock size={11} className="text-indigo-600" />
+                                      <span>{l.preferredCallWindow || 'Anytime'}</span>
+                                    </div>
+                                    <div className="text-[10px] text-indigo-700 font-bold">
+                                      {l.preferredCallDate || 'Today'}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 italic">As soon as available</span>
+                                )}
+                              </td>
+
+                              {/* Travelers & Message */}
+                              <td className="p-4">
+                                <div className="space-y-1 max-w-xs">
+                                  <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                    {l.travelersCount || 1} Pax {l.budgetPerPerson ? `• ${l.budgetPerPerson}` : ''}
+                                  </span>
+                                  {l.message ? (
+                                    <p className="text-[11px] text-slate-600 line-clamp-2" title={l.message}>
+                                      {l.message}
+                                    </p>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">No special message</span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Status Badge */}
+                              <td className="p-4">
+                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase whitespace-nowrap ${
+                                  l.status === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' :
+                                  l.status === 'CONTACTED' ? 'bg-blue-100 text-blue-800' :
+                                  l.status === 'QUALIFIED' ? 'bg-purple-100 text-purple-800' :
+                                  l.status === 'IN_PROGRESS' ? 'bg-indigo-100 text-indigo-800' :
+                                  l.status === 'LOST' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                                }`}>
+                                  {l.status}
+                                </span>
+                              </td>
+
+                              {/* Status Dropdown */}
+                              <td className="p-4 text-right">
+                                <select
+                                  value={l.status}
+                                  onChange={(e) => handleUpdateLeadStatus(l._id || l.id, e.target.value)}
+                                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-300"
+                                >
+                                  <option value="NEW">NEW</option>
+                                  <option value="CONTACTED">CONTACTED</option>
+                                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                                  <option value="QUALIFIED">QUALIFIED</option>
+                                  <option value="CONVERTED">CONVERTED</option>
+                                  <option value="LOST">LOST</option>
+                                </select>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-bold">
+                            No inquiries match the active search or filter criteria.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1487,7 +1709,7 @@ const AdminDashboard = () => {
 
                 {/* 3. PRICING & BATCHES */}
                 {tripModalTab === 'pricing' && (
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block uppercase mb-1">Base Price (₹) *</label>
@@ -1523,27 +1745,129 @@ const AdminDashboard = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block uppercase mb-1">Next Batch Date Range</label>
-                        <input
-                          type="text"
-                          value={tripForm.nextBatch}
-                          onChange={(e) => setTripForm({ ...tripForm, nextBatch: e.target.value })}
-                          placeholder="e.g. 15 Sep - 19 Sep"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block uppercase mb-1">Max Group Capacity</label>
-                        <input
-                          type="number"
-                          value={tripForm.capacity}
-                          onChange={(e) => setTripForm({ ...tripForm, capacity: e.target.value })}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
-                        />
+                    {/* Room Sharing Rates */}
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                      <span className="text-xs font-black uppercase text-slate-700 block">
+                        Authoritative Room Sharing Rates (₹ per person)
+                      </span>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Triple Sharing</label>
+                          <input
+                            type="number"
+                            value={tripForm.sharingPricing?.tripleSharing || ''}
+                            onChange={(e) => setTripForm({
+                              ...tripForm,
+                              sharingPricing: { ...tripForm.sharingPricing, tripleSharing: e.target.value }
+                            })}
+                            placeholder={tripForm.price ? `${Math.max(1000, Number(tripForm.price) - 1500)}` : 'e.g. 17000'}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Double Sharing (Base)</label>
+                          <input
+                            type="number"
+                            value={tripForm.sharingPricing?.doubleSharing || ''}
+                            onChange={(e) => setTripForm({
+                              ...tripForm,
+                              sharingPricing: { ...tripForm.sharingPricing, doubleSharing: e.target.value }
+                            })}
+                            placeholder={tripForm.price ? `${tripForm.price}` : 'e.g. 18500'}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Single Sharing</label>
+                          <input
+                            type="number"
+                            value={tripForm.sharingPricing?.singleSharing || ''}
+                            onChange={(e) => setTripForm({
+                              ...tripForm,
+                              sharingPricing: { ...tripForm.sharingPricing, singleSharing: e.target.value }
+                            })}
+                            placeholder={tripForm.price ? `${Number(tripForm.price) + 3500}` : 'e.g. 22000'}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                          />
+                        </div>
                       </div>
                     </div>
+
+                    {/* Departure Batches Management */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-slate-700">
+                          Departure Batches ({(tripForm.batches || []).length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddTripBatch}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus size={13} /> Add Batch
+                        </button>
+                      </div>
+
+                      <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                        {(tripForm.batches || []).map((batch, bIdx) => (
+                          <div key={bIdx} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 flex-1">
+                              <div className="sm:col-span-2">
+                                <label className="block text-[9px] font-bold text-slate-500 uppercase">Dates Text</label>
+                                <input
+                                  type="text"
+                                  value={batch.dates || ''}
+                                  onChange={(e) => {
+                                    const updated = [...tripForm.batches];
+                                    updated[bIdx].dates = e.target.value;
+                                    setTripForm({ ...tripForm, batches: updated });
+                                  }}
+                                  placeholder="e.g. 15 Sep - 20 Sep, 2026"
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-500 uppercase">Capacity</label>
+                                <input
+                                  type="number"
+                                  value={batch.capacity || ''}
+                                  onChange={(e) => {
+                                    const updated = [...tripForm.batches];
+                                    updated[bIdx].capacity = Number(e.target.value);
+                                    setTripForm({ ...tripForm, batches: updated });
+                                  }}
+                                  placeholder="20"
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] font-bold text-slate-500 uppercase">Booked</label>
+                                <input
+                                  type="number"
+                                  value={batch.bookedSeats || 0}
+                                  onChange={(e) => {
+                                    const updated = [...tripForm.batches];
+                                    updated[bIdx].bookedSeats = Number(e.target.value);
+                                    setTripForm({ ...tripForm, batches: updated });
+                                  }}
+                                  placeholder="0"
+                                  className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 outline-none"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTripBatch(bIdx)}
+                              className="text-rose-600 hover:text-rose-700 text-xs font-bold px-2 py-1 shrink-0 self-end sm:self-center"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                   </div>
                 )}
 

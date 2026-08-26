@@ -1,14 +1,14 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const getHeaders = () => {
+export function getHeaders() {
   const token = localStorage.getItem('wanderluxe_token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
-};
+}
 
-export const registerApi = async (userData) => {
+export async function registerApi(userData) {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: getHeaders(),
@@ -20,9 +20,9 @@ export const registerApi = async (userData) => {
     throw new Error(data.message || 'Registration failed');
   }
   return data;
-};
+}
 
-export const loginApi = async (credentials) => {
+export async function loginApi(credentials) {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: getHeaders(),
@@ -34,9 +34,9 @@ export const loginApi = async (credentials) => {
     throw new Error(data.message || 'Invalid email or password');
   }
   return data;
-};
+}
 
-export const influencerLoginApi = async (credentials) => {
+export async function influencerLoginApi(credentials) {
   const response = await fetch(`${API_BASE_URL}/auth/influencer-login`, {
     method: 'POST',
     headers: getHeaders(),
@@ -48,9 +48,9 @@ export const influencerLoginApi = async (credentials) => {
     throw new Error(data.message || 'Invalid creator credentials or unapproved status.');
   }
   return data;
-};
+}
 
-export const influencerApplyApi = async (applicationData) => {
+export async function influencerApplyApi(applicationData) {
   const response = await fetch(`${API_BASE_URL}/auth/influencer-apply`, {
     method: 'POST',
     headers: getHeaders(),
@@ -62,9 +62,9 @@ export const influencerApplyApi = async (applicationData) => {
     throw new Error(data.message || 'Failed to submit influencer application');
   }
   return data;
-};
+}
 
-export const getMeApi = async () => {
+export async function getMeApi() {
   const response = await fetch(`${API_BASE_URL}/auth/me`, {
     method: 'GET',
     headers: getHeaders()
@@ -75,9 +75,9 @@ export const getMeApi = async () => {
     throw new Error(data.message || 'Failed to fetch session');
   }
   return data;
-};
+}
 
-export const updateProfileApi = async (profileData) => {
+export async function updateProfileApi(profileData) {
   const response = await fetch(`${API_BASE_URL}/auth/profile`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -89,9 +89,9 @@ export const updateProfileApi = async (profileData) => {
     throw new Error(data.message || 'Failed to update profile');
   }
   return data;
-};
+}
 
-export const addBookingApi = async (bookingData) => {
+export async function addBookingApi(bookingData) {
   const response = await fetch(`${API_BASE_URL}/auth/booking`, {
     method: 'POST',
     headers: getHeaders(),
@@ -103,9 +103,9 @@ export const addBookingApi = async (bookingData) => {
     throw new Error(data.message || 'Failed to create booking');
   }
   return data;
-};
+}
 
-export const cancelBookingApi = async (bookingId) => {
+export async function cancelBookingApi(bookingId) {
   const response = await fetch(`${API_BASE_URL}/auth/booking/cancel`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -117,10 +117,13 @@ export const cancelBookingApi = async (bookingId) => {
     throw new Error(data.message || 'Failed to cancel booking');
   }
   return data;
-};
+}
 
-// Admin Endpoints
-export const getAdminStatsApi = async (range = '30d') => {
+// ==========================================
+// ADMIN ENDPOINTS
+// ==========================================
+
+export async function getAdminStatsApi(range = '30d') {
   const response = await fetch(`${API_BASE_URL}/admin/stats?range=${range}`, {
     method: 'GET',
     headers: getHeaders()
@@ -131,9 +134,9 @@ export const getAdminStatsApi = async (range = '30d') => {
     throw new Error(data.message || 'Failed to fetch admin stats');
   }
   return data;
-};
+}
 
-export const getCouponsApi = async () => {
+export async function getCouponsApi() {
   const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
     method: 'GET',
     headers: getHeaders()
@@ -144,9 +147,9 @@ export const getCouponsApi = async () => {
     throw new Error(data.message || 'Failed to fetch coupons');
   }
   return data;
-};
+}
 
-export const createCouponApi = async (couponData) => {
+export async function createCouponApi(couponData) {
   const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
     method: 'POST',
     headers: getHeaders(),
@@ -158,9 +161,9 @@ export const createCouponApi = async (couponData) => {
     throw new Error(data.message || 'Failed to create coupon');
   }
   return data;
-};
+}
 
-export const toggleCouponApi = async (couponId) => {
+export async function toggleCouponApi(couponId) {
   const response = await fetch(`${API_BASE_URL}/admin/coupons/${couponId}/toggle`, {
     method: 'PUT',
     headers: getHeaders()
@@ -171,9 +174,9 @@ export const toggleCouponApi = async (couponId) => {
     throw new Error(data.message || 'Failed to toggle coupon status');
   }
   return data;
-};
+}
 
-export const deleteCouponApi = async (couponId) => {
+export async function deleteCouponApi(couponId) {
   const response = await fetch(`${API_BASE_URL}/admin/coupons/${couponId}`, {
     method: 'DELETE',
     headers: getHeaders()
@@ -184,9 +187,9 @@ export const deleteCouponApi = async (couponId) => {
     throw new Error(data.message || 'Failed to delete coupon');
   }
   return data;
-};
+}
 
-export const getAdminUsersApi = async () => {
+export async function getAdminUsersApi() {
   const response = await fetch(`${API_BASE_URL}/admin/users`, {
     method: 'GET',
     headers: getHeaders()
@@ -197,9 +200,9 @@ export const getAdminUsersApi = async () => {
     throw new Error(data.message || 'Failed to fetch users');
   }
   return data;
-};
+}
 
-export const updateUserRoleApi = async (userId, role) => {
+export async function updateUserRoleApi(userId, role) {
   const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -211,9 +214,9 @@ export const updateUserRoleApi = async (userId, role) => {
     throw new Error(data.message || 'Failed to update user role');
   }
   return data;
-};
+}
 
-export const getAdminBookingsApi = async () => {
+export async function getAdminBookingsApi() {
   const response = await fetch(`${API_BASE_URL}/admin/bookings`, {
     method: 'GET',
     headers: getHeaders()
@@ -224,10 +227,10 @@ export const getAdminBookingsApi = async () => {
     throw new Error(data.message || 'Failed to fetch admin bookings');
   }
   return data;
-};
+}
 
 // Influencer Verification Endpoints (Database-Driven)
-export const getInfluencerApplicationsApi = async () => {
+export async function getInfluencerApplicationsApi() {
   const response = await fetch(`${API_BASE_URL}/admin/influencer-applications`, {
     method: 'GET',
     headers: getHeaders()
@@ -238,9 +241,9 @@ export const getInfluencerApplicationsApi = async () => {
     throw new Error(data.message || 'Failed to fetch influencer applications');
   }
   return data;
-};
+}
 
-export const approveInfluencerApplicationApi = async (userId) => {
+export async function approveInfluencerApplicationApi(userId) {
   const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/approve`, {
     method: 'PUT',
     headers: getHeaders()
@@ -251,9 +254,9 @@ export const approveInfluencerApplicationApi = async (userId) => {
     throw new Error(data.message || 'Failed to approve application');
   }
   return data;
-};
+}
 
-export const rejectInfluencerApplicationApi = async (userId, reason) => {
+export async function rejectInfluencerApplicationApi(userId, reason) {
   const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/reject`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -265,10 +268,10 @@ export const rejectInfluencerApplicationApi = async (userId, reason) => {
     throw new Error(data.message || 'Failed to reject application');
   }
   return data;
-};
+}
 
 // Trip SEO API
-export const updateTripSeoApi = async (tripId, seoData) => {
+export async function updateTripSeoApi(tripId, seoData) {
   const response = await fetch(`${API_BASE_URL}/admin/trips/${tripId}/seo`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -280,10 +283,10 @@ export const updateTripSeoApi = async (tripId, seoData) => {
     throw new Error(data.message || 'Failed to update trip SEO');
   }
   return data;
-};
+}
 
 // Influencer & Checkout Server APIs
-export const validateCouponServerApi = async (code, bookingAmount, planId) => {
+export async function validateCouponServerApi(code, bookingAmount, planId) {
   const response = await fetch(`${API_BASE_URL}/checkout/coupon/validate`, {
     method: 'POST',
     headers: getHeaders(),
@@ -295,47 +298,61 @@ export const validateCouponServerApi = async (code, bookingAmount, planId) => {
     throw new Error(data.message || 'Coupon validation failed');
   }
   return data;
-};
+}
 
-export const getInfluencerPlansApi = async () => {
+export async function getInfluencerPlansApi() {
   const response = await fetch(`${API_BASE_URL}/influencer/plans`, {
     method: 'GET',
     headers: getHeaders()
   });
   return response.json();
-};
+}
 
-export const generateCouponApi = async (planData) => {
+export async function generateCouponApi(planData) {
   const response = await fetch(`${API_BASE_URL}/influencer/coupons`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify(planData)
   });
   return response.json();
-};
+}
 
-export const getWalletSummaryApi = async () => {
+export async function getWalletSummaryApi() {
   const response = await fetch(`${API_BASE_URL}/influencer/wallet`, {
     method: 'GET',
     headers: getHeaders()
   });
   return response.json();
-};
+}
 
-export const requestPayoutApi = async (amount, destination) => {
+export async function requestPayoutApi(amount, destination) {
   const response = await fetch(`${API_BASE_URL}/influencer/payouts`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify({ amount, destination })
   });
   return response.json();
-};
+}
 
 // ==========================================
 // REAL BOOKING & RAZORPAY TEST PAYMENT APIS
 // ==========================================
 
-export const createBookingOrderApi = async (bookingPayload) => {
+export async function calculateBookingPricingApi(pricingPayload) {
+  const response = await fetch(`${API_BASE_URL}/bookings/calculate-pricing`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(pricingPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to calculate booking pricing');
+  }
+  return data.pricing || data;
+}
+
+export async function createBookingOrderApi(bookingPayload) {
   const response = await fetch(`${API_BASE_URL}/bookings/create-order`, {
     method: 'POST',
     headers: getHeaders(),
@@ -347,9 +364,9 @@ export const createBookingOrderApi = async (bookingPayload) => {
     throw new Error(data.message || 'Failed to initialize booking order');
   }
   return data;
-};
+}
 
-export const verifyBookingPaymentApi = async (verificationPayload) => {
+export async function verifyBookingPaymentApi(verificationPayload) {
   const response = await fetch(`${API_BASE_URL}/bookings/verify-payment`, {
     method: 'POST',
     headers: getHeaders(),
@@ -361,9 +378,9 @@ export const verifyBookingPaymentApi = async (verificationPayload) => {
     throw new Error(data.message || 'Payment verification failed');
   }
   return data;
-};
+}
 
-export const getMyBookingsApi = async () => {
+export async function getMyBookingsApi() {
   const response = await fetch(`${API_BASE_URL}/bookings/my-bookings`, {
     method: 'GET',
     headers: getHeaders()
@@ -374,9 +391,9 @@ export const getMyBookingsApi = async () => {
     throw new Error(data.message || 'Failed to fetch user bookings');
   }
   return data;
-};
+}
 
-export const getBookingByIdApi = async (bookingId) => {
+export async function getBookingByIdApi(bookingId) {
   const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
     method: 'GET',
     headers: getHeaders()
@@ -387,9 +404,9 @@ export const getBookingByIdApi = async (bookingId) => {
     throw new Error(data.message || 'Failed to fetch booking details');
   }
   return data;
-};
+}
 
-export const getBoardingPassApi = async (bookingId) => {
+export async function getBoardingPassApi(bookingId) {
   const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/boarding-pass`, {
     method: 'GET',
     headers: getHeaders()
@@ -400,9 +417,49 @@ export const getBoardingPassApi = async (bookingId) => {
     throw new Error(data.message || 'Failed to fetch boarding pass document');
   }
   return data.boardingPass || data;
-};
+}
 
-export const verifyBookingTokenApi = async (token) => {
+export async function getProvisionalLetterApi(bookingId) {
+  const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/provisional-letter`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch provisional booking letter');
+  }
+  return data.provisionalLetter || data;
+}
+
+export async function payRemainingBalanceApi(bookingId) {
+  const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/pay-balance`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to initialize balance payment');
+  }
+  return data;
+}
+
+export async function verifyRemainingBalanceApi(bookingId, verificationPayload) {
+  const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/verify-balance`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(verificationPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Balance payment verification failed');
+  }
+  return data;
+}
+
+export async function verifyBookingTokenApi(token) {
   const response = await fetch(`${API_BASE_URL}/bookings/verify/${token}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -413,13 +470,13 @@ export const verifyBookingTokenApi = async (token) => {
     throw new Error(data.message || 'Failed to verify booking token');
   }
   return data;
-};
+}
 
 // ==========================================
 // TRIPS, LEADS, REVIEWS & DYNAMIC PAGES APIS
 // ==========================================
 
-export const getTripsApi = async (params = {}) => {
+export async function getTripsApi(params = {}) {
   const query = new URLSearchParams(params).toString();
   const response = await fetch(`${API_BASE_URL}/trips${query ? `?${query}` : ''}`, {
     method: 'GET',
@@ -431,9 +488,9 @@ export const getTripsApi = async (params = {}) => {
     throw new Error(data.message || 'Failed to fetch trips');
   }
   return data.data || data;
-};
+}
 
-export const getTripByIdOrSlugApi = async (idOrSlug) => {
+export async function getTripByIdOrSlugApi(idOrSlug) {
   const response = await fetch(`${API_BASE_URL}/trips/${idOrSlug}`, {
     method: 'GET',
     headers: getHeaders()
@@ -444,12 +501,12 @@ export const getTripByIdOrSlugApi = async (idOrSlug) => {
     throw new Error(data.message || 'Failed to fetch trip details');
   }
   return data.data || data;
-};
+}
 
-export const createLeadApi = async (leadData) => {
+export async function createLeadApi(leadData) {
   const response = await fetch(`${API_BASE_URL}/leads`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(leadData)
   });
 
@@ -458,9 +515,9 @@ export const createLeadApi = async (leadData) => {
     throw new Error(data.message || 'Failed to submit inquiry lead');
   }
   return data;
-};
+}
 
-export const getAdminLeadsApi = async () => {
+export async function getAdminLeadsApi() {
   const response = await fetch(`${API_BASE_URL}/leads`, {
     method: 'GET',
     headers: getHeaders()
@@ -470,24 +527,25 @@ export const getAdminLeadsApi = async () => {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch leads');
   }
-  return data.data || data;
-};
+  return Array.isArray(data) ? data : (data.data || []);
+}
 
-export const updateLeadStatusApi = async (leadId, statusPayload) => {
+export async function updateLeadStatusApi(leadId, statusPayload) {
+  const body = typeof statusPayload === 'string' ? { status: statusPayload } : statusPayload;
   const response = await fetch(`${API_BASE_URL}/leads/${leadId}/status`, {
     method: 'PUT',
     headers: getHeaders(),
-    body: JSON.stringify(statusPayload)
+    body: JSON.stringify(body)
   });
 
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to update lead status');
   }
-  return data.data || data;
-};
+  return data;
+}
 
-export const getTripReviewsApi = async (tripId) => {
+export async function getTripReviewsApi(tripId) {
   const response = await fetch(`${API_BASE_URL}/reviews/trip/${tripId}`, {
     method: 'GET',
     headers: getHeaders()
@@ -498,9 +556,9 @@ export const getTripReviewsApi = async (tripId) => {
     throw new Error(data.message || 'Failed to fetch reviews');
   }
   return data.data || data;
-};
+}
 
-export const createReviewApi = async (reviewPayload) => {
+export async function createReviewApi(reviewPayload) {
   const response = await fetch(`${API_BASE_URL}/reviews`, {
     method: 'POST',
     headers: getHeaders(),
@@ -512,13 +570,13 @@ export const createReviewApi = async (reviewPayload) => {
     throw new Error(data.message || 'Failed to submit review');
   }
   return data.data || data;
-};
+}
 
 // ================================================================
 // AI ITINERARY & SHARING API HELPERS
 // ================================================================
 
-export const generateAIItineraryApi = async (params) => {
+export async function generateAIItineraryApi(params) {
   const response = await fetch(`${API_BASE_URL}/ai/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -530,9 +588,9 @@ export const generateAIItineraryApi = async (params) => {
     throw new Error(data.message || 'Failed to generate AI itinerary');
   }
   return data.data;
-};
+}
 
-export const saveAIItineraryApi = async (itineraryData) => {
+export async function saveAIItineraryApi(itineraryData) {
   const response = await fetch(`${API_BASE_URL}/ai/save`, {
     method: 'POST',
     headers: getHeaders(),
@@ -544,9 +602,9 @@ export const saveAIItineraryApi = async (itineraryData) => {
     throw new Error(data.message || 'Failed to save itinerary');
   }
   return data.data;
-};
+}
 
-export const updateAIItineraryApi = async (id, itineraryData) => {
+export async function updateAIItineraryApi(id, itineraryData) {
   const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -558,9 +616,9 @@ export const updateAIItineraryApi = async (id, itineraryData) => {
     throw new Error(data.message || 'Failed to update itinerary');
   }
   return data.data;
-};
+}
 
-export const getAIItineraryByIdApi = async (id) => {
+export async function getAIItineraryByIdApi(id) {
   const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
     method: 'GET',
     headers: getHeaders()
@@ -571,9 +629,9 @@ export const getAIItineraryByIdApi = async (id) => {
     throw new Error(data.message || 'Failed to fetch itinerary');
   }
   return data.data;
-};
+}
 
-export const getMySavedItinerariesApi = async () => {
+export async function getMySavedItinerariesApi() {
   const response = await fetch(`${API_BASE_URL}/ai/my-itineraries`, {
     method: 'GET',
     headers: getHeaders()
@@ -584,9 +642,9 @@ export const getMySavedItinerariesApi = async () => {
     throw new Error(data.message || 'Failed to fetch saved itineraries');
   }
   return data.data || [];
-};
+}
 
-export const deleteSavedItineraryApi = async (id) => {
+export async function deleteSavedItineraryApi(id) {
   const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}`, {
     method: 'DELETE',
     headers: getHeaders()
@@ -597,9 +655,9 @@ export const deleteSavedItineraryApi = async (id) => {
     throw new Error(data.message || 'Failed to delete itinerary');
   }
   return data;
-};
+}
 
-export const toggleShareItineraryApi = async (id, enable = true) => {
+export async function toggleShareItineraryApi(id, enable = true) {
   const response = await fetch(`${API_BASE_URL}/ai/itinerary/${id}/share`, {
     method: 'POST',
     headers: getHeaders(),
@@ -611,9 +669,9 @@ export const toggleShareItineraryApi = async (id, enable = true) => {
     throw new Error(data.message || 'Failed to toggle share settings');
   }
   return data;
-};
+}
 
-export const getPublicSharedItineraryApi = async (shareToken) => {
+export async function getPublicSharedItineraryApi(shareToken) {
   const response = await fetch(`${API_BASE_URL}/ai/shared/${shareToken}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -624,9 +682,9 @@ export const getPublicSharedItineraryApi = async (shareToken) => {
     throw new Error(data.message || 'Failed to load shared itinerary');
   }
   return data.data;
-};
+}
 
-export const regenerateDayApi = async (payload) => {
+export async function regenerateDayApi(payload) {
   const response = await fetch(`${API_BASE_URL}/ai/regenerate-day`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -638,13 +696,13 @@ export const regenerateDayApi = async (payload) => {
     throw new Error(data.message || 'Failed to regenerate day');
   }
   return data.data;
-};
+}
 
 // ==========================================
 // MASTER ADMIN TRIP CMS & MEDIA APIS
 // ==========================================
 
-export const getAdminTripsApi = async () => {
+export async function getAdminTripsApi() {
   const response = await fetch(`${API_BASE_URL}/trips?includeDrafts=true`, {
     method: 'GET',
     headers: getHeaders()
@@ -654,9 +712,9 @@ export const getAdminTripsApi = async () => {
     throw new Error(data.message || 'Failed to fetch trips');
   }
   return data.data || [];
-};
+}
 
-export const createTripApi = async (tripData) => {
+export async function createTripApi(tripData) {
   const response = await fetch(`${API_BASE_URL}/trips`, {
     method: 'POST',
     headers: getHeaders(),
@@ -667,9 +725,9 @@ export const createTripApi = async (tripData) => {
     throw new Error(data.message || 'Failed to create trip package');
   }
   return data.data || data;
-};
+}
 
-export const updateTripApi = async (tripId, tripData) => {
+export async function updateTripApi(tripId, tripData) {
   const response = await fetch(`${API_BASE_URL}/trips/${tripId}`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -680,9 +738,9 @@ export const updateTripApi = async (tripId, tripData) => {
     throw new Error(data.message || 'Failed to update trip package');
   }
   return data.data || data;
-};
+}
 
-export const deleteTripApi = async (tripId) => {
+export async function deleteTripApi(tripId) {
   const response = await fetch(`${API_BASE_URL}/trips/${tripId}`, {
     method: 'DELETE',
     headers: getHeaders()
@@ -692,10 +750,10 @@ export const deleteTripApi = async (tripId) => {
     throw new Error(data.message || 'Failed to delete trip package');
   }
   return data;
-};
+}
 
 // Media / Image Upload API (Cloudinary + Local Fallback)
-export const uploadImageApi = async (file, folder = 'wanderluxe/trips') => {
+export async function uploadImageApi(file, folder = 'wanderluxe/trips') {
   const formData = new FormData();
   formData.append('image', file);
   formData.append('folder', folder);
@@ -714,13 +772,13 @@ export const uploadImageApi = async (file, folder = 'wanderluxe/trips') => {
     throw new Error(data.message || 'Failed to upload image asset');
   }
   return data.data;
-};
+}
 
 // ==========================================
 // MASTER ADMIN DYNAMIC PAGES CMS APIS
 // ==========================================
 
-export const getAllAdminPagesApi = async () => {
+export async function getAllAdminPagesApi() {
   const response = await fetch(`${API_BASE_URL}/pages`, {
     method: 'GET',
     headers: getHeaders()
@@ -730,9 +788,9 @@ export const getAllAdminPagesApi = async () => {
     throw new Error(data.message || 'Failed to fetch dynamic pages');
   }
   return Array.isArray(data) ? data : (data.pages || []);
-};
+}
 
-export const getPageBySlugApi = async (slug) => {
+export async function getPageBySlugApi(slug) {
   const response = await fetch(`${API_BASE_URL}/pages/${slug}`, {
     method: 'GET',
     headers: getHeaders()
@@ -742,9 +800,9 @@ export const getPageBySlugApi = async (slug) => {
     throw new Error(data.message || 'Page not found');
   }
   return data;
-};
+}
 
-export const createPageApi = async (pageData) => {
+export async function createPageApi(pageData) {
   const response = await fetch(`${API_BASE_URL}/pages`, {
     method: 'POST',
     headers: getHeaders(),
@@ -755,9 +813,9 @@ export const createPageApi = async (pageData) => {
     throw new Error(data.message || 'Failed to create page');
   }
   return data.page || data;
-};
+}
 
-export const updatePageApi = async (pageId, pageData) => {
+export async function updatePageApi(pageId, pageData) {
   const response = await fetch(`${API_BASE_URL}/pages/${pageId}`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -768,9 +826,9 @@ export const updatePageApi = async (pageId, pageData) => {
     throw new Error(data.message || 'Failed to update page');
   }
   return data.page || data;
-};
+}
 
-export const deletePageApi = async (pageId) => {
+export async function deletePageApi(pageId) {
   const response = await fetch(`${API_BASE_URL}/pages/${pageId}`, {
     method: 'DELETE',
     headers: getHeaders()
@@ -780,8 +838,69 @@ export const deletePageApi = async (pageId) => {
     throw new Error(data.message || 'Failed to delete page');
   }
   return data;
+}
+
+export default {
+  getHeaders,
+  registerApi,
+  loginApi,
+  influencerLoginApi,
+  influencerApplyApi,
+  getMeApi,
+  updateProfileApi,
+  addBookingApi,
+  cancelBookingApi,
+  getAdminStatsApi,
+  getCouponsApi,
+  createCouponApi,
+  toggleCouponApi,
+  deleteCouponApi,
+  getAdminUsersApi,
+  updateUserRoleApi,
+  getAdminBookingsApi,
+  getInfluencerApplicationsApi,
+  approveInfluencerApplicationApi,
+  rejectInfluencerApplicationApi,
+  updateTripSeoApi,
+  validateCouponServerApi,
+  getInfluencerPlansApi,
+  generateCouponApi,
+  getWalletSummaryApi,
+  requestPayoutApi,
+  calculateBookingPricingApi,
+  createBookingOrderApi,
+  verifyBookingPaymentApi,
+  getMyBookingsApi,
+  getBookingByIdApi,
+  getBoardingPassApi,
+  getProvisionalLetterApi,
+  payRemainingBalanceApi,
+  verifyRemainingBalanceApi,
+  verifyBookingTokenApi,
+  getTripsApi,
+  getTripByIdOrSlugApi,
+  createLeadApi,
+  getAdminLeadsApi,
+  updateLeadStatusApi,
+  getTripReviewsApi,
+  createReviewApi,
+  generateAIItineraryApi,
+  saveAIItineraryApi,
+  updateAIItineraryApi,
+  getAIItineraryByIdApi,
+  getMySavedItinerariesApi,
+  deleteSavedItineraryApi,
+  toggleShareItineraryApi,
+  getPublicSharedItineraryApi,
+  regenerateDayApi,
+  getAdminTripsApi,
+  createTripApi,
+  updateTripApi,
+  deleteTripApi,
+  uploadImageApi,
+  getAllAdminPagesApi,
+  getPageBySlugApi,
+  createPageApi,
+  updatePageApi,
+  deletePageApi
 };
-
-
-
-

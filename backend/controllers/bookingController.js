@@ -58,24 +58,121 @@ const getRazorpayInstance = () => {
   return new Razorpay({ key_id, key_secret });
 };
 
-// Helper: Authoritative Server-Side Price Calculation
-const calculateServerPrice = async (trip, travelersCount, occupancy, couponCode) => {
-  const count = Math.max(1, parseInt(travelersCount, 10) || 1);
-  const basePerPerson = Number(trip.price) || 18500;
-  
-  let occupancyDiff = 0;
-  if (occupancy === 'Single Sharing') occupancyDiff = 3500;
-  else if (occupancy === 'Triple Sharing') occupancyDiff = -1500;
+// Helper: Parse batch departure date accurately
+export const parseBatchStartDate = (batchDateStr) => {
+  if (!batchDateStr) return null;
+  if (batchDateStr instanceof Date) return batchDateStr;
+  if (typeof batchDateStr !== 'string') return null;
+  const match = batchDateStr.match(/(\d{1,2})\s+([A-Za-z]{3})(?:\s*-\s*\d{1,2}\s+[A-Za-z]{3})?,?\s*(\d{4})/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const monthStr = match[2];
+    const year = parseInt(match[3], 10);
+    const months = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    const monthIndex = months[monthStr.toLowerCase().substring(0, 3)];
+    if (monthIndex !== undefined) {
+      return new Date(Date.UTC(year, monthIndex, day));
+    }
+  }
+  const directDate = new Date(batchDateStr);
+  if (!isNaN(directDate.getTime())) {
+    return directDate;
+  }
+  return null;
+};
 
-  const effectivePerPerson = Math.max(1000, basePerPerson + occupancyDiff);
+// Helper: Authoritative Partial Payment Eligibility & Due Date Rule
+export const evaluatePartialPaymentEligibility = (batchDateStr, balanceDueDays = 6) => {
+  const departureDate = parseBatchStartDate(batchDateStr);
+  const now = new Date();
+  
+  if (!departureDate) {
+    const fallbackDueDate = new Date(now.getTime() + balanceDueDays * 24 * 60 * 60 * 1000);
+    return {
+      eligible: true,
+      balanceDueDate: fallbackDueDate,
+      daysUntilDeparture: 30,
+      reason: 'Standard 6-day balance schedule applies.'
+    };
+  }
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysUntilDeparture = Math.floor((departureDate.getTime() - now.getTime()) / msPerDay);
+
+  // Partial payment disallowed if departure is too close (<= balanceDueDays)
+  if (daysUntilDeparture <= balanceDueDays) {
+    return {
+      eligible: false,
+      daysUntilDeparture,
+      balanceDueDate: null,
+      reason: `Partial payment is not available for this departure (only ${Math.max(0, daysUntilDeparture)} day(s) until trip). Full payment is required.`
+    };
+  }
+
+  // Calculate balance due date: normal balanceDueDays from today, capped at least 2 days before departure
+  const normalDueDate = new Date(now.getTime() + balanceDueDays * msPerDay);
+  const maxDueDate = new Date(departureDate.getTime() - 2 * msPerDay);
+  const balanceDueDate = normalDueDate < maxDueDate ? normalDueDate : maxDueDate;
+
+  return {
+    eligible: true,
+    daysUntilDeparture,
+    balanceDueDate,
+    reason: `10% deposit now. 90% balance due by ${balanceDueDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`
+  };
+};
+
+// Helper: Authoritative Server-Side Price Calculation
+export const calculateServerPrice = async (trip, travelersCount, occupancy, couponCode, batchId, batchDate) => {
+  const count = Math.max(1, parseInt(travelersCount, 10) || 1);
+  const basePrice = Number(trip.price) || 18500;
+  
+  // 1. Resolve matching batch if provided
+  let matchedBatch = null;
+  if (Array.isArray(trip.batches) && trip.batches.length > 0) {
+    matchedBatch = trip.batches.find(b => 
+      (batchId && (b.batchId === batchId || String(b._id) === String(batchId))) ||
+      (batchDate && b.dates === batchDate)
+    );
+  }
+
+  // 2. Resolve room sharing rate
+  let effectivePerPerson = basePrice;
+  const occ = (occupancy || 'Double Sharing').trim();
+
+  if (matchedBatch && matchedBatch.pricing) {
+    if (occ === 'Triple Sharing' && matchedBatch.pricing.tripleSharing) {
+      effectivePerPerson = Number(matchedBatch.pricing.tripleSharing);
+    } else if (occ === 'Single Sharing' && matchedBatch.pricing.singleSharing) {
+      effectivePerPerson = Number(matchedBatch.pricing.singleSharing);
+    } else if (matchedBatch.pricing.doubleSharing) {
+      effectivePerPerson = Number(matchedBatch.pricing.doubleSharing);
+    }
+  } else if (trip.sharingPricing) {
+    if (occ === 'Triple Sharing' && trip.sharingPricing.tripleSharing) {
+      effectivePerPerson = Number(trip.sharingPricing.tripleSharing);
+    } else if (occ === 'Single Sharing' && trip.sharingPricing.singleSharing) {
+      effectivePerPerson = Number(trip.sharingPricing.singleSharing);
+    } else if (trip.sharingPricing.doubleSharing) {
+      effectivePerPerson = Number(trip.sharingPricing.doubleSharing);
+    }
+  } else {
+    if (occ === 'Triple Sharing') effectivePerPerson = Math.round(basePrice * 0.92);
+    else if (occ === 'Single Sharing') effectivePerPerson = Math.round(basePrice * 1.25);
+  }
+
   const subtotal = effectivePerPerson * count;
 
+  // 3. Authoritative Coupon Verification
   let discount = 0;
   let validatedCoupon = null;
 
-  if (couponCode && couponCode.trim()) {
+  if (couponCode && typeof couponCode === 'string') {
     const code = couponCode.trim().toUpperCase();
-    if (code === 'GOA-KR7X9P' || code === 'GAURAV15' || code === 'EARLYBIRD15') {
+    if (code === 'GOA-KR7X9P' || code === 'EARLYBIRD15' || code === 'GAURAV15') {
       discount = Math.round(subtotal * 0.15);
       validatedCoupon = { code, discountValue: 15, discountType: 'percentage', influencerId: 'usr_influencer' };
     } else if (code === 'MEGH-X82P9A' || code === 'WANDER10' || code === 'EXPLOREWITHGAURAV') {
@@ -107,11 +204,81 @@ const calculateServerPrice = async (trip, travelersCount, occupancy, couponCode)
     taxes: 0,
     finalAmount,
     currency: 'INR',
+    occupancy: occ,
+    batchDate: matchedBatch ? matchedBatch.dates : (batchDate || trip.nextBatch || 'Upcoming Batch'),
     validatedCoupon
   };
 };
 
-// @desc    Create Razorpay Test Order and Pending Booking
+// @desc    Calculate Server-Authoritative Booking Pricing
+// @route   POST /api/bookings/calculate-pricing
+// @access  Public
+export const calculatePricingEndpoint = async (req, res) => {
+  try {
+    const { tripId, travelersCount, occupancy, couponCode, batchId, batchDate } = req.body;
+
+    if (!tripId) {
+      return res.status(400).json({ message: 'Trip ID or slug is required.' });
+    }
+
+    let trip = null;
+    if (isDbConnected()) {
+      try {
+        if (mongoose.Types.ObjectId.isValid(tripId)) {
+          trip = await Trip.findById(tripId);
+        }
+        if (!trip) {
+          trip = await Trip.findOne({ slug: String(tripId).toLowerCase() });
+        }
+      } catch (e) {}
+    }
+
+    if (!trip && STATIC_TRIPS_CATALOG[String(tripId)]) {
+      trip = STATIC_TRIPS_CATALOG[String(tripId)];
+    }
+
+    if (!trip) {
+      trip = {
+        title: 'Curated Expedition',
+        price: 18500
+      };
+    }
+
+    const pricing = await calculateServerPrice(
+      trip,
+      travelersCount,
+      occupancy,
+      couponCode,
+      batchId,
+      batchDate
+    );
+
+    const partialEligibility = evaluatePartialPaymentEligibility(pricing.batchDate || batchDate, 6);
+    const depositPercent = 10;
+    const depositAmount = Math.round(pricing.finalAmount * (depositPercent / 100));
+    const balanceAmount = pricing.finalAmount - depositAmount;
+
+    res.json({
+      success: true,
+      pricing: {
+        ...pricing,
+        partialPayment: {
+          eligible: partialEligibility.eligible,
+          reason: partialEligibility.reason,
+          depositPercent,
+          depositAmount,
+          balanceAmount,
+          balanceDueDate: partialEligibility.balanceDueDate
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Calculate Pricing Error:', err);
+    res.status(500).json({ message: err.message || 'Server error calculating pricing.' });
+  }
+};
+
+// @desc    Create Razorpay Test Order and Pending Booking (Full or 10% Deposit)
 // @route   POST /api/bookings/create-order
 // @access  Private
 export const createBookingOrder = async (req, res) => {
@@ -124,16 +291,52 @@ export const createBookingOrder = async (req, res) => {
     const {
       tripId,
       travelersCount,
+      batchId,
       batchDate,
       occupancy,
       pickupPoint,
       leadTraveler,
       coTravelers,
-      couponCode
+      couponCode,
+      paymentPlan
     } = req.body;
 
     if (!tripId) {
       return res.status(400).json({ message: 'Trip ID is required for booking.' });
+    }
+
+    const count = Math.max(1, parseInt(travelersCount, 10) || 1);
+    if (count > 10) {
+      return res.status(400).json({ message: 'Maximum 10 travelers allowed per booking.' });
+    }
+
+    // Lead Traveler Validation
+    const customerName = (leadTraveler?.name || req.user?.name || '').trim();
+    const customerEmail = (leadTraveler?.email || req.user?.email || '').trim();
+    const customerPhone = (leadTraveler?.phone || req.user?.phone || '').trim();
+
+    if (!customerName || !customerEmail || !customerPhone) {
+      return res.status(400).json({ 
+        message: 'Lead traveler name, valid email, and contact phone number are required.' 
+      });
+    }
+
+    // Co-Travelers Validation
+    const formattedCoTravelers = Array.isArray(coTravelers) ? coTravelers : [];
+    if (count > 1) {
+      if (formattedCoTravelers.length < count - 1) {
+        return res.status(400).json({
+          message: `Please provide details for all ${count} travelers (${count - 1} co-traveler${count > 2 ? 's' : ''}).`
+        });
+      }
+      for (let i = 0; i < count - 1; i++) {
+        const ct = formattedCoTravelers[i];
+        if (!ct || !ct.name || !ct.name.trim()) {
+          return res.status(400).json({
+            message: `Please provide the full name for Traveler ${i + 2}.`
+          });
+        }
+      }
     }
 
     let trip = null;
@@ -162,30 +365,78 @@ export const createBookingOrder = async (req, res) => {
       };
     }
 
+    // Capacity Validation against remaining batch seats
+    let matchedBatch = null;
+    if (Array.isArray(trip.batches) && trip.batches.length > 0) {
+      matchedBatch = trip.batches.find(b => 
+        (batchId && (b.batchId === batchId || String(b._id) === String(batchId))) ||
+        (batchDate && b.dates === batchDate)
+      );
+
+      if (matchedBatch && matchedBatch.capacity !== undefined && matchedBatch.capacity !== null) {
+        const availableSeats = Math.max(0, Number(matchedBatch.capacity) - Number(matchedBatch.bookedSeats || 0));
+        if (count > availableSeats) {
+          return res.status(400).json({
+            message: `Selected departure batch only has ${availableSeats} seat${availableSeats === 1 ? '' : 's'} available (Requested: ${count}).`
+          });
+        }
+      }
+    }
+
     const pricing = await calculateServerPrice(
       trip,
-      travelersCount,
+      count,
       occupancy,
-      couponCode
+      couponCode,
+      batchId,
+      batchDate
     );
 
-    const bookingId = 'WLX-2026-' + Math.floor(100000 + Math.random() * 900000);
-    const verificationToken = crypto.randomBytes(16).toString('hex');
-    const orderId = 'order_' + Math.random().toString(36).substring(2, 15);
+    // Payment Plan Resolution (Full vs 10% Deposit)
+    const planType = (paymentPlan?.type || paymentPlan || 'FULL').toUpperCase();
+    const depositPercent = Number(paymentPlan?.depositPercent) || 10;
+    const balanceDueDays = Number(paymentPlan?.balanceDueDays) || 6;
 
-    // Create Razorpay Order
+    let amountToCharge = pricing.finalAmount;
+    let depositAmount = Math.round(pricing.finalAmount * (depositPercent / 100));
+    let amountOutstanding = 0;
+    let balanceDueDate = null;
+
+    if (planType === 'PARTIAL') {
+      const eligibility = evaluatePartialPaymentEligibility(pricing.batchDate || batchDate, balanceDueDays);
+      if (!eligibility.eligible) {
+        return res.status(400).json({
+          message: eligibility.reason || 'Partial payment is not available for this departure date. Full payment is required.'
+        });
+      }
+      amountToCharge = depositAmount;
+      amountOutstanding = pricing.finalAmount - depositAmount;
+      balanceDueDate = eligibility.balanceDueDate;
+    }
+
+    const bookingId = 'WLX-2026-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const verificationToken = crypto.randomBytes(16).toString('hex');
+    const orderId = 'order_' + crypto.randomBytes(8).toString('hex');
+
+    // Create Razorpay Order strictly with server-calculated amount
     let rzpOrder = null;
     try {
       const rzp = getRazorpayInstance();
       rzpOrder = await rzp.orders.create({
-        amount: pricing.finalAmount * 100,
+        amount: amountToCharge * 100,
         currency: 'INR',
         receipt: bookingId,
-        notes: { bookingId, userId: userId.toString(), tripTitle: trip.title }
+        notes: {
+          bookingId,
+          userId: userId.toString(),
+          tripTitle: trip.title,
+          planType,
+          depositPercent: planType === 'PARTIAL' ? depositPercent : 100
+        }
       });
     } catch (rzpErr) {
       console.warn('Razorpay SDK sandbox mode fallback:', rzpErr.message);
-      rzpOrder = { id: orderId, amount: pricing.finalAmount * 100, currency: 'INR' };
+      rzpOrder = { id: orderId, amount: amountToCharge * 100, currency: 'INR' };
     }
 
     const bookingData = {
@@ -198,19 +449,24 @@ export const createBookingOrder = async (req, res) => {
         destination: trip.destination || trip.location || 'India',
         image: trip.image,
         duration: trip.duration || '5D/4N',
-        batchDate: batchDate || '15 Sep - 20 Sep 2026',
+        batchDate: pricing.batchDate || batchDate || '15 Sep - 20 Sep 2026',
         pickupPoint: pickupPoint || 'Main Arrival Meeting Hub'
       },
       customer: {
-        name: leadTraveler?.name || req.user.name,
-        email: leadTraveler?.email || req.user.email,
-        phone: leadTraveler?.phone || req.user.phone || '',
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone,
         age: leadTraveler?.age || '',
         gender: leadTraveler?.gender || 'Male'
       },
-      travelers: coTravelers || [],
+      travelers: formattedCoTravelers.slice(0, count - 1),
       numberOfTravelers: pricing.count,
       occupancy: occupancy || 'Double Sharing',
+      paymentPlan: {
+        type: planType,
+        depositPercent,
+        balanceDueDays
+      },
       pricing: {
         basePricePerPerson: pricing.basePricePerPerson,
         subtotal: pricing.subtotal,
@@ -218,6 +474,10 @@ export const createBookingOrder = async (req, res) => {
         couponCode: couponCode ? couponCode.trim().toUpperCase() : '',
         taxes: 0,
         finalAmount: pricing.finalAmount,
+        amountPaid: 0,
+        amountOutstanding: pricing.finalAmount,
+        balanceDueDate,
+        isOverdue: false,
         currency: 'INR'
       },
       payment: {
@@ -225,7 +485,9 @@ export const createBookingOrder = async (req, res) => {
         status: 'PENDING',
         razorpayOrderId: rzpOrder.id
       },
+      paymentStatus: 'UNPAID',
       bookingStatus: 'PENDING_PAYMENT',
+      payments: [],
       qrCode: {
         verificationToken,
         verificationUrl: `https://wanderluxe.in/booking/verify/${verificationToken}`
@@ -241,7 +503,28 @@ export const createBookingOrder = async (req, res) => {
     let booking = null;
     if (isDbConnected()) {
       try {
-        booking = await Booking.create(bookingData);
+        // Pending booking deduplication (update active draft instead of creating duplicates)
+        const existingPending = await Booking.findOne({
+          userId,
+          tripId: String(tripId),
+          bookingStatus: { $in: ['DRAFT', 'PENDING_PAYMENT'] },
+          createdAt: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
+        });
+
+        if (existingPending) {
+          existingPending.tripSnapshot = bookingData.tripSnapshot;
+          existingPending.customer = bookingData.customer;
+          existingPending.travelers = bookingData.travelers;
+          existingPending.numberOfTravelers = bookingData.numberOfTravelers;
+          existingPending.occupancy = bookingData.occupancy;
+          existingPending.paymentPlan = bookingData.paymentPlan;
+          existingPending.pricing = bookingData.pricing;
+          existingPending.payment.razorpayOrderId = rzpOrder.id;
+          existingPending.influencerAttribution = bookingData.influencerAttribution;
+          booking = await existingPending.save();
+        } else {
+          booking = await Booking.create(bookingData);
+        }
       } catch (dbErr) {
         console.warn('Booking DB save fallback:', dbErr.message);
       }
@@ -257,7 +540,11 @@ export const createBookingOrder = async (req, res) => {
       bookingId: booking.bookingId,
       orderId: rzpOrder.id,
       amount: rzpOrder.amount,
-      currency: rzpOrder.currency,
+      amountToPay: amountToCharge,
+      amountOutstanding,
+      balanceDueDate,
+      paymentPlan: booking.paymentPlan,
+      currency: rzpOrder.currency || 'INR',
       key: process.env.RAZORPAY_KEY_ID || 'rzp_test_wanderluxe2026key',
       customer: booking.customer,
       pricing: booking.pricing,
@@ -269,7 +556,7 @@ export const createBookingOrder = async (req, res) => {
   }
 };
 
-// @desc    Verify Razorpay Payment Signature, Confirm Booking, and Generate Unique QR Code
+// @desc    Verify Razorpay Payment Signature, Confirm / Provisionally Confirm Booking
 // @route   POST /api/bookings/verify-payment
 // @access  Private
 export const verifyBookingPayment = async (req, res) => {
@@ -283,6 +570,27 @@ export const verifyBookingPayment = async (req, res) => {
 
     if (!bookingId || !razorpay_order_id || !razorpay_payment_id) {
       return res.status(400).json({ message: 'Missing required payment verification parameters.' });
+    }
+
+    // CRITICAL: Verify Razorpay HMAC-SHA256 signature to prevent fake payment confirmation
+    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (razorpaySecret && razorpay_signature) {
+      const expectedSignature = crypto
+        .createHmac('sha256', razorpaySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      if (expectedSignature !== razorpay_signature) {
+        console.error('Razorpay signature mismatch — potential tampered payment attempt', {
+          bookingId,
+          razorpay_order_id,
+          razorpay_payment_id
+        });
+        return res.status(400).json({ message: 'Payment signature verification failed. Contact support.' });
+      }
+    } else if (!razorpaySecret) {
+      // Test/sandbox mode — log warning but do not block
+      console.warn('RAZORPAY_KEY_SECRET not set — skipping HMAC verification (sandbox mode only)');
     }
 
     let booking = null;
@@ -300,36 +608,84 @@ export const verifyBookingPayment = async (req, res) => {
       return res.status(404).json({ message: 'Booking record not found.' });
     }
 
-    // Generate Scannable QR Code Data URL
-    const qrPayload = JSON.stringify({
-      bookingId: booking.bookingId,
-      token: booking.qrCode?.verificationToken || 'token_' + Date.now(),
-      trip: booking.tripSnapshot?.title || 'WanderLuxe Departure',
-      travelers: booking.numberOfTravelers,
-      batchDate: booking.tripSnapshot?.batchDate,
-      lead: booking.customer?.name,
-      status: 'CONFIRMED'
-    });
-
-    let qrDataUrl = '';
-    try {
-      qrDataUrl = await QRCode.toDataURL(qrPayload, {
-        width: 320,
-        margin: 2,
-        color: { dark: '#0b132b', light: '#ffffff' }
-      });
-    } catch (qrErr) {}
-
-    booking.payment.status = 'PAID';
-    booking.payment.razorpayPaymentId = razorpay_payment_id;
-    booking.payment.razorpaySignature = razorpay_signature || 'verified_test_sig';
-    booking.payment.paidAt = new Date();
-    booking.bookingStatus = 'CONFIRMED';
-    if (qrDataUrl) {
-      booking.qrCode.dataUrl = qrDataUrl;
+    // Ensure booking belongs to authenticated user (unless admin)
+    if (req.user?.role !== 'admin' && String(booking.userId) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to verify this booking.' });
     }
 
-    // Automatically send WhatsApp E-Ticket & Payment Receipt
+    const isPartial = booking.paymentPlan?.type === 'PARTIAL';
+    const depositPercent = booking.paymentPlan?.depositPercent || 10;
+    const finalAmount = booking.pricing?.finalAmount || 18500;
+    const depositPaid = Math.round(finalAmount * (depositPercent / 100));
+
+    if (isPartial) {
+      // 10% Deposit Verification Lifecycle
+      booking.pricing.amountPaid = depositPaid;
+      booking.pricing.amountOutstanding = Math.max(0, finalAmount - depositPaid);
+      booking.paymentStatus = 'PARTIALLY_PAID';
+      booking.bookingStatus = 'PROVISIONALLY_CONFIRMED';
+      booking.payment.status = 'PAID';
+      booking.payment.razorpayPaymentId = razorpay_payment_id;
+      booking.payment.razorpaySignature = razorpay_signature || 'verified_test_sig';
+      booking.payment.paidAt = new Date();
+
+      if (!Array.isArray(booking.payments)) booking.payments = [];
+      booking.payments.push({
+        provider: 'razorpay',
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        amount: depositPaid,
+        type: 'DEPOSIT',
+        verifiedAt: new Date(),
+        signature: razorpay_signature || 'verified_test_sig'
+      });
+
+      // No official Boarding QR unlocked for partial payment
+      booking.qrCode.dataUrl = '';
+    } else {
+      // Full Payment Verification Lifecycle
+      booking.pricing.amountPaid = finalAmount;
+      booking.pricing.amountOutstanding = 0;
+      booking.paymentStatus = 'PAID';
+      booking.bookingStatus = 'CONFIRMED';
+      booking.payment.status = 'PAID';
+      booking.payment.razorpayPaymentId = razorpay_payment_id;
+      booking.payment.razorpaySignature = razorpay_signature || 'verified_test_sig';
+      booking.payment.paidAt = new Date();
+
+      if (!Array.isArray(booking.payments)) booking.payments = [];
+      booking.payments.push({
+        provider: 'razorpay',
+        orderId: razorpay_order_id,
+        paymentId: razorpay_payment_id,
+        amount: finalAmount,
+        type: 'FULL',
+        verifiedAt: new Date(),
+        signature: razorpay_signature || 'verified_test_sig'
+      });
+
+      // Generate Official Boarding Pass QR Code
+      const qrPayload = JSON.stringify({
+        bookingId: booking.bookingId,
+        token: booking.qrCode?.verificationToken || 'token_' + Date.now(),
+        trip: booking.tripSnapshot?.title || 'WanderLuxe Departure',
+        travelers: booking.numberOfTravelers,
+        batchDate: booking.tripSnapshot?.batchDate,
+        lead: booking.customer?.name,
+        status: 'CONFIRMED'
+      });
+
+      try {
+        const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+          width: 320,
+          margin: 2,
+          color: { dark: '#0b132b', light: '#ffffff' }
+        });
+        booking.qrCode.dataUrl = qrDataUrl;
+      } catch (qrErr) {}
+    }
+
+    // Automatically send WhatsApp Notification / Receipt
     try {
       const waResult = await sendWhatsAppTicketAndReceipt(booking);
       booking.whatsappNotification = waResult;
@@ -343,12 +699,191 @@ export const verifyBookingPayment = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Payment verified and booking confirmed successfully.',
+      message: isPartial 
+        ? 'Deposit payment verified. Booking is PROVISIONALLY CONFIRMED.' 
+        : 'Payment verified and booking CONFIRMED successfully.',
       booking
     });
   } catch (error) {
     console.error('Verify Payment Error:', error);
     res.status(500).json({ message: error.message || 'Server Error verifying payment' });
+  }
+};
+
+// @desc    Initiate Razorpay Order to Pay Remaining Balance
+// @route   POST /api/bookings/:bookingId/pay-balance
+// @access  Private
+export const payRemainingBalance = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { bookingId } = req.params;
+
+    let booking = null;
+    if (isDbConnected()) {
+      try {
+        booking = await Booking.findOne({ bookingId });
+      } catch (e) {}
+    }
+    if (!booking) {
+      booking = memoryBookings.find(b => b.bookingId === bookingId);
+    }
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    if (booking.userId && String(booking.userId) !== String(userId) && req.user?.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to pay for this booking.' });
+    }
+
+    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const amountPaid = Number(booking.pricing?.amountPaid) || 0;
+    const outstanding = booking.pricing?.amountOutstanding !== undefined && booking.pricing?.amountOutstanding !== null
+      ? Number(booking.pricing.amountOutstanding)
+      : Math.max(0, finalAmount - amountPaid);
+
+    if (outstanding <= 0 || booking.bookingStatus === 'CONFIRMED' || booking.paymentStatus === 'PAID') {
+      return res.status(400).json({ message: 'Booking is already fully paid. No outstanding balance due.' });
+    }
+
+    const balanceOrderId = 'order_bal_' + crypto.randomBytes(8).toString('hex');
+    let rzpOrder = null;
+    try {
+      const rzp = getRazorpayInstance();
+      rzpOrder = await rzp.orders.create({
+        amount: outstanding * 100,
+        currency: 'INR',
+        receipt: `${booking.bookingId}_BAL`,
+        notes: {
+          bookingId: booking.bookingId,
+          type: 'BALANCE_PAYMENT',
+          userId: userId.toString()
+        }
+      });
+    } catch (rzpErr) {
+      console.warn('Razorpay SDK balance order fallback:', rzpErr.message);
+      rzpOrder = { id: balanceOrderId, amount: outstanding * 100, currency: 'INR' };
+    }
+
+    res.json({
+      success: true,
+      bookingId: booking.bookingId,
+      orderId: rzpOrder.id,
+      amount: rzpOrder.amount,
+      outstandingAmount: outstanding,
+      currency: rzpOrder.currency || 'INR',
+      key: process.env.RAZORPAY_KEY_ID || 'rzp_test_wanderluxe2026key',
+      tripTitle: booking.tripSnapshot?.title,
+      batchDate: booking.tripSnapshot?.batchDate
+    });
+  } catch (error) {
+    console.error('Pay Remaining Balance Error:', error);
+    res.status(500).json({ message: error.message || 'Error initializing balance payment order' });
+  }
+};
+
+// @desc    Verify Razorpay Signature for Remaining Balance and Confirm Booking
+// @route   POST /api/bookings/:bookingId/verify-balance
+// @access  Private
+export const verifyRemainingBalance = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { bookingId } = req.params;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id) {
+      return res.status(400).json({ message: 'Missing payment verification parameters.' });
+    }
+
+    // CRITICAL: Verify Razorpay HMAC-SHA256 signature for balance payment
+    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (razorpaySecret && razorpay_signature) {
+      const expectedSignature = crypto
+        .createHmac('sha256', razorpaySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+
+      if (expectedSignature !== razorpay_signature) {
+        console.error('Razorpay balance signature mismatch — potential tampered payment attempt', {
+          bookingId,
+          razorpay_order_id
+        });
+        return res.status(400).json({ message: 'Balance payment signature verification failed. Contact support.' });
+      }
+    } else if (!razorpaySecret) {
+      console.warn('RAZORPAY_KEY_SECRET not set — skipping balance HMAC verification (sandbox mode only)');
+    }
+
+    let booking = null;
+    if (isDbConnected()) {
+      try {
+        booking = await Booking.findOne({ bookingId });
+      } catch (e) {}
+    }
+    if (!booking) {
+      booking = memoryBookings.find(b => b.bookingId === bookingId);
+    }
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const outstandingPaid = Number(booking.pricing?.amountOutstanding) || (finalAmount - Number(booking.pricing?.amountPaid || 0));
+
+    booking.pricing.amountPaid = finalAmount;
+    booking.pricing.amountOutstanding = 0;
+    booking.paymentStatus = 'PAID';
+    booking.bookingStatus = 'CONFIRMED';
+    booking.payment.status = 'PAID';
+    booking.payment.paidAt = new Date();
+
+    if (!Array.isArray(booking.payments)) booking.payments = [];
+    booking.payments.push({
+      provider: 'razorpay',
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      amount: outstandingPaid,
+      type: 'BALANCE',
+      verifiedAt: new Date(),
+      signature: razorpay_signature || 'verified_test_sig'
+    });
+
+    // Generate Final Scannable QR Code
+    const qrPayload = JSON.stringify({
+      bookingId: booking.bookingId,
+      token: booking.qrCode?.verificationToken || 'token_' + Date.now(),
+      trip: booking.tripSnapshot?.title || 'WanderLuxe Departure',
+      travelers: booking.numberOfTravelers,
+      batchDate: booking.tripSnapshot?.batchDate,
+      lead: booking.customer?.name,
+      status: 'CONFIRMED'
+    });
+
+    try {
+      const qrDataUrl = await QRCode.toDataURL(qrPayload, {
+        width: 320,
+        margin: 2,
+        color: { dark: '#0b132b', light: '#ffffff' }
+      });
+      booking.qrCode.dataUrl = qrDataUrl;
+    } catch (qrErr) {}
+
+    // Send updated WhatsApp confirmation
+    try {
+      await sendWhatsAppTicketAndReceipt(booking);
+    } catch (waErr) {}
+
+    if (isDbConnected() && typeof booking.save === 'function') {
+      await booking.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Remaining balance payment verified. Booking is now fully CONFIRMED with unlocked boarding pass.',
+      booking
+    });
+  } catch (error) {
+    console.error('Verify Balance Payment Error:', error);
+    res.status(500).json({ message: error.message || 'Error verifying balance payment' });
   }
 };
 
@@ -440,7 +975,7 @@ export const verifyBookingToken = async (req, res) => {
       numberOfTravelers: booking.numberOfTravelers,
       customerName: booking.customer?.name,
       bookingStatus: booking.bookingStatus,
-      paymentStatus: booking.payment?.status,
+      paymentStatus: booking.paymentStatus || booking.payment?.status,
       confirmedAt: booking.payment?.paidAt || booking.updatedAt || new Date()
     });
   } catch (error) {
@@ -488,7 +1023,7 @@ export const resendWhatsAppTicket = async (req, res) => {
   }
 };
 
-// @desc    Get Authoritative Boarding Pass Document Data
+// @desc    Get Authoritative Boarding Pass Document Data (Only for Fully Confirmed Bookings)
 // @route   GET /api/bookings/:bookingId/boarding-pass
 // @access  Private
 export const getBoardingPassData = async (req, res) => {
@@ -513,6 +1048,16 @@ export const getBoardingPassData = async (req, res) => {
     // Authorization check
     if (req.user && req.user.role !== 'admin' && String(booking.userId) !== String(req.user._id)) {
       return res.status(403).json({ message: 'Not authorized to access this boarding pass.' });
+    }
+
+    // Strict Gatekeeper: No Boarding Pass until Fully Paid & Confirmed
+    if (booking.bookingStatus !== 'CONFIRMED' || (booking.paymentStatus && booking.paymentStatus !== 'PAID')) {
+      return res.status(403).json({
+        message: 'Official Boarding Pass is locked. Please pay the remaining balance to unlock your boarding pass.',
+        bookingStatus: booking.bookingStatus,
+        paymentStatus: booking.paymentStatus,
+        amountOutstanding: booking.pricing?.amountOutstanding || (booking.pricing?.finalAmount - (booking.pricing?.amountPaid || 0))
+      });
     }
 
     // Ensure high-resolution QR code
@@ -549,13 +1094,14 @@ export const getBoardingPassData = async (req, res) => {
       numberOfTravelers: booking.numberOfTravelers || 1,
       occupancy: booking.occupancy || 'Double Sharing',
       pricing: {
-        totalAmount: booking.pricing?.totalAmount || 18500,
-        discountAmount: booking.pricing?.discountAmount || 0,
-        finalAmount: booking.pricing?.finalAmount || 18500,
+        totalAmount: booking.pricing?.finalAmount || 18500,
+        amountPaid: booking.pricing?.amountPaid || booking.pricing?.finalAmount || 18500,
+        amountOutstanding: 0,
+        discountAmount: booking.pricing?.discount || 0,
         couponCode: booking.pricing?.couponCode || ''
       },
       payment: {
-        status: booking.payment?.status || 'PAID',
+        status: booking.paymentStatus || 'PAID',
         method: booking.payment?.method || 'Razorpay Gateway',
         razorpayPaymentId: booking.payment?.razorpayPaymentId || `pay_rzp_${Date.now()}`
       },
@@ -581,4 +1127,81 @@ export const getBoardingPassData = async (req, res) => {
   }
 };
 
+// @desc    Get Provisional Booking Letter Data (For Partially Paid Bookings)
+// @route   GET /api/bookings/:bookingId/provisional-letter
+// @access  Private
+export const getProvisionalLetterData = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
 
+    let booking = null;
+    if (isDbConnected()) {
+      try {
+        booking = await Booking.findOne({ bookingId });
+      } catch (e) {}
+    }
+
+    if (!booking) {
+      booking = memoryBookings.find((b) => b.bookingId === bookingId);
+    }
+
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    if (req.user && req.user.role !== 'admin' && String(booking.userId) !== String(req.user._id)) {
+      return res.status(403).json({ message: 'Not authorized to access this booking document.' });
+    }
+
+    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const amountPaid = Number(booking.pricing?.amountPaid) || 0;
+    const amountOutstanding = booking.pricing?.amountOutstanding !== undefined 
+      ? Number(booking.pricing.amountOutstanding) 
+      : Math.max(0, finalAmount - amountPaid);
+
+    const provisionalLetter = {
+      bookingId: booking.bookingId,
+      bookingStatus: booking.bookingStatus,
+      paymentStatus: booking.paymentStatus || 'PARTIALLY_PAID',
+      confirmedAt: booking.payment?.paidAt || booking.updatedAt || booking.createdAt || new Date(),
+      trip: {
+        id: booking.tripId,
+        title: booking.tripSnapshot?.title || 'WanderLuxe Expedition',
+        destination: booking.tripSnapshot?.destination || 'Destination Hub',
+        duration: booking.tripSnapshot?.duration || '5D/4N',
+        batchDate: booking.tripSnapshot?.batchDate || '15 Sep - 20 Sep, 2026',
+        pickupPoint: booking.tripSnapshot?.pickupPoint || 'Central Pickup Station',
+        image: booking.tripSnapshot?.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+      },
+      leadTraveler: {
+        name: booking.customer?.name || 'Lead Explorer',
+        email: booking.customer?.email || 'traveler@wanderluxe.in',
+        phone: booking.customer?.phone || '+91 8542036499',
+        age: booking.customer?.age || 24,
+        gender: booking.customer?.gender || 'Male'
+      },
+      coTravelers: booking.travelers || [],
+      numberOfTravelers: booking.numberOfTravelers || 1,
+      occupancy: booking.occupancy || 'Double Sharing',
+      totalCost: finalAmount,
+      amountPaid,
+      amountOutstanding,
+      balanceDueDate: booking.pricing?.balanceDueDate,
+      depositPercent: booking.paymentPlan?.depositPercent || 10,
+      payments: booking.payments || [],
+      supportContact: {
+        phone: '+91 8542036499',
+        email: 'support@wanderluxe.in',
+        desk: '24x7 Trip Commander Desk'
+      }
+    };
+
+    res.json({
+      success: true,
+      provisionalLetter
+    });
+  } catch (error) {
+    console.error('Get Provisional Letter Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error fetching provisional letter' });
+  }
+};

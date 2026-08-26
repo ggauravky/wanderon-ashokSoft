@@ -8,17 +8,18 @@ import {
   Award, CheckCircle2, ShieldAlert, Luggage, BedDouble, Utensils, Bus,
   Sun, CheckSquare, Square, Backpack, ThumbsUp
 } from 'lucide-react';
-import SEOHead from '../components/SEOHead';
-import Breadcrumbs from '../components/Breadcrumbs';
-import WeatherBadge from '../components/WeatherBadge';
-import TripCard from '../components/TripCard';
-import AIPlannerModal from '../components/AIPlannerModal';
-import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas';
-import { UPCOMING_TRIPS } from '../constants/mockData';
-import { getAllStaticTrips, normalizeTripObject } from '../services/travelKnowledgeService';
-import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
-import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory';
-import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine';
+import SEOHead from '../components/SEOHead.jsx';
+import Breadcrumbs from '../components/Breadcrumbs.jsx';
+import WeatherBadge from '../components/WeatherBadge.jsx';
+import TripCard from '../components/TripCard.jsx';
+import AIPlannerModal from '../components/AIPlannerModal.jsx';
+import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
+import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas.js';
+import { UPCOMING_TRIPS } from '../constants/mockData.js';
+import { getAllStaticTrips, normalizeTripObject } from '../services/travelKnowledgeService.js';
+import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine.js';
+import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory.js';
+import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine.js';
 
 const TripDetails = () => {
   const { id } = useParams();
@@ -26,11 +27,11 @@ const TripDetails = () => {
 
   // Find trip from static catalog or initialize
   const [trip, setTrip] = useState(() => {
-    const staticList = getAllStaticTrips();
-    const found = staticList.find(
+    const staticList = typeof getAllStaticTrips === 'function' ? getAllStaticTrips() : UPCOMING_TRIPS.map(t => typeof normalizeTripObject === 'function' ? normalizeTripObject(t) : t);
+    const found = (staticList || []).find(
       (t) => String(t.id) === String(id) || String(t._id) === String(id) || t.slug === id || t.id === parseInt(id)
     );
-    return found || staticList[0] || normalizeTripObject(UPCOMING_TRIPS[0]);
+    return found || staticList[0] || (typeof normalizeTripObject === 'function' ? normalizeTripObject(UPCOMING_TRIPS[0]) : UPCOMING_TRIPS[0]);
   });
 
   // Fetch live trip from backend if it was created in Admin
@@ -73,6 +74,7 @@ const TripDetails = () => {
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [isLiked, setIsLiked] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
+  const [isCallbackOpen, setIsCallbackOpen] = useState(false);
 
   // Contextual Helpers
   const whyVisitNow = getWhyVisitNow(trip, season, weather);
@@ -127,11 +129,17 @@ const TripDetails = () => {
     setIsLiked(updated.includes(trip.id));
   };
 
-  // Pricing calculations based on occupancy
+  // Pricing calculations based on occupancy — reads sharingPricing from trip if available
   const getPerPersonPrice = () => {
-    if (occupancy === 'Single Sharing') return trip.price + 3500;
-    if (occupancy === 'Triple Sharing') return trip.price - 1500;
-    return trip.price;
+    const sp = trip.sharingPricing || selectedBatch?.pricing || {};
+    if (occupancy === 'Single Sharing') {
+      return Number(sp.singleSharing) || (Number(trip.price) + 3500);
+    }
+    if (occupancy === 'Triple Sharing') {
+      return Number(sp.tripleSharing) || Math.max(1000, Number(trip.price) - 1500);
+    }
+    // Double Sharing (default)
+    return Number(sp.doubleSharing) || Number(trip.price);
   };
 
   const perPersonPrice = getPerPersonPrice();
@@ -149,7 +157,7 @@ const TripDetails = () => {
     },
     {
       q: 'Can I pay a partial advance to confirm my seat?',
-      a: 'Yes, you can reserve your seat with a 20% advance payment during checkout or choose our 0% interest No-Cost EMI option.'
+      a: 'Yes, you can reserve your seat with just a 10% advance deposit during checkout. The 90% balance is due within 6 days of booking.'
     },
     {
       q: 'What is the cancellation & refund policy for this tour?',
@@ -161,24 +169,25 @@ const TripDetails = () => {
   const faqSchema = getFAQSchema(tripFaqs);
 
   const handleProceedToBooking = () => {
-    navigate('/checkout', {
+    navigate(`/book/${trip.slug || trip.id}`, {
       state: {
         tripId: trip.id,
+        tripSlug: trip.slug,
         tripTitle: trip.title,
         tripImage: trip.image,
         location: trip.location,
+        destination: trip.destination,
         duration: trip.duration,
-        batchDates: selectedBatch.dates,
-        occupancy: occupancy,
-        travelersCount: travelers,
-        pricePerPerson: perPersonPrice,
-        totalAmount: totalPrice
+        initialBatch: selectedBatch?.dates,
+        initialOccupancy: occupancy,
+        initialTravelers: travelers,
+        trip
       }
     });
   };
 
   return (
-    <div className="min-h-screen bg-brand-light pt-24 pb-24">
+    <div className="min-h-screen bg-brand-light pt-24 pb-32 lg:pb-24">
       <SEOHead
         title={`${trip.title} (${trip.duration}) - ${trip.location} | WanderLuxe Group Expeditions`}
         description={`Book official verified group tour package for ${trip.title}. Daily itinerary, boutique stays, certified captains, transparent pricing with 0% EMI.`}
@@ -625,22 +634,38 @@ const TripDetails = () => {
                 </div>
               </div>
 
-              {/* Total Calculation & Proceed CTA */}
+              {/* Total Calculation & Dual Action CTA */}
               <div className="pt-4 border-t border-slate-100 space-y-3">
                 <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                  <span>Total Payable:</span>
-                  <span className="text-lg font-black text-slate-900">₹{totalPrice.toLocaleString()}</span>
+                  <span>Starting From:</span>
+                  <div className="text-right">
+                    <span className="text-lg font-black text-slate-900">₹{perPersonPrice.toLocaleString()}</span>
+                    <span className="text-[10px] text-slate-400 font-bold ml-1">/ person</span>
+                  </div>
                 </div>
 
-                <button
-                  onClick={handleProceedToBooking}
-                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck size={16} /> Book Now with Instant QR
-                </button>
+                <div className="space-y-2.5">
+                  {/* Primary CTA: Book Now */}
+                  <button
+                    type="button"
+                    onClick={handleProceedToBooking}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ShieldCheck size={16} /> Book Now
+                  </button>
 
-                <p className="text-[10px] text-center text-slate-400 font-bold">
-                  🔒 Razorpay Test Payment • Free date rollover up to 15 days prior
+                  {/* Secondary CTA: Talk to a Travel Expert */}
+                  <button
+                    type="button"
+                    onClick={() => setIsCallbackOpen(true)}
+                    className="w-full py-3 bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer border border-slate-800"
+                  >
+                    <PhoneCall size={14} className="text-emerald-400" /> Talk to a Travel Expert
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-center text-slate-500 font-semibold">
+                  Flexible payment available where eligible.
                 </p>
               </div>
             </div>
@@ -669,6 +694,53 @@ const TripDetails = () => {
             ))}
           </div>
         </div>
+
+        {/* Mobile Sticky Bottom Conversion Bar (Visible on mobile/tablet < 1024px) */}
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-3">
+          <div>
+            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 block">
+              Starting Price
+            </span>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-black text-slate-900">
+                ₹{perPersonPrice.toLocaleString()}
+              </span>
+              <span className="text-[10px] font-bold text-slate-400">/ person</span>
+            </div>
+            <span className="text-[9px] font-medium text-slate-400 block -mt-0.5">Flexible payment eligible</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Secondary CTA: Talk to Expert */}
+            <button
+              type="button"
+              onClick={() => setIsCallbackOpen(true)}
+              className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl font-black text-[11px] uppercase tracking-wider transition-all flex items-center gap-1.5 border border-slate-700 shadow-xs cursor-pointer"
+              title="Talk to Travel Expert"
+            >
+              <PhoneCall size={13} className="text-emerald-400" />
+              <span>Expert</span>
+            </button>
+
+            {/* Primary CTA: Book Now */}
+            <button
+              type="button"
+              onClick={handleProceedToBooking}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl font-black text-[11px] uppercase tracking-wider transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
+            >
+              <ShieldCheck size={14} />
+              <span>Book Now</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Callback Request / Schedule Call Modal */}
+        <RequestCallbackModal
+          isOpen={isCallbackOpen}
+          onClose={() => setIsCallbackOpen(false)}
+          trip={trip}
+          selectedBatch={selectedBatch}
+        />
       </div>
     </div>
   );

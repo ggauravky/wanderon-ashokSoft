@@ -18,21 +18,55 @@ const leadSchema = new mongoose.Schema(
       required: [true, 'Please provide phone number'],
       trim: true
     },
+    leadType: {
+      type: String,
+      enum: ['general', 'trip_enquiry', 'callback_request'],
+      default: 'trip_enquiry',
+      index: true
+    },
+    tripId: {
+      type: String,
+      default: '',
+      index: true
+    },
+    tripTitle: {
+      type: String,
+      default: ''
+    },
     destination: {
       type: String,
       default: 'Meghalaya'
     },
     travelersCount: {
       type: Number,
-      default: 2
+      default: 1
     },
     travelMonth: {
       type: String,
-      default: 'September 2026'
+      default: ''
+    },
+    travelDate: {
+      type: String,
+      default: ''
     },
     budgetPerPerson: {
       type: String,
-      default: '₹15,000 - ₹25,000'
+      default: ''
+    },
+    preferredCallDate: {
+      type: String,
+      default: ''
+    },
+    preferredCallWindow: {
+      type: String,
+      enum: ['Morning', 'Afternoon', 'Evening', 'Anytime', ''],
+      default: 'Anytime'
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true
     },
     message: {
       type: String,
@@ -40,7 +74,7 @@ const leadSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['NEW', 'CONTACTED', 'IN_PROGRESS', 'CONVERTED', 'LOST'],
+      enum: ['NEW', 'CONTACTED', 'IN_PROGRESS', 'QUALIFIED', 'CONVERTED', 'LOST'],
       default: 'NEW',
       index: true
     },
@@ -54,10 +88,17 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      default: 'Custom Trip Inquiry Form'
+      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry'],
+      default: 'trip_page'
+    },
+    whatsappNotification: {
+      sent: { type: Boolean, default: false },
+      status: { type: String, default: 'PENDING' },
+      sentAt: { type: Date }
     }
   },
   { timestamps: true }
 );
 
 export default mongoose.model('Lead', leadSchema);
+

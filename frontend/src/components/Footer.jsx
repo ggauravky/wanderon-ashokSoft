@@ -98,14 +98,16 @@ const Footer = () => {
           {/* Col 2: Featured Expeditions */}
           <div>
             <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400 mb-4">
-              Top Expeditions
+              Explore Expeditions
             </h3>
             <ul className="space-y-2.5 text-xs text-slate-400 font-medium">
-              <li><Link to="/trip/1" className="hover:text-white transition-colors">Meghalaya Living Roots</Link></li>
-              <li><Link to="/trip/2" className="hover:text-white transition-colors">Spiti Valley Circuit</Link></li>
-              <li><Link to="/trip/3" className="hover:text-white transition-colors">Bali Tropical Escape</Link></li>
-              <li><Link to="/trip/4" className="hover:text-white transition-colors">Kerala Tea & Backwaters</Link></li>
-              <li><Link to="/destinations" className="hover:text-white transition-colors">All 2026 Departures</Link></li>
+              <li><Link to="/trips/india" className="hover:text-white transition-colors">India Group Tours (46)</Link></li>
+              <li><Link to="/trips/international" className="hover:text-white transition-colors">International Escapes (4)</Link></li>
+              <li><Link to="/weekend-trips" className="hover:text-white transition-colors">Weekend Getaways (19)</Link></li>
+              <li><Link to="/backpacking-trips" className="hover:text-white transition-colors">Backpacking Circuits (15)</Link></li>
+              <li><Link to="/adventure-treks" className="hover:text-white transition-colors">Adventure & Treks (19)</Link></li>
+              <li><Link to="/romantic-escapes" className="hover:text-white transition-colors">Romantic Escapes (20)</Link></li>
+              <li><Link to="/culture-heritage" className="hover:text-white transition-colors">Culture & Heritage (12)</Link></li>
             </ul>
           </div>
 

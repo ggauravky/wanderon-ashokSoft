@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Clock, Star, Calendar, Sparkles, Heart } from 'lucide-react';
+import { MapPin, Clock, Star, Calendar, Sparkles, Heart, Navigation } from 'lucide-react';
 import { motion } from 'framer-motion';
 import WeatherBadge from './WeatherBadge.jsx';
 import { getDestinationWeather } from '../utils/weatherSeasonEngine.js';
@@ -30,13 +30,31 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
 
   const weather = trip.weather || getDestinationWeather(trip.location || '');
   const price = Number(trip.price) || 0;
-  const originalPrice = Number(trip.originalPrice) || 0;
+  const originalPrice = Number(trip.originalPrice) || (price ? Math.round(price * 1.2) : 0);
   const discountPct = (originalPrice > price && originalPrice > 0)
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : null;
 
   // Determine top priority single explainable badge
-  const primaryBadge = customBadge || trip.explainableBadge || (Array.isArray(trip.tags) && trip.tags[0]) || 'Curated';
+  const primaryBadge = customBadge || trip.explainableBadge || (Array.isArray(trip.tags) && trip.tags[0]) || trip.category || 'Curated';
+
+  // Batch awareness: extract next 1-2 departure dates
+  const batchDatesList = React.useMemo(() => {
+    if (Array.isArray(trip.availableBatches) && trip.availableBatches.length > 0) {
+      return trip.availableBatches.map(b => {
+        // e.g. "20 Aug - 26 Aug, 2026" -> extract "20 Aug"
+        const m = (b.dates || '').match(/^(\d{1,2}\s+[A-Za-z]{3})/);
+        return m ? m[1] : (b.dates ? b.dates.split('-')[0].trim() : '');
+      }).filter(Boolean);
+    }
+    if (trip.nextBatch) {
+      return [trip.nextBatch];
+    }
+    return [];
+  }, [trip.availableBatches, trip.nextBatch]);
+
+  const displayedBatches = batchDatesList.slice(0, 2);
+  const extraBatchesCount = Math.max(0, batchDatesList.length - 2);
 
   return (
     <div className="relative h-full group">
@@ -60,7 +78,7 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
           <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 z-10">
             <span className="bg-slate-900/90 backdrop-blur-md text-white text-[10px] font-black px-3 py-1 rounded-full shadow-sm tracking-wide uppercase border border-white/15 flex items-center gap-1.5 pointer-events-none">
               <Sparkles size={11} className="text-emerald-400 shrink-0" />
-              <span className="truncate max-w-[140px]">{primaryBadge}</span>
+              <span className="truncate max-w-[130px]">{primaryBadge}</span>
             </span>
 
             {/* Interactive Wishlist Heart Button */}
@@ -69,7 +87,7 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
               whileTap={{ scale: 0.85 }}
               onClick={handleWishlistToggle}
               aria-label={isWishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md shadow-md border ${
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md shadow-md border cursor-pointer ${
                 isWishlisted 
                   ? 'bg-rose-500 text-white border-rose-400' 
                   : 'bg-white/80 hover:bg-white text-slate-700 border-white/60'
@@ -79,12 +97,19 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
             </motion.button>
           </div>
 
-          {/* Bottom Row: Next Batch & Weather Badge */}
+          {/* Bottom Row: Departure Dates & Weather Badge */}
           <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-none z-10">
-            {trip.nextBatch ? (
-              <div className="bg-white/95 backdrop-blur-md text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-sm border border-white/60">
-                <Calendar size={11} className="text-emerald-600 shrink-0" />
-                <span className="truncate">{trip.nextBatch}</span>
+            {displayedBatches.length > 0 ? (
+              <div className="flex items-center gap-1 flex-wrap">
+                <div className="bg-white/95 backdrop-blur-md text-slate-900 text-[10px] font-black px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-sm border border-white/60">
+                  <Calendar size={11} className="text-emerald-600 shrink-0" />
+                  <span className="truncate max-w-[110px]">{displayedBatches.join(', ')}</span>
+                </div>
+                {extraBatchesCount > 0 && (
+                  <span className="bg-slate-900/80 backdrop-blur-md text-white text-[9px] font-black px-1.5 py-0.5 rounded-lg border border-white/20">
+                    +{extraBatchesCount}
+                  </span>
+                )}
               </div>
             ) : <div />}
 
@@ -95,13 +120,13 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
         </div>
         
         {/* Card Content */}
-        <div className="p-5 flex-grow flex flex-col justify-between space-y-3.5">
-          <div>
+        <div className="p-5 flex-grow flex flex-col justify-between space-y-3">
+          <div className="space-y-1.5">
             {/* Meta Row: Location & Rating */}
-            <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1 text-slate-500 text-[11px] font-bold">
                 <MapPin size={12} className="text-emerald-500 shrink-0" />
-                <span className="truncate max-w-[140px]">{trip.location || 'India'}</span>
+                <span className="truncate max-w-[130px]">{trip.location || 'India'}</span>
               </div>
 
               <div className="flex items-center gap-1 text-amber-500 shrink-0 text-[11px] font-black">
@@ -115,21 +140,38 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
             <h3 className="text-sm sm:text-base font-black text-slate-900 group-hover:text-emerald-600 transition-colors line-clamp-2 leading-snug">
               {trip.title || 'Curated Expedition'}
             </h3>
+
+            {/* Pickup / Hub */}
+            {trip.startingPoint && (
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 truncate pt-0.5">
+                <Navigation size={11} className="text-slate-400 shrink-0" />
+                <span className="truncate">Starts from: <strong className="text-slate-700">{trip.startingPoint}</strong></span>
+              </div>
+            )}
           </div>
           
           {/* Pricing & Duration Bottom Row */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-1 text-slate-500 text-xs font-bold">
-              <Clock size={13} className="text-emerald-500 shrink-0" />
-              <span>{trip.duration || '3N/4D'}</span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 text-slate-600 text-xs font-extrabold bg-slate-100 px-2 py-0.5 rounded-md">
+                <Clock size={12} className="text-emerald-600 shrink-0" />
+                <span>{trip.duration || '3N/4D'}</span>
+              </div>
             </div>
             
             <div className="text-right">
-              {originalPrice > price && (
-                <div className="text-[10px] font-bold text-slate-400 line-through">
-                  ₹{originalPrice.toLocaleString()}
-                </div>
-              )}
+              <div className="flex items-center justify-end gap-1.5">
+                {originalPrice > price && (
+                  <span className="text-[10px] font-bold text-slate-400 line-through">
+                    ₹{originalPrice.toLocaleString()}
+                  </span>
+                )}
+                {discountPct && discountPct > 0 && (
+                  <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-1 py-0.5 rounded">
+                    {discountPct}% OFF
+                  </span>
+                )}
+              </div>
               <div className="text-sm font-black text-slate-900 flex items-baseline justify-end gap-1">
                 <span>₹{price > 0 ? price.toLocaleString() : '12,000'}</span>
                 <span className="text-[10px] font-bold text-slate-400">/ person</span>
