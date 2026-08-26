@@ -120,8 +120,8 @@ export const cancelBookingApi = async (bookingId) => {
 };
 
 // Admin Endpoints
-export const getAdminStatsApi = async () => {
-  const response = await fetch(`${API_BASE_URL}/admin/stats`, {
+export const getAdminStatsApi = async (range = '30d') => {
+  const response = await fetch(`${API_BASE_URL}/admin/stats?range=${range}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -639,5 +639,149 @@ export const regenerateDayApi = async (payload) => {
   }
   return data.data;
 };
+
+// ==========================================
+// MASTER ADMIN TRIP CMS & MEDIA APIS
+// ==========================================
+
+export const getAdminTripsApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/trips?includeDrafts=true`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch trips');
+  }
+  return data.data || [];
+};
+
+export const createTripApi = async (tripData) => {
+  const response = await fetch(`${API_BASE_URL}/trips`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(tripData)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to create trip package');
+  }
+  return data.data || data;
+};
+
+export const updateTripApi = async (tripId, tripData) => {
+  const response = await fetch(`${API_BASE_URL}/trips/${tripId}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(tripData)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update trip package');
+  }
+  return data.data || data;
+};
+
+export const deleteTripApi = async (tripId) => {
+  const response = await fetch(`${API_BASE_URL}/trips/${tripId}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete trip package');
+  }
+  return data;
+};
+
+// Media / Image Upload API (Cloudinary + Local Fallback)
+export const uploadImageApi = async (file, folder = 'wanderluxe/trips') => {
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('folder', folder);
+
+  const token = localStorage.getItem('wanderluxe_token');
+  const response = await fetch(`${API_BASE_URL}/upload/image`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: formData
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to upload image asset');
+  }
+  return data.data;
+};
+
+// ==========================================
+// MASTER ADMIN DYNAMIC PAGES CMS APIS
+// ==========================================
+
+export const getAllAdminPagesApi = async () => {
+  const response = await fetch(`${API_BASE_URL}/pages`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch dynamic pages');
+  }
+  return Array.isArray(data) ? data : (data.pages || []);
+};
+
+export const getPageBySlugApi = async (slug) => {
+  const response = await fetch(`${API_BASE_URL}/pages/${slug}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Page not found');
+  }
+  return data;
+};
+
+export const createPageApi = async (pageData) => {
+  const response = await fetch(`${API_BASE_URL}/pages`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(pageData)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to create page');
+  }
+  return data.page || data;
+};
+
+export const updatePageApi = async (pageId, pageData) => {
+  const response = await fetch(`${API_BASE_URL}/pages/${pageId}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(pageData)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update page');
+  }
+  return data.page || data;
+};
+
+export const deletePageApi = async (pageId) => {
+  const response = await fetch(`${API_BASE_URL}/pages/${pageId}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete page');
+  }
+  return data;
+};
+
+
 
 

@@ -5,10 +5,29 @@ import {
 } from '../utils/travelContextEngine.js';
 import { getCurrentSeason, getDestinationWeather } from '../utils/weatherSeasonEngine.js';
 import { getRecentlyViewedTrips, getWishlistIds, getSavedAIItineraries } from '../utils/userHistory.js';
-import { UPCOMING_TRIPS } from '../constants/mockData.js';
+import { getAllStaticTrips, mergeTripsWithLive } from '../services/travelKnowledgeService.js';
 
 export const useTravelContext = (customTrips) => {
-  const tripsPool = customTrips || UPCOMING_TRIPS;
+  const [liveTrips, setLiveTrips] = useState([]);
+
+  useEffect(() => {
+    const fetchLiveCatalog = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips`);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.data) && json.data.length > 0) {
+            setLiveTrips(json.data);
+          }
+        }
+      } catch (e) {
+        // Fallback to static
+      }
+    };
+    fetchLiveCatalog();
+  }, []);
+
+  const tripsPool = customTrips || (liveTrips.length > 0 ? mergeTripsWithLive(liveTrips) : getAllStaticTrips());
 
   // Active Context States
   const [now, setNow] = useState(new Date());

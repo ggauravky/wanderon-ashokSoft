@@ -10,21 +10,22 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
   if (!trip || typeof trip !== 'object') return null;
 
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const tripKey = trip.id || trip._id || trip.slug;
 
   useEffect(() => {
     try {
       const ids = getWishlistIds();
-      setIsWishlisted(ids.includes(trip.id));
+      setIsWishlisted(ids.some(id => String(id) === String(tripKey)));
     } catch (e) {
       // Ignored
     }
-  }, [trip.id]);
+  }, [tripKey]);
 
   const handleWishlistToggle = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const updated = toggleWishlistItem(trip.id);
-    setIsWishlisted(updated.includes(trip.id));
+    const updated = toggleWishlistItem(tripKey);
+    setIsWishlisted(updated.some(id => String(id) === String(tripKey)));
   };
 
   const weather = trip.weather || getDestinationWeather(trip.location || '');
@@ -40,7 +41,7 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
   return (
     <div className="relative h-full group">
       <Link 
-        to={`/trip/${trip.id}`} 
+        to={`/trip/${trip.slug || trip.id || trip._id}`} 
         className="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-[0_2px_12px_-2px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_35px_-8px_rgba(15,23,42,0.12)] hover:-translate-y-1 h-full flex flex-col transition-all duration-300 relative block"
       >
         {/* Cover Image Container */}

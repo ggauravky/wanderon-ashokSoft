@@ -15,6 +15,7 @@ import TripCard from '../components/TripCard';
 import AIPlannerModal from '../components/AIPlannerModal';
 import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS } from '../constants/mockData';
+import { getAllStaticTrips, normalizeTripObject } from '../services/travelKnowledgeService';
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine';
 import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory';
 import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine';
@@ -23,12 +24,48 @@ const TripDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Find trip by ID or fallback to trip 1
-  const trip = UPCOMING_TRIPS.find((t) => t.id === parseInt(id)) || UPCOMING_TRIPS[0];
+  // Find trip from static catalog or initialize
+  const [trip, setTrip] = useState(() => {
+    const staticList = getAllStaticTrips();
+    const found = staticList.find(
+      (t) => String(t.id) === String(id) || String(t._id) === String(id) || t.slug === id || t.id === parseInt(id)
+    );
+    return found || staticList[0] || normalizeTripObject(UPCOMING_TRIPS[0]);
+  });
+
+  // Fetch live trip from backend if it was created in Admin
+  useEffect(() => {
+    const fetchLiveTrip = async () => {
+      if (!id) return;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            const normalized = normalizeTripObject(json.data);
+            setTrip(normalized);
+          }
+        }
+      } catch (err) {
+        // Fallback to static catalog already in state
+      }
+    };
+    fetchLiveTrip();
+  }, [id]);
+
   const weather = trip.weather || getDestinationWeather(trip.location);
   const season = getCurrentSeason();
 
-  const [selectedBatch, setSelectedBatch] = useState(trip.availableBatches?.[0] || { dates: '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' });
+  const [selectedBatch, setSelectedBatch] = useState(
+    trip.availableBatches?.[0] || { dates: trip.nextBatch || '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' }
+  );
+
+  useEffect(() => {
+    if (trip.availableBatches && trip.availableBatches.length > 0) {
+      setSelectedBatch(trip.availableBatches[0]);
+    }
+  }, [trip]);
+
   const [occupancy, setOccupancy] = useState('Double Sharing');
   const [travelers, setTravelers] = useState(1);
   const [activeTab, setActiveTab] = useState('overview');
@@ -43,9 +80,10 @@ const TripDetails = () => {
 
   // Interactive Packing Checklist state (persisted per trip)
   const defaultChecklist = generatePackingChecklist(trip, weather, season);
+  const tripKey = trip.id || trip._id || trip.slug;
   const [packingList, setPackingList] = useState(() => {
     try {
-      const saved = localStorage.getItem(`wanderluxe_packing_${trip.id}`);
+      const saved = localStorage.getItem(`wanderluxe_packing_${tripKey}`);
       if (saved) return JSON.parse(saved);
     } catch (e) {
       // Ignored
@@ -57,17 +95,17 @@ const TripDetails = () => {
   useEffect(() => {
     recordTripView(trip);
     const wishlist = getWishlistIds();
-    setIsLiked(wishlist.includes(trip.id));
+    setIsLiked(wishlist.some(wId => String(wId) === String(tripKey)));
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
-      const saved = localStorage.getItem(`wanderluxe_packing_${trip.id}`);
+      const saved = localStorage.getItem(`wanderluxe_packing_${tripKey}`);
       if (saved) setPackingList(JSON.parse(saved));
       else setPackingList(generatePackingChecklist(trip, weather, season));
     } catch (e) {
       setPackingList(generatePackingChecklist(trip, weather, season));
     }
-  }, [trip.id]);
+  }, [tripKey]);
 
   const handleTogglePackingItem = (itemId) => {
     const updated = packingList.map((item) =>

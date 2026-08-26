@@ -25,6 +25,7 @@ import InfluencerRoute from './components/InfluencerRoute';
 import CreatorTrip from './pages/CreatorTrip';
 import CreatorStorefront from './pages/CreatorStorefront';
 import SharedItinerary from './pages/SharedItinerary';
+import DynamicPage from './pages/DynamicPage';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 import ScrollToTop from './components/ScrollToTop';
@@ -86,6 +87,8 @@ function App() {
             <Route path="contact" element={<Contact />} />
             <Route path="blog" element={<Blog />} />
             <Route path="about" element={<About />} />
+            <Route path="page/:slug" element={<DynamicPage />} />
+            <Route path="pages/:slug" element={<DynamicPage />} />
             <Route path="privacy" element={<PlaceholderPage />} />
             <Route path="terms" element={<PlaceholderPage />} />
             <Route path="cancellation" element={<PlaceholderPage />} />

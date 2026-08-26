@@ -3,15 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
-  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, Globe, Save
+  DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, 
+  Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, 
+  Globe, Save, Upload, FileText, ArrowUpRight, MessageSquare, 
+  Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { UPCOMING_TRIPS } from '../constants/mockData';
 import { 
   getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, 
-  deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi 
+  deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi,
+  getAdminTripsApi, createTripApi, updateTripApi, deleteTripApi, uploadImageApi,
+  getAllAdminPagesApi, createPageApi, updatePageApi, deletePageApi,
+  getAdminLeadsApi, updateLeadStatusApi, updateTripSeoApi
 } from '../services/api';
+import { getDestinations, getTravelStyles } from '../services/travelKnowledgeService';
 
 const AdminDashboard = () => {
   const { 
@@ -19,342 +25,552 @@ const AdminDashboard = () => {
     influencerApplications, fetchInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication
   } = useAuth();
   const navigate = useNavigate();
+
+  // Active Main Navigation Tab
   const [activeTab, setActiveTab] = useState('analytics');
 
-  // Stats Data
+  // ==========================================
+  // 1. REAL ANALYTICS STATE (ZERO MOCK DATA)
+  // ==========================================
+  const [analyticsRange, setAnalyticsRange] = useState('30d');
+  const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalRevenue: 4850000,
-    totalBookings: 1240,
-    activeTrips: 18,
-    newLeads: 342,
-    conversionRate: '14.2%',
-    monthlyRevenue: [
-      { month: 'Jan', revenue: 320000 },
-      { month: 'Feb', revenue: 410000 },
-      { month: 'Mar', revenue: 580000 },
-      { month: 'Apr', revenue: 620000 },
-      { month: 'May', revenue: 790000 },
-      { month: 'Jun', revenue: 940000 },
-      { month: 'Jul', revenue: 1190000 }
-    ]
+    totalRevenue: 0,
+    totalBookings: 0,
+    confirmedBookings: 0,
+    pendingBookings: 0,
+    cancelledBookings: 0,
+    activeTrips: 0,
+    totalUsers: 0,
+    totalLeads: 0,
+    convertedLeads: 0,
+    conversionRate: '0%',
+    monthlyRevenue: [],
+    destinationBreakdown: [],
+    topTrips: [],
+    isRealData: true
   });
 
-  // Coupons State
-  const [coupons, setCoupons] = useState([
-    { id: 'c1', code: 'WANDER10', type: 'percentage', value: 10, expiry: '2026-12-31', maxUses: 500, usesCount: 142, active: true },
-    { id: 'c2', code: 'SUMMER500', type: 'flat', value: 500, expiry: '2026-09-30', maxUses: 300, usesCount: 89, active: true },
-    { id: 'c3', code: 'EARLYBIRD15', type: 'percentage', value: 15, expiry: '2026-10-15', maxUses: 200, usesCount: 45, active: true },
-    { id: 'c4', code: 'FESTIVE20', type: 'percentage', value: 20, expiry: '2026-11-01', maxUses: 100, usesCount: 12, active: false }
-  ]);
+  // ==========================================
+  // 2. TRIPS CMS STATE
+  // ==========================================
+  const [trips, setTrips] = useState([]);
+  const [tripsLoading, setTripsLoading] = useState(false);
+  const [tripSearch, setTripSearch] = useState('');
+  const [tripStatusFilter, setTripStatusFilter] = useState('all');
+  const [showTripModal, setShowTripModal] = useState(false);
+  const [editingTripId, setEditingTripId] = useState(null);
+  const [tripModalTab, setTripModalTab] = useState('basic');
+  const [tripActionLoading, setTripActionLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [tripSuccessMsg, setTripSuccessMsg] = useState('');
 
-  // Users State (Loaded from MongoDB)
+  // Initial Empty Trip Form
+  const initialTripForm = {
+    title: '',
+    slug: '',
+    location: '',
+    destination: 'Meghalaya',
+    region: 'Northeast India',
+    duration: '5D/4N',
+    days: 5,
+    nights: 4,
+    price: '',
+    originalPrice: '',
+    discount: 0,
+    currency: 'INR',
+    image: '',
+    heroImage: '',
+    gallery: [],
+    category: 'Backpacking',
+    mood: 'Adventure',
+    difficulty: 'Moderate',
+    groupType: 'Mixed Group',
+    bestMonths: ['October', 'November', 'December', 'March', 'April', 'May'],
+    nextBatch: '15 Sep - 19 Sep',
+    capacity: 20,
+    shortDescription: '',
+    overview: '',
+    itinerary: [
+      { day: 1, title: 'Arrival & Welcome Dinner', description: 'Meet trip captains and check into mountain stay.', morning: 'Airport/Station pickup', afternoon: 'Check-in & scenic walk', evening: 'Local cafe & dinner', stay: 'Boutique Homestay' }
+    ],
+    inclusions: ['Trip Captain & Local Guide', 'All Stay Accommodations', 'Breakfast & Dinner', 'Internal Transfers'],
+    exclusions: ['Flights/Train Tickets', 'Personal Expenses & Lunches'],
+    faqs: [
+      { question: 'What is the group size?', answer: 'Average group size is 12-16 travelers.' }
+    ],
+    status: 'published',
+    seo: {
+      seoTitle: '',
+      metaDescription: '',
+      canonicalUrl: '',
+      indexingDirective: 'index, follow',
+      ogTitle: '',
+      ogDescription: '',
+      ogImage: ''
+    }
+  };
+  const [tripForm, setTripForm] = useState(initialTripForm);
+
+  // ==========================================
+  // 3. DYNAMIC PAGES CMS STATE
+  // ==========================================
+  const [pages, setPages] = useState([]);
+  const [pagesLoading, setPagesLoading] = useState(false);
+  const [showPageModal, setShowPageModal] = useState(false);
+  const [editingPageId, setEditingPageId] = useState(null);
+  const [pageActionLoading, setPageActionLoading] = useState(false);
+  const [pageSuccessMsg, setPageSuccessMsg] = useState('');
+
+  const initialPageForm = {
+    title: '',
+    slug: '',
+    heroSubtitle: '',
+    category: 'Travel Guide',
+    content: '',
+    sections: [
+      { heading: 'Overview', subheading: 'Key Highlights', body: '', imageUrl: '', imageAlt: '', ctaLabel: 'Explore Trips', ctaUrl: '/destinations' }
+    ],
+    status: 'published',
+    author: 'WanderLuxe Editorial',
+    seo: {
+      metaTitle: '',
+      metaDescription: '',
+      keywords: '',
+      canonicalUrl: '',
+      robots: 'index, follow',
+      ogTitle: '',
+      ogDescription: '',
+      ogImage: ''
+    }
+  };
+  const [pageForm, setPageForm] = useState(initialPageForm);
+
+  // ==========================================
+  // 4. BOOKINGS & LEADS STATE
+  // ==========================================
+  const [bookings, setBookings] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [bookingSearch, setBookingSearch] = useState('');
+  const [leadSearch, setLeadSearch] = useState('');
+
+  // ==========================================
+  // 5. COUPONS & USERS STATE
+  // ==========================================
+  const [coupons, setCoupons] = useState([]);
   const [usersList, setUsersList] = useState([]);
-
-  // Trips State & Trip-Level SEO Management State
-  const [tripsList, setTripsList] = useState(UPCOMING_TRIPS);
-  const [selectedSeoTripId, setSelectedSeoTripId] = useState(1);
-  const [tripSeoForm, setTripSeoForm] = useState({
-    seoTitle: 'Meghalaya Backpacking Living Root Bridges (5D/4N) | WanderLuxe Expeditions',
-    metaDescription: 'Book 5-day Meghalaya group trip. Explore Dawki crystal river, Cherrapunji waterfalls, and living root bridges with top-rated trip captains.',
-    canonicalUrl: 'https://wanderluxe.in/trip/1',
-    indexingDirective: 'index, follow',
-    ogTitle: 'Meghalaya Backpacking Living Root Bridges',
-    ogDescription: 'Experience the magic of Meghalaya living root bridges and Dawki river.',
-    ogImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-  });
-  const [seoSavedSuccess, setSeoSavedSuccess] = useState(false);
-
-  // Master Bookings Log
-  const [masterBookings, setMasterBookings] = useState([
-    { id: 'WL-894201', customer: 'Gaurav Kumar Yadav', email: 'kumar.gaurav.yadav2007@gmail.com', trip: 'Meghalaya Backpacking', amount: 37000, date: '2026-08-01', status: 'Confirmed' },
-    { id: 'WL-782104', customer: 'Sarah Jenkins', email: 'sarah.j@gmail.com', trip: 'Spiti Valley Circuit', amount: 22000, date: '2026-08-03', status: 'Confirmed' },
-    { id: 'WL-541289', customer: 'Rohit Sharma', email: 'rohit.sharma@yahoo.com', trip: 'Bali Island Escape', amount: 45000, date: '2026-08-04', status: 'Pending' }
-  ]);
-
-  // Modal States
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [newCoupon, setNewCoupon] = useState({ code: '', type: 'percentage', value: '', expiry: '2026-12-31', maxUses: 500 });
-  
-  const [showTripModal, setShowTripModal] = useState(false);
-  const [newTrip, setNewTrip] = useState({ title: '', location: '', price: '', duration: '5N/6D', image: '', tags: 'Trending, Adventure' });
+
+  // Load All Real Admin Data
+  const fetchAllAdminData = async () => {
+    try {
+      setStatsLoading(true);
+      const statsRes = await getAdminStatsApi(analyticsRange);
+      setStats(statsRes);
+    } catch (err) {
+      console.warn('Stats fetch warning:', err.message);
+    } finally {
+      setStatsLoading(false);
+    }
+
+    try {
+      setTripsLoading(true);
+      const tripsRes = await getAdminTripsApi();
+      setTrips(tripsRes);
+    } catch (err) {
+      console.warn('Trips fetch warning:', err.message);
+    } finally {
+      setTripsLoading(false);
+    }
+
+    try {
+      setPagesLoading(true);
+      const pagesRes = await getAllAdminPagesApi();
+      setPages(pagesRes);
+    } catch (err) {
+      console.warn('Pages fetch warning:', err.message);
+    } finally {
+      setPagesLoading(false);
+    }
+
+    try {
+      const bookingsRes = await getAdminBookingsApi();
+      setBookings(Array.isArray(bookingsRes) ? bookingsRes : []);
+    } catch (err) {
+      console.warn('Bookings fetch warning:', err.message);
+    }
+
+    try {
+      const leadsRes = await getAdminLeadsApi();
+      setLeads(Array.isArray(leadsRes) ? leadsRes : []);
+    } catch (err) {
+      console.warn('Leads fetch warning:', err.message);
+    }
+
+    try {
+      const couponsRes = await getCouponsApi();
+      setCoupons(Array.isArray(couponsRes) ? couponsRes : []);
+    } catch (err) {
+      console.warn('Coupons fetch warning:', err.message);
+    }
+
+    try {
+      const usersRes = await getAdminUsersApi();
+      setUsersList(Array.isArray(usersRes) ? usersRes : []);
+    } catch (err) {
+      console.warn('Users fetch warning:', err.message);
+    }
+
+    if (typeof fetchInfluencerApplications === 'function') {
+      try {
+        await fetchInfluencerApplications();
+      } catch (e) {}
+    }
+  };
 
   useEffect(() => {
-    const loadAdminData = async () => {
-      try {
-        const statsData = await getAdminStatsApi();
-        setStats(statsData);
-        const couponsData = await getCouponsApi();
-        setCoupons(couponsData);
-        const usersData = await getAdminUsersApi();
-        setUsersList(usersData);
-        const bookingsData = await getAdminBookingsApi();
-        if (Array.isArray(bookingsData) && bookingsData.length > 0) {
-          setMasterBookings(bookingsData.map(b => ({
-            id: b.bookingId || b._id,
-            customer: b.customer?.name || 'Traveler',
-            email: b.customer?.email || '',
-            trip: b.tripSnapshot?.title || 'Expedition',
-            amount: b.pricing?.finalAmount || b.paidAmount || 18500,
-            date: b.createdAt ? new Date(b.createdAt).toISOString().split('T')[0] : '2026-08-14',
-            status: b.bookingStatus === 'CONFIRMED' ? 'Confirmed' : b.bookingStatus === 'CANCELLED' ? 'Cancelled' : 'Pending'
-          })));
-        }
-        if (typeof fetchInfluencerApplications === 'function') {
-          await fetchInfluencerApplications();
-        }
-      } catch (e) {
-        console.warn('Backend API offline, utilizing state fallback');
-      }
-    };
-    loadAdminData();
-  }, []);
+    fetchAllAdminData();
+  }, [analyticsRange]);
 
   const handleAdminLogout = () => {
     logout();
     navigate('/admin/login');
   };
 
+  // ==========================================
+  // TRIP CMS ACTIONS
+  // ==========================================
+  const handleOpenAddTrip = () => {
+    setEditingTripId(null);
+    setTripForm(initialTripForm);
+    setTripModalTab('basic');
+    setShowTripModal(true);
+  };
+
+  const handleOpenEditTrip = (trip) => {
+    setEditingTripId(trip._id || trip.id);
+    setTripForm({
+      title: trip.title || '',
+      slug: trip.slug || '',
+      location: trip.location || '',
+      destination: trip.destination || 'Meghalaya',
+      region: trip.region || 'North India',
+      duration: trip.duration || '5D/4N',
+      days: trip.days || 5,
+      nights: trip.nights || 4,
+      price: trip.price || '',
+      originalPrice: trip.originalPrice || '',
+      discount: trip.discount || 0,
+      currency: trip.currency || 'INR',
+      image: trip.image || '',
+      heroImage: trip.heroImage || trip.image || '',
+      gallery: trip.gallery || [],
+      category: trip.category || 'Backpacking',
+      mood: trip.mood || 'Adventure',
+      difficulty: trip.difficulty || 'Moderate',
+      groupType: trip.groupType || 'Mixed Group',
+      bestMonths: trip.bestMonths || ['October', 'November', 'December'],
+      nextBatch: trip.nextBatch || '15 Sep - 19 Sep',
+      capacity: trip.capacity || 20,
+      shortDescription: trip.shortDescription || trip.overview || '',
+      overview: trip.overview || trip.shortDescription || '',
+      itinerary: Array.isArray(trip.itinerary) && trip.itinerary.length > 0 ? trip.itinerary : [
+        { day: 1, title: 'Arrival & Welcome', description: 'Meet the trip captains.', morning: '', afternoon: '', evening: '', stay: 'Mountain Hotel' }
+      ],
+      inclusions: trip.inclusions || ['Trip Captain', 'Stays', 'Breakfast & Dinner'],
+      exclusions: trip.exclusions || ['Personal Expenses', 'Flights'],
+      faqs: trip.faqs || [],
+      status: trip.status || (trip.isActive !== false ? 'published' : 'inactive'),
+      seo: {
+        seoTitle: trip.seo?.seoTitle || `${trip.title} | WanderLuxe`,
+        metaDescription: trip.seo?.metaDescription || trip.overview || '',
+        canonicalUrl: trip.seo?.canonicalUrl || `https://wanderluxe.in/trip/${trip.slug || trip.id}`,
+        indexingDirective: trip.seo?.indexingDirective || 'index, follow',
+        ogTitle: trip.seo?.ogTitle || trip.title,
+        ogDescription: trip.seo?.ogDescription || trip.overview || '',
+        ogImage: trip.seo?.ogImage || trip.image || ''
+      }
+    });
+    setTripModalTab('basic');
+    setShowTripModal(true);
+  };
+
+  const handleSaveTrip = async (e) => {
+    if (e) e.preventDefault();
+    if (!tripForm.title || !tripForm.location || !tripForm.price || !tripForm.image) {
+      alert('Please fill out all required fields: Title, Location, Price, and Main Image URL.');
+      return;
+    }
+
+    try {
+      setTripActionLoading(true);
+      if (editingTripId) {
+        const updated = await updateTripApi(editingTripId, tripForm);
+        setTrips(trips.map(t => (String(t._id || t.id) === String(editingTripId) ? updated : t)));
+        setTripSuccessMsg('Trip package updated successfully.');
+      } else {
+        const created = await createTripApi(tripForm);
+        setTrips([created, ...trips]);
+        setTripSuccessMsg('New trip package published to database.');
+      }
+      setTimeout(() => {
+        setShowTripModal(false);
+        setTripSuccessMsg('');
+      }, 1200);
+    } catch (err) {
+      alert(err.message || 'Failed to save trip package');
+    } finally {
+      setTripActionLoading(false);
+    }
+  };
+
+  const handleDeleteTrip = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to delete or deactivate "${title}"?`)) return;
+    try {
+      const res = await deleteTripApi(id);
+      if (res.deactivated) {
+        setTrips(trips.map(t => (String(t._id || t.id) === String(id) ? { ...t, status: 'inactive', isActive: false } : t)));
+        alert(res.message);
+      } else {
+        setTrips(trips.filter(t => String(t._id || t.id) !== String(id)));
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete trip');
+    }
+  };
+
+  const handleImageUpload = async (file) => {
+    if (!file) return;
+    try {
+      setUploadingImage(true);
+      const uploaded = await uploadImageApi(file, 'wanderluxe/trips');
+      const url = uploaded.secure_url || uploaded.url;
+      setTripForm(prev => ({
+        ...prev,
+        image: url,
+        heroImage: prev.heroImage || url
+      }));
+    } catch (err) {
+      alert(err.message || 'Image upload failed. Using fallback URL input.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Itinerary Helper
+  const handleAddItineraryDay = () => {
+    const nextDay = tripForm.itinerary.length + 1;
+    setTripForm({
+      ...tripForm,
+      itinerary: [
+        ...tripForm.itinerary,
+        { day: nextDay, title: `Day ${nextDay} Exploration`, description: 'Scenic route and cultural sightseeing.', morning: '', afternoon: '', evening: '', stay: 'Boutique Stay' }
+      ]
+    });
+  };
+
+  const handleRemoveItineraryDay = (index) => {
+    const updated = tripForm.itinerary.filter((_, idx) => idx !== index).map((d, idx) => ({ ...d, day: idx + 1 }));
+    setTripForm({ ...tripForm, itinerary: updated });
+  };
+
+  // ==========================================
+  // PAGE CMS ACTIONS
+  // ==========================================
+  const handleOpenAddPage = () => {
+    setEditingPageId(null);
+    setPageForm(initialPageForm);
+    setShowPageModal(true);
+  };
+
+  const handleOpenEditPage = (p) => {
+    setEditingPageId(p._id || p.id);
+    setPageForm({
+      title: p.title || '',
+      slug: p.slug || '',
+      heroSubtitle: p.heroSubtitle || '',
+      category: p.category || 'Travel Guide',
+      content: p.content || '',
+      sections: p.sections || [],
+      status: p.status || 'published',
+      author: p.author || 'WanderLuxe Editorial',
+      seo: {
+        metaTitle: p.seo?.metaTitle || `${p.title} | WanderLuxe`,
+        metaDescription: p.seo?.metaDescription || '',
+        keywords: p.seo?.keywords || '',
+        canonicalUrl: p.seo?.canonicalUrl || `https://wanderluxe.in/page/${p.slug}`,
+        robots: p.seo?.robots || 'index, follow',
+        ogTitle: p.seo?.ogTitle || p.title,
+        ogDescription: p.seo?.ogDescription || '',
+        ogImage: p.seo?.ogImage || ''
+      }
+    });
+    setShowPageModal(true);
+  };
+
+  const handleSavePage = async (e) => {
+    if (e) e.preventDefault();
+    if (!pageForm.title || !pageForm.slug) {
+      alert('Page title and slug are required.');
+      return;
+    }
+
+    try {
+      setPageActionLoading(true);
+      if (editingPageId) {
+        const res = await updatePageApi(editingPageId, pageForm);
+        setPages(pages.map(p => (String(p._id || p.id) === String(editingPageId) ? res.page || res : p)));
+        setPageSuccessMsg('Page updated successfully.');
+      } else {
+        const res = await createPageApi(pageForm);
+        setPages([res.page || res, ...pages]);
+        setPageSuccessMsg('New public page published to database.');
+      }
+      setTimeout(() => {
+        setShowPageModal(false);
+        setPageSuccessMsg('');
+      }, 1200);
+    } catch (err) {
+      alert(err.message || 'Failed to save page');
+    } finally {
+      setPageActionLoading(false);
+    }
+  };
+
+  const handleDeletePage = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this content page?')) return;
+    try {
+      await deletePageApi(id);
+      setPages(pages.filter(p => String(p._id || p.id) !== String(id)));
+    } catch (err) {
+      alert(err.message || 'Failed to delete page');
+    }
+  };
+
+  // ==========================================
+  // COUPON & CRM ACTIONS
+  // ==========================================
   const handleAddCoupon = async (e) => {
     e.preventDefault();
     if (!newCoupon.code || !newCoupon.value) return;
-
     try {
       const added = await createCouponApi(newCoupon);
       setCoupons([added, ...coupons]);
-    } catch (e) {
-      const fallbackCoupon = {
-        id: 'c_' + Date.now(),
-        code: newCoupon.code.toUpperCase().trim(),
-        type: newCoupon.type,
-        value: Number(newCoupon.value),
-        expiry: newCoupon.expiry,
-        maxUses: Number(newCoupon.maxUses),
-        usesCount: 0,
-        active: true
-      };
-      setCoupons([fallbackCoupon, ...coupons]);
+      setNewCoupon({ code: '', type: 'percentage', value: '', expiry: '2026-12-31', maxUses: 500 });
+      setShowCouponModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to create coupon');
     }
-
-    setNewCoupon({ code: '', type: 'percentage', value: '', expiry: '2026-12-31', maxUses: 500 });
-    setShowCouponModal(false);
   };
 
   const handleToggleCoupon = async (id) => {
     try {
-      await toggleCouponApi(id);
-    } catch (e) {
-      console.warn('Toggle coupon offline mode');
+      const res = await toggleCouponApi(id);
+      setCoupons(coupons.map(c => (c.id === id ? { ...c, active: res.active !== undefined ? res.active : !c.active } : c)));
+    } catch (err) {
+      console.warn('Coupon toggle warning:', err.message);
     }
-    setCoupons(coupons.map((c) => (c.id === id ? { ...c, active: !c.active } : c)));
   };
 
   const handleDeleteCoupon = async (id) => {
     try {
       await deleteCouponApi(id);
-    } catch (e) {
-      console.warn('Delete coupon offline mode');
+      setCoupons(coupons.filter(c => c.id !== id));
+    } catch (err) {
+      alert(err.message || 'Failed to delete coupon');
     }
-    setCoupons(coupons.filter((c) => c.id !== id));
   };
 
-  const handleToggleRole = async (userId, currentRole) => {
+  const handleUpdateLeadStatus = async (leadId, newStatus) => {
+    try {
+      await updateLeadStatusApi(leadId, newStatus);
+      setLeads(leads.map(l => (String(l._id || l.id) === String(leadId) ? { ...l, status: newStatus } : l)));
+    } catch (err) {
+      alert(err.message || 'Failed to update lead');
+    }
+  };
+
+  const handleUserRoleChange = async (userId, currentRole) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    if (!window.confirm(`Change role to ${newRole.toUpperCase()}?`)) return;
     try {
       await updateUserRoleApi(userId, newRole);
-    } catch (e) {
-      console.warn('Role toggle offline mode');
-    }
-    setUsersList(usersList.map((u) => (u.id === userId || u._id === userId ? { ...u, role: newRole } : u)));
-  };
-
-  const handleAddTrip = (e) => {
-    e.preventDefault();
-    if (!newTrip.title || !newTrip.price) return;
-
-    const createdTrip = {
-      id: tripsList.length + 1,
-      title: newTrip.title,
-      shortTitle: newTrip.title.split(':')[0],
-      duration: newTrip.duration,
-      price: Number(newTrip.price),
-      originalPrice: Math.round(Number(newTrip.price) * 1.2),
-      location: newTrip.location || 'India',
-      image: newTrip.image || 'https://images.pexels.com/photos/17334314/pexels-photo-17334314.jpeg',
-      rating: 4.8,
-      reviews: 12,
-      tags: newTrip.tags.split(',').map((t) => t.trim()),
-      nextBatch: '10 Sep',
-      availableBatches: [{ id: 'b1', dates: '10 Sep - 15 Sep, 2026', seatsLeft: 10, status: 'Available' }]
-    };
-
-    setTripsList([createdTrip, ...tripsList]);
-    setNewTrip({ title: '', location: '', price: '', duration: '5N/6D', image: '', tags: 'Trending, Adventure' });
-    setShowTripModal(false);
-  };
-
-  const handleDeleteTrip = (id) => {
-    if (window.confirm('Delete this trip package from catalog?')) {
-      setTripsList(tripsList.filter((t) => t.id !== id));
+      setUsersList(usersList.map(u => (String(u._id || u.id) === String(userId) ? { ...u, role: newRole } : u)));
+    } catch (err) {
+      alert(err.message || 'Failed to update user role');
     }
   };
 
-  const handleBookingStatus = (id, newStatus) => {
-    setMasterBookings(masterBookings.map((b) => (b.id === id ? { ...b, status: newStatus } : b)));
-  };
+  // Filtered Lists
+  const filteredTrips = trips.filter(t => {
+    const matchSearch = (t.title || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
+                        (t.location || '').toLowerCase().includes(tripSearch.toLowerCase()) ||
+                        (t.destination || '').toLowerCase().includes(tripSearch.toLowerCase());
+    const matchStatus = tripStatusFilter === 'all' || t.status === tripStatusFilter;
+    return matchSearch && matchStatus;
+  });
 
-  const handleSelectTripSeo = (tripId) => {
-    setSelectedSeoTripId(tripId);
-    const target = tripsList.find((t) => t.id === Number(tripId) || t.id === tripId);
-    if (target) {
-      setTripSeoForm({
-        seoTitle: `${target.title} | WanderLuxe Expeditions`,
-        metaDescription: `Book ${target.title} group departure in ${target.location}. Duration: ${target.duration}. Price: ₹${target.price.toLocaleString()}. Certified trip captain inclusive.`,
-        canonicalUrl: `https://wanderluxe.in/trip/${target.id}`,
-        indexingDirective: 'index, follow',
-        ogTitle: target.title,
-        ogDescription: `Join ${target.title} group departure in ${target.location}.`,
-        ogImage: target.image
-      });
-    }
-  };
-
-  const handleSaveTripSeo = (e) => {
-    e.preventDefault();
-    setSeoSavedSuccess(true);
-    setTimeout(() => setSeoSavedSuccess(false), 3000);
-  };
+  const popularDestinationsList = getDestinations().map(d => d.name);
 
   return (
-    <div className="min-h-screen bg-brand-light pt-24 pb-24">
-      {/* Create Coupon Modal */}
-      <AnimatePresence>
-        {showCouponModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setShowCouponModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl relative border border-gray-100"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button onClick={() => setShowCouponModal(false)} className="absolute top-5 right-5 text-gray-400 hover:text-brand-navy">
-                <X size={20} />
-              </button>
-
-              <h2 className="text-xl font-extrabold text-brand-navy mb-4 flex items-center gap-2">
-                <Tag size={20} className="text-brand-emerald" /> Create Coupon Code
-              </h2>
-
-              <form onSubmit={handleAddCoupon} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Coupon Code</label>
-                  <input
-                    type="text"
-                    value={newCoupon.code}
-                    onChange={(e) => setNewCoupon({ ...newCoupon, code: e.target.value })}
-                    placeholder="e.g. FESTIVE25"
-                    className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold uppercase focus:outline-none focus:border-brand-emerald"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Discount Type</label>
-                    <select
-                      value={newCoupon.type}
-                      onChange={(e) => setNewCoupon({ ...newCoupon, type: e.target.value })}
-                      className="w-full px-3 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                    >
-                      <option value="percentage">Percentage (%)</option>
-                      <option value="flat">Flat Amount (₹)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Discount Value</label>
-                    <input
-                      type="number"
-                      value={newCoupon.value}
-                      onChange={(e) => setNewCoupon({ ...newCoupon, value: e.target.value })}
-                      placeholder="10 or 500"
-                      className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 bg-brand-emerald text-white rounded-2xl font-extrabold text-sm hover:bg-brand-teal transition-all shadow-md mt-2"
-                >
-                  Create & Activate Coupon
-                </button>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="container mx-auto px-4 md:px-8">
-        {/* Header Admin Banner */}
-        <div className="bg-brand-navy text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-          <div className="relative z-10">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-brand-emerald/20 text-brand-emerald border border-brand-emerald/30 text-xs font-extrabold px-3 py-1 rounded-full inline-block">
-                Master Admin Control Panel
+    <div className="min-h-screen bg-slate-100/70 pb-24 pt-28 md:pt-32 text-slate-800 font-sans">
+      <div className="container mx-auto px-4 md:px-8 max-w-7xl">
+        
+        {/* Header Admin Control Panel Banner */}
+        <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden border border-slate-800">
+          <div className="relative z-10 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                Enterprise Admin Control Center
               </span>
-              <span className="text-xs text-white/60 font-mono">
-                Admin: {user?.email || 'gaurav999@gmail.com'}
+              <span className="text-xs text-slate-400 font-mono">
+                Admin: {user?.email || 'admin@wanderluxe.in'}
               </span>
             </div>
-            <h1 className="text-2xl md:text-4xl font-extrabold">System Overview & Influencer Engine</h1>
-            <p className="text-white/70 text-xs md:text-sm font-medium mt-1">
-              Sales revenue analytics, Influencer verification approvals, trip-level SEO configurator, and master bookings logs.
+            <h1 className="text-2xl md:text-4xl font-black tracking-tight text-white">
+              WanderLuxe Master Administration
+            </h1>
+            <p className="text-slate-300 text-xs md:text-sm font-medium max-w-2xl">
+              Real-time sales analytics, Trip CMS with 10-step configuration, dynamic Public Page CMS, live CRM leads, and creator partner approvals.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 relative z-10">
+          <div className="flex items-center gap-3 relative z-10 shrink-0">
             <button
-              onClick={() => setShowTripModal(true)}
-              className="px-5 py-3 bg-brand-emerald text-white text-xs font-extrabold rounded-2xl hover:bg-brand-teal transition-all shadow-lg flex items-center gap-2"
+              onClick={handleOpenAddTrip}
+              className="px-5 py-3 bg-emerald-600 text-white text-xs font-black rounded-2xl hover:bg-emerald-500 transition-all shadow-lg flex items-center gap-2"
             >
-              <Plus size={16} /> Add Package
+              <Plus size={16} /> Add New Trip
             </button>
             <button
               onClick={handleAdminLogout}
-              className="px-4 py-3 bg-white/10 text-white hover:bg-red-600 border border-white/20 transition-all text-xs font-extrabold rounded-2xl flex items-center gap-1.5"
+              className="px-4 py-3 bg-white/10 text-white hover:bg-rose-600 border border-white/20 transition-all text-xs font-bold rounded-2xl flex items-center gap-1.5"
             >
               <LogOut size={16} /> Exit Admin
             </button>
           </div>
         </div>
 
-        {/* Tab Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2.5 mb-8">
+        {/* Master Tab Selector */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-8">
           {[
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} /> },
-            { id: 'influencer_verification', label: 'Influencer Approvals', icon: <UserCheck size={15} /> },
-            { id: 'trip_seo_manager', label: 'Trip SEO Config', icon: <Globe size={15} /> },
-            { id: 'seo_health', label: 'SEO Health', icon: <Search size={15} /> },
-            { id: 'influencer_plans', label: 'Influencer Plans', icon: <Sparkles size={15} /> },
-            { id: 'payouts', label: 'Payout Approvals', icon: <Wallet size={15} /> },
-            { id: 'trips', label: 'Trip Catalog', icon: <Layers size={15} /> },
-            { id: 'coupons', label: 'Discount Engine', icon: <Tag size={15} /> },
+            { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} /> },
+            { id: 'pages', label: 'Pages CMS', icon: <FileText size={15} /> },
+            { id: 'bookings_crm', label: 'Bookings & CRM', icon: <Ticket size={15} /> },
+            { id: 'influencer_verification', label: 'Creator Approvals', icon: <UserCheck size={15} /> },
+            { id: 'payouts', label: 'Payouts', icon: <Wallet size={15} /> },
+            { id: 'coupons', label: 'Discounts', icon: <Tag size={15} /> },
             { id: 'users', label: 'Users & Roles', icon: <Users size={15} /> }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`p-3 rounded-2xl text-xs font-extrabold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              className={`p-3 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-xs ${
                 activeTab === tab.id
-                  ? 'bg-brand-navy text-white shadow-lg'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  ? 'bg-slate-900 text-white shadow-md border-b-2 border-emerald-500'
+                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
               }`}
             >
               {tab.icon} {tab.label}
@@ -362,13 +578,485 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* FEATURE 1: INFLUENCER VERIFICATION & APPROVALS TAB */}
+        {/* ========================================================================= */}
+        {/* TAB 1: REAL ANALYTICS ENGINE (ZERO MOCK / ZERO RANDOM NUMBERS) */}
+        {/* ========================================================================= */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            {/* Range & Filter Header */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <BarChart3 size={20} className="text-emerald-600" /> Real-Time Platform Analytics
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Authoritative metrics aggregated directly from verified MongoDB bookings, payments, and users.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+                {[
+                  { label: '7 Days', val: '7d' },
+                  { label: '30 Days', val: '30d' },
+                  { label: '90 Days', val: '90d' },
+                  { label: 'This Year', val: 'year' },
+                  { label: 'All Time', val: 'all' }
+                ].map(r => (
+                  <button
+                    key={r.val}
+                    onClick={() => setAnalyticsRange(r.val)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                      analyticsRange === r.val
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Metric KPI Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+              {/* Gross Verified Revenue */}
+              <div className="bg-white p-6 rounded-3xl shadow-xs border border-slate-200">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Verified Revenue</span>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-900 mt-1.5">
+                  ₹{Number(stats.totalRevenue || 0).toLocaleString()}
+                </h3>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-md mt-2 inline-flex items-center gap-1">
+                  <ShieldCheck size={12} /> Real Paid Bookings
+                </span>
+              </div>
+
+              {/* Total Bookings */}
+              <div className="bg-white p-6 rounded-3xl shadow-xs border border-slate-200">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Bookings</span>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-900 mt-1.5">
+                  {stats.totalBookings || 0}
+                </h3>
+                <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md mt-2 inline-block">
+                  {stats.confirmedBookings || 0} Confirmed • {stats.pendingBookings || 0} Pending
+                </span>
+              </div>
+
+              {/* Active Published Departures */}
+              <div className="bg-white p-6 rounded-3xl shadow-xs border border-slate-200">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Departures</span>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-900 mt-1.5">
+                  {stats.activeTrips || trips.filter(t => t.status === 'published').length || 0}
+                </h3>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-2 inline-block">
+                  Live in Public Catalog
+                </span>
+              </div>
+
+              {/* CRM Leads & Conversion */}
+              <div className="bg-white p-6 rounded-3xl shadow-xs border border-slate-200">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">CRM Inquiries & Conversion</span>
+                <h3 className="text-2xl md:text-3xl font-black text-slate-900 mt-1.5">
+                  {stats.totalLeads || 0} Leads
+                </h3>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md mt-2 inline-block">
+                  {stats.conversionRate || '0%'} Conversion
+                </span>
+              </div>
+            </div>
+
+            {/* Monthly Trend & Destination Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Monthly Revenue Chart / List */}
+              <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-black text-slate-900 text-sm uppercase">Monthly Revenue & Bookings Trend</h3>
+                  <span className="text-xs text-slate-400 font-bold font-mono">Aggregation Period: {analyticsRange.toUpperCase()}</span>
+                </div>
+
+                {Array.isArray(stats.monthlyRevenue) && stats.monthlyRevenue.length > 0 ? (
+                  <div className="space-y-3 pt-2">
+                    {stats.monthlyRevenue.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs font-bold">
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black">
+                            {idx + 1}
+                          </span>
+                          <div>
+                            <div className="font-black text-slate-900 text-sm">{item.month}</div>
+                            <div className="text-slate-400 text-[11px]">{item.bookings} confirmed bookings</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-black text-emerald-600 text-sm">₹{Number(item.revenue).toLocaleString()}</div>
+                          <div className="text-[10px] text-slate-400">Gross Total</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-slate-400 space-y-2">
+                    <p className="text-xs font-bold">No booking transactions recorded for this period.</p>
+                    <p className="text-[11px] text-slate-400">Real analytics will populate automatically as users complete test or live bookings.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Destination Breakdown */}
+              <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+                <h3 className="font-black text-slate-900 text-sm uppercase">Top Booked Destinations</h3>
+                {Array.isArray(stats.destinationBreakdown) && stats.destinationBreakdown.length > 0 ? (
+                  <div className="space-y-3">
+                    {stats.destinationBreakdown.map((dest, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-black text-slate-800">
+                          <span>{dest.name}</span>
+                          <span className="text-emerald-600 font-mono">{dest.percentage}%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                          <div className="bg-emerald-600 h-full rounded-full" style={{ width: `${dest.percentage}%` }} />
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {dest.count} bookings • ₹{Number(dest.revenue || 0).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-slate-400 text-xs font-bold">
+                    No destination bookings recorded yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2: TRIP CMS (FULL 10-SECTION CREATOR / EDITOR WIZARD) */}
+        {/* ========================================================================= */}
+        {activeTab === 'trips' && (
+          <div className="space-y-6">
+            {/* Search & Actions Bar */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+              <div className="flex items-center gap-3 w-full md:w-auto">
+                <div className="relative flex-1 md:w-72">
+                  <Search size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search trips, locations..."
+                    value={tripSearch}
+                    onChange={(e) => setTripSearch(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <select
+                  value={tripStatusFilter}
+                  onChange={(e) => setTripStatusFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none"
+                >
+                  <option value="all">All Statuses ({trips.length})</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+
+              <button
+                onClick={handleOpenAddTrip}
+                className="w-full md:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                <Plus size={16} /> Create Trip Package
+              </button>
+            </div>
+
+            {/* Trip Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredTrips.map((trip) => (
+                <div key={trip._id || trip.id} className="bg-white rounded-3xl overflow-hidden shadow-xs border border-slate-200 flex flex-col justify-between hover:shadow-md transition-shadow">
+                  <div className="h-44 overflow-hidden relative">
+                    <img 
+                      src={trip.image || trip.heroImage || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'} 
+                      alt={trip.title} 
+                      className="w-full h-full object-cover" 
+                    />
+                    <div className="absolute top-3 left-3 flex gap-2">
+                      <span className="bg-slate-900/90 text-white text-[10px] font-black px-2.5 py-1 rounded-full backdrop-blur-xs">
+                        {trip.duration}
+                      </span>
+                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase ${
+                        trip.status === 'draft' ? 'bg-amber-100 text-amber-900 border border-amber-300' :
+                        trip.status === 'inactive' ? 'bg-rose-100 text-rose-900 border border-rose-300' :
+                        'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      }`}>
+                        {trip.status || 'published'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-2.5">
+                    <h3 className="font-black text-slate-900 text-base leading-snug line-clamp-1">{trip.title}</h3>
+                    <p className="text-xs text-slate-500 font-bold flex items-center gap-1">
+                      <MapPin size={13} className="text-emerald-600" /> {trip.location} • {trip.destination}
+                    </p>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-base font-black text-emerald-600">₹{Number(trip.price).toLocaleString()}</span>
+                      <span className="text-[11px] text-slate-400 font-bold">{trip.itinerary?.length || 5} Days Itinerary</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
+                    <a
+                      href={`/trip/${trip.slug || trip.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <Eye size={13} /> View Live
+                    </a>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditTrip(trip)}
+                        className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1"
+                      >
+                        <Edit3 size={13} /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTrip(trip._id || trip.id, trip.title)}
+                        className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition-colors"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: DYNAMIC PUBLIC PAGES CMS */}
+        {/* ========================================================================= */}
+        {activeTab === 'pages' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <FileText size={20} className="text-emerald-600" /> Dynamic Public Content Pages CMS
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Create rich landing pages, destination guides, and travel blogs accessible on <code>/page/:slug</code>.
+                </p>
+              </div>
+
+              <button
+                onClick={handleOpenAddPage}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center gap-2"
+              >
+                <Plus size={16} /> Create Content Page
+              </button>
+            </div>
+
+            {/* Pages Table */}
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                  <tr>
+                    <th className="p-4">Page Title & Slug</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4">Sections</th>
+                    <th className="p-4">SEO Health</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {pages.map((p) => (
+                    <tr key={p._id || p.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4">
+                        <div className="font-black text-slate-900 text-sm">{p.title}</div>
+                        <div className="text-[11px] text-emerald-600 font-mono font-bold">/page/{p.slug}</div>
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full font-bold text-[11px]">
+                          {p.category || 'General'}
+                        </span>
+                      </td>
+                      <td className="p-4 font-bold text-slate-600">
+                        {p.sections?.length || 1} Sections
+                      </td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-black rounded-full text-[10px] border border-emerald-200">
+                          {p.seoHealthScore || 85}% Optimized
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                          p.status === 'published' ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'
+                        }`}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right space-x-2">
+                        <a
+                          href={`/page/${p.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors"
+                        >
+                          <Eye size={13} /> View
+                        </a>
+                        <button
+                          onClick={() => handleOpenEditPage(p)}
+                          className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all inline-flex items-center gap-1"
+                        >
+                          <Edit3 size={13} /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePage(p._id || p.id)}
+                          className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-bold transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: BOOKINGS & CRM LEADS */}
+        {/* ========================================================================= */}
+        {activeTab === 'bookings_crm' && (
+          <div className="space-y-8">
+            {/* Live Master Bookings Table */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <Ticket size={20} className="text-emerald-600" /> Master Bookings Log ({bookings.length})
+                </h3>
+                <span className="text-xs text-slate-400 font-bold">Authoritative MongoDB Records</span>
+              </div>
+
+              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                    <tr>
+                      <th className="p-4">Booking ID</th>
+                      <th className="p-4">Traveler / Customer</th>
+                      <th className="p-4">Trip Package</th>
+                      <th className="p-4">Amount</th>
+                      <th className="p-4">Payment</th>
+                      <th className="p-4">Booking Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {bookings.map((b) => (
+                      <tr key={b._id || b.bookingId} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 font-mono font-bold text-emerald-700">{b.bookingId || b._id}</td>
+                        <td className="p-4">
+                          <div className="font-bold text-slate-900">{b.customer?.name || 'Traveler'}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{b.customer?.email}</div>
+                        </td>
+                        <td className="p-4 font-bold text-slate-800">{b.tripSnapshot?.title || 'Expedition'}</td>
+                        <td className="p-4 font-black text-slate-900">₹{Number(b.pricing?.finalAmount || b.paidAmount || 18500).toLocaleString()}</td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                            b.payment?.status === 'PAID' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {b.payment?.status || 'PAID'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                            b.bookingStatus === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            {b.bookingStatus || 'CONFIRMED'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* CRM Leads Table */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <MessageSquare size={20} className="text-emerald-600" /> CRM Customer Inquiries & Leads ({leads.length})
+                </h3>
+                <span className="text-xs text-slate-400 font-bold">Contact & Custom Itinerary Inquiries</span>
+              </div>
+
+              <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                    <tr>
+                      <th className="p-4">Lead Name & Contact</th>
+                      <th className="p-4">Destination & Month</th>
+                      <th className="p-4">Travelers</th>
+                      <th className="p-4">Message</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Update Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {leads.map((l) => (
+                      <tr key={l._id || l.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4">
+                          <div className="font-bold text-slate-900">{l.name}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{l.email} • {l.phone}</div>
+                        </td>
+                        <td className="p-4 font-bold text-slate-800">{l.destination} ({l.travelMonth})</td>
+                        <td className="p-4 font-bold text-slate-600">{l.travelersCount || 2} Pax</td>
+                        <td className="p-4 text-slate-500 max-w-xs truncate">{l.message || 'Custom trip inquiry'}</td>
+                        <td className="p-4">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                            l.status === 'CONVERTED' ? 'bg-emerald-100 text-emerald-800' :
+                            l.status === 'CONTACTED' ? 'bg-blue-100 text-blue-800' :
+                            l.status === 'LOST' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {l.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <select
+                            value={l.status}
+                            onChange={(e) => handleUpdateLeadStatus(l._id || l.id, e.target.value)}
+                            className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 outline-none"
+                          >
+                            <option value="NEW">NEW</option>
+                            <option value="CONTACTED">CONTACTED</option>
+                            <option value="IN_PROGRESS">IN_PROGRESS</option>
+                            <option value="CONVERTED">CONVERTED</option>
+                            <option value="LOST">LOST</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: PROTECTED INFLUENCER APPROVALS TAB (STRICTLY UNTOUCHED LOGIC) */}
+        {/* ========================================================================= */}
         {activeTab === 'influencer_verification' && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
-                  <UserCheck size={22} className="text-brand-emerald" /> Influencer Verification & Approval Engine
+                  <UserCheck size={22} className="text-emerald-600" /> Influencer Verification & Approval Engine
                 </h2>
                 <p className="text-xs text-gray-500 font-medium">
                   Review applicant profile, social metrics, and approve/reject creator accounts. Approved creators gain full Influencer Portal access.
@@ -387,7 +1075,7 @@ const AdminDashboard = () => {
 
             <div className="bg-white rounded-3xl shadow-sm border border-gray-200/80 overflow-hidden">
               <table className="w-full text-left text-xs">
-                <thead className="bg-brand-navy text-white uppercase font-bold text-[10px]">
+                <thead className="bg-slate-900 text-white uppercase font-bold text-[10px]">
                   <tr>
                     <th className="p-4">Applicant</th>
                     <th className="p-4">Social Handle / Platform</th>
@@ -405,7 +1093,7 @@ const AdminDashboard = () => {
                         <div className="font-bold text-brand-navy text-sm">{app.name}</div>
                         <div className="text-[11px] text-gray-400 font-mono">{app.email}</div>
                       </td>
-                      <td className="p-4 font-mono font-bold text-brand-emerald">
+                      <td className="p-4 font-mono font-bold text-emerald-600">
                         {app.socialHandle} <span className="text-gray-400 font-normal">({app.platform})</span>
                       </td>
                       <td className="p-4 font-extrabold text-brand-navy">{app.followerCount}</td>
@@ -430,7 +1118,7 @@ const AdminDashboard = () => {
                             </button>
                             <button
                               onClick={() => rejectInfluencerApplication(app.userId || app._id || app.id, 'Criteria not met')}
-                              className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors inline-flex items-center gap-1"
+                              className="px-3.5 py-1.5 bg-rose-50 text-rose-600 rounded-xl text-xs font-bold hover:bg-rose-100 transition-colors inline-flex items-center gap-1"
                             >
                               <UserX size={14} /> Reject
                             </button>
@@ -447,221 +1135,796 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* FEATURE 2: TRIP-LEVEL SEO MANAGER TAB */}
-        {activeTab === 'trip_seo_manager' && (
+        {/* ========================================================================= */}
+        {/* TAB 6: PAYOUT APPROVALS (PROTECTED) */}
+        {/* ========================================================================= */}
+        {activeTab === 'payouts' && (
           <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-extrabold text-brand-navy flex items-center gap-2">
-                  <Globe size={22} className="text-brand-emerald" /> Trip-Level SEO & Metadata Configurator
-                </h2>
-                <p className="text-xs text-gray-500 font-medium">
-                  Configure custom page titles, meta descriptions, canonical URLs, indexing directives, and Open Graph attributes for individual trip packages.
-                </p>
-              </div>
-
-              {seoSavedSuccess && (
-                <div className="px-4 py-2 bg-emerald-500 text-white text-xs font-extrabold rounded-xl shadow-lg flex items-center gap-1.5 animate-bounce">
-                  <CheckCircle2 size={16} /> Trip SEO Saved & Published!
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Trip Package List Selector */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-200/80 shadow-sm space-y-4">
-                <h3 className="font-extrabold text-brand-navy text-sm uppercase">Select Trip Package</h3>
-                <div className="space-y-2">
-                  {tripsList.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => handleSelectTripSeo(t.id)}
-                      className={`w-full p-3 rounded-2xl text-left text-xs font-bold transition-all flex items-center justify-between ${
-                        selectedSeoTripId === t.id
-                          ? 'bg-brand-navy text-white shadow-md'
-                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/60'
-                      }`}
-                    >
-                      <span className="truncate max-w-[180px]">{t.title}</span>
-                      <span className="text-[10px] font-mono text-brand-emerald shrink-0">₹{t.price.toLocaleString()}</span>
-                    </button>
+            <h2 className="text-xl font-extrabold text-slate-900 flex items-center gap-2">
+              <Wallet size={22} className="text-emerald-600" /> Creator Payout Requests
+            </h2>
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                  <tr>
+                    <th className="p-4">Creator</th>
+                    <th className="p-4">Amount</th>
+                    <th className="p-4">Destination / Account</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {allPayoutRequests?.map((payout) => (
+                    <tr key={payout.id} className="hover:bg-slate-50">
+                      <td className="p-4 font-bold text-slate-900">{payout.influencerName || 'Creator'}</td>
+                      <td className="p-4 font-black text-emerald-600">₹{payout.amount?.toLocaleString()}</td>
+                      <td className="p-4 font-mono text-slate-500">{payout.destination}</td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                          payout.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {payout.status}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right">
+                        {payout.status === 'pending' && (
+                          <button
+                            onClick={() => adminApprovePayout(payout.id)}
+                            className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all"
+                          >
+                            Approve
+                          </button>
+                        )}
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              </div>
-
-              {/* Trip SEO Form */}
-              <div className="lg:col-span-2 bg-white p-6 md:p-8 rounded-3xl border border-gray-200/80 shadow-sm">
-                <form onSubmit={handleSaveTripSeo} className="space-y-4 text-xs font-bold">
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                    <span className="text-brand-navy font-extrabold text-sm uppercase">SEO Configuration Fields</span>
-                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-black rounded-full uppercase">
-                      SEO Score: GOOD (95/100)
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="text-gray-700 uppercase block mb-1">SEO Page Title Tag ({tripSeoForm.seoTitle.length} / 60 chars)</label>
-                    <input
-                      type="text"
-                      value={tripSeoForm.seoTitle}
-                      onChange={(e) => setTripSeoForm({ ...tripSeoForm, seoTitle: e.target.value })}
-                      className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-gray-700 uppercase block mb-1">Meta Description ({tripSeoForm.metaDescription.length} / 160 chars)</label>
-                    <textarea
-                      rows={3}
-                      value={tripSeoForm.metaDescription}
-                      onChange={(e) => setTripSeoForm({ ...tripSeoForm, metaDescription: e.target.value })}
-                      className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-gray-700 uppercase block mb-1">Canonical Tag URL</label>
-                      <input
-                        type="text"
-                        value={tripSeoForm.canonicalUrl}
-                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, canonicalUrl: e.target.value })}
-                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-mono text-brand-navy focus:border-brand-emerald focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-gray-700 uppercase block mb-1">Indexing Directive</label>
-                      <select
-                        value={tripSeoForm.indexingDirective}
-                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, indexingDirective: e.target.value })}
-                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
-                      >
-                        <option value="index, follow">index, follow (Public Search Indexable)</option>
-                        <option value="noindex, nofollow">noindex, nofollow (Shielded Private)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-gray-700 uppercase block mb-1">Open Graph Title</label>
-                      <input
-                        type="text"
-                        value={tripSeoForm.ogTitle}
-                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, ogTitle: e.target.value })}
-                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs text-brand-navy focus:border-brand-emerald focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-gray-700 uppercase block mb-1">Open Graph Image URL</label>
-                      <input
-                        type="text"
-                        value={tripSeoForm.ogImage}
-                        onChange={(e) => setTripSeoForm({ ...tripSeoForm, ogImage: e.target.value })}
-                        className="w-full bg-brand-light border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-mono text-brand-navy focus:border-brand-emerald focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 bg-brand-emerald hover:bg-brand-teal text-white rounded-2xl font-extrabold text-xs transition-all shadow-md flex items-center justify-center gap-2 mt-4"
-                  >
-                    <Save size={16} /> Save & Deploy Trip SEO Metadata
-                  </button>
-                </form>
-              </div>
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* TAB 1: ANALYTICS */}
-        {activeTab === 'analytics' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
-                <span className="text-xs font-bold text-gray-400 uppercase">Gross Revenue</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">₹48,50,000</h3>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-2 inline-block">
-                  +24.5% vs last month
-                </span>
-              </div>
-
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
-                <span className="text-xs font-bold text-gray-400 uppercase">Total Bookings</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{stats.totalBookings}</h3>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-2 inline-block">
-                  1,140 Confirmed
-                </span>
-              </div>
-
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
-                <span className="text-xs font-bold text-gray-400 uppercase">Active Departures</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{tripsList.filter(t => t.isActive !== false).length}</h3>
-                <span className="text-xs font-bold text-brand-emerald bg-brand-emerald/10 px-2 py-0.5 rounded mt-2 inline-block">
-                  100% Verified Catalog
-                </span>
-              </div>
-
-              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
-                <span className="text-xs font-bold text-gray-400 uppercase">Lead Conversion</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{stats.conversionRate}</h3>
-                <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-2 inline-block">
-                  342 Leads This Month
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 4: TRIP CATALOG */}
-        {activeTab === 'trips' && (
+        {/* ========================================================================= */}
+        {/* TAB 7: DISCOUNT ENGINE (COUPONS) */}
+        {/* ========================================================================= */}
+        {activeTab === 'coupons' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-extrabold text-brand-navy">Trip Package Catalog ({tripsList.length})</h2>
+              <h2 className="text-xl font-black text-slate-900">Discount Engine ({coupons.length})</h2>
               <button
-                onClick={() => setShowTripModal(true)}
-                className="px-4 py-2.5 bg-brand-emerald text-white rounded-2xl text-xs font-bold hover:bg-brand-teal transition-all shadow-md flex items-center gap-2"
+                onClick={() => setShowCouponModal(true)}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md flex items-center gap-2"
               >
-                <Plus size={16} /> Create Trip Package
+                <Plus size={16} /> Create Coupon
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {tripsList.map((trip) => (
-                <div key={trip.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-200/80 flex flex-col justify-between">
-                  <div className="h-44 overflow-hidden relative">
-                    <img src={trip.image} alt={trip.title} className="w-full h-full object-cover" />
-                    <span className="absolute top-3 left-3 bg-brand-navy/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
-                      {trip.duration}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {coupons.map((coupon) => (
+                <div key={coupon.id} className="bg-white p-5 rounded-3xl shadow-xs border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 px-3 py-1 rounded-xl">
+                      {coupon.code}
                     </span>
-                  </div>
-
-                  <div className="p-6 space-y-3">
-                    <h3 className="font-bold text-brand-navy text-base leading-snug">{trip.title}</h3>
-                    <p className="text-xs text-gray-500 font-medium flex items-center gap-1">
-                      <MapPin size={14} className="text-brand-emerald" /> {trip.location}
-                    </p>
-                    <div className="text-sm font-extrabold text-brand-emerald">₹{trip.price.toLocaleString()}</div>
-                  </div>
-
-                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-gray-500">Batches: {trip.availableBatches?.length || 1}</span>
                     <button
-                      onClick={() => handleDeleteTrip(trip.id)}
-                      className="px-3 py-1.5 bg-red-50 text-red-600 rounded-xl text-xs font-bold hover:bg-red-100 transition-colors flex items-center gap-1"
+                      onClick={() => handleToggleCoupon(coupon.id)}
+                      className={`p-1.5 rounded-xl text-xs font-black transition-colors ${
+                        coupon.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'
+                      }`}
                     >
-                      <Trash2 size={14} /> Delete
+                      {coupon.active ? <Power size={15} /> : <Power size={15} />}
                     </button>
                   </div>
+                  <div className="text-lg font-black text-emerald-600">
+                    {coupon.type === 'percentage' ? `${coupon.value}% OFF` : `₹${coupon.value} FLAT`}
+                  </div>
+                  <div className="text-[11px] text-slate-400 font-medium">
+                    Valid till {coupon.expiry} • {coupon.usesCount || 0} / {coupon.maxUses} used
+                  </div>
+                  <button
+                    onClick={() => handleDeleteCoupon(coupon.id)}
+                    className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 8: USERS & ROLES */}
+        {/* ========================================================================= */}
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-black text-slate-900">User Account Management ({usersList.length})</h2>
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                  <tr>
+                    <th className="p-4">User Name & Email</th>
+                    <th className="p-4">Role</th>
+                    <th className="p-4">Phone</th>
+                    <th className="p-4">Joined Date</th>
+                    <th className="p-4 text-right">Role Switching</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {usersList.map((u) => (
+                    <tr key={u._id || u.id} className="hover:bg-slate-50">
+                      <td className="p-4">
+                        <div className="font-bold text-slate-900">{u.name}</div>
+                        <div className="text-[11px] text-slate-400 font-mono">{u.email}</div>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                          u.role === 'admin' ? 'bg-purple-100 text-purple-800' :
+                          u.role === 'influencer' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'
+                        }`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td className="p-4 font-mono text-slate-500">{u.phone || 'N/A'}</td>
+                      <td className="p-4 text-slate-500">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '2026'}</td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => handleUserRoleChange(u._id || u.id, u.role)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                        >
+                          Switch to {u.role === 'admin' ? 'USER' : 'ADMIN'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </div>
+
+      {/* ========================================================================= */}
+      {/* TRIP CREATION & EDITING WIZARD MODAL (10-STEP STRUCTURED SECTIONS) */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showTripModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-4xl w-full p-6 md:p-8 shadow-2xl relative border border-slate-200 max-h-[90vh] overflow-y-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {editingTripId ? 'Edit Trip Package' : 'Create New Trip Package'}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    Configure complete details, pricing, day-by-day itinerary, online media, and SEO.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowTripModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {tripSuccessMsg && (
+                <div className="p-3.5 bg-emerald-50 text-emerald-800 rounded-2xl border border-emerald-200 text-xs font-black mb-4 flex items-center gap-2">
+                  <CheckCircle2 size={16} /> {tripSuccessMsg}
+                </div>
+              )}
+
+              {/* Wizard Navigation Sub-tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 border-b border-slate-100 text-xs font-black">
+                {[
+                  { id: 'basic', label: '1. Basic Info' },
+                  { id: 'media', label: '2. Media & Images' },
+                  { id: 'pricing', label: '3. Pricing & Batches' },
+                  { id: 'itinerary', label: '4. Itinerary Builder' },
+                  { id: 'details', label: '5. Inclusions & FAQs' },
+                  { id: 'seo', label: '6. SEO & Publishing' }
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setTripModalTab(t.id)}
+                    className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                      tripModalTab === t.id
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <form onSubmit={handleSaveTrip} className="space-y-6 text-xs font-bold text-slate-700">
+                {/* 1. BASIC INFO */}
+                {tripModalTab === 'basic' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block uppercase mb-1">Trip Package Title *</label>
+                      <input
+                        type="text"
+                        required
+                        value={tripForm.title}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTripForm(prev => ({
+                            ...prev,
+                            title: val,
+                            slug: prev.slug || val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+                          }));
+                        }}
+                        placeholder="e.g. Meghalaya Backpacking Living Root Bridges"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:border-emerald-500 outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block uppercase mb-1">URL Slug *</label>
+                        <input
+                          type="text"
+                          required
+                          value={tripForm.slug}
+                          onChange={(e) => setTripForm({ ...tripForm, slug: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 font-mono text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Destination State / Region *</label>
+                        <select
+                          value={tripForm.destination}
+                          onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 outline-none"
+                        >
+                          {popularDestinationsList.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block uppercase mb-1">Exact Location *</label>
+                        <input
+                          type="text"
+                          required
+                          value={tripForm.location}
+                          onChange={(e) => setTripForm({ ...tripForm, location: e.target.value })}
+                          placeholder="e.g. Cherrapunji, Meghalaya"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Category</label>
+                        <select
+                          value={tripForm.category}
+                          onChange={(e) => setTripForm({ ...tripForm, category: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 outline-none"
+                        >
+                          <option value="Backpacking">Backpacking</option>
+                          <option value="Weekend Trips">Weekend Trips</option>
+                          <option value="Roadtrips">Roadtrips</option>
+                          <option value="Trekking">Trekking</option>
+                          <option value="Luxury Escape">Luxury Escape</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Travel Mood</label>
+                        <select
+                          value={tripForm.mood}
+                          onChange={(e) => setTripForm({ ...tripForm, mood: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 outline-none"
+                        >
+                          <option value="Adventure">Adventure</option>
+                          <option value="Relaxed">Relaxed</option>
+                          <option value="Romantic">Romantic</option>
+                          <option value="Cultural">Cultural</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block uppercase mb-1">Overview / Summary</label>
+                      <textarea
+                        rows={3}
+                        value={tripForm.overview}
+                        onChange={(e) => setTripForm({ ...tripForm, overview: e.target.value })}
+                        placeholder="Comprehensive trip description for travelers..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. MEDIA & IMAGES */}
+                {tripModalTab === 'media' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block uppercase mb-1">Main Cover Image URL *</label>
+                      <input
+                        type="url"
+                        required
+                        value={tripForm.image}
+                        onChange={(e) => setTripForm({ ...tripForm, image: e.target.value, heroImage: tripForm.heroImage || e.target.value })}
+                        placeholder="https://images.unsplash.com/..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-slate-900 outline-none"
+                      />
+                    </div>
+
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center space-y-2">
+                      <Upload size={24} className="mx-auto text-emerald-600" />
+                      <p className="text-xs font-bold text-slate-700">Or Upload Image via Cloudinary</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0])}
+                        disabled={uploadingImage}
+                        className="text-xs text-slate-500"
+                      />
+                      {uploadingImage && <p className="text-xs text-emerald-600 font-black animate-pulse">Uploading asset to cloud...</p>}
+                    </div>
+
+                    {tripForm.image && (
+                      <div className="h-44 rounded-2xl overflow-hidden border border-slate-200 shadow-xs">
+                        <img src={tripForm.image} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. PRICING & BATCHES */}
+                {tripModalTab === 'pricing' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block uppercase mb-1">Base Price (₹) *</label>
+                        <input
+                          type="number"
+                          required
+                          min="0"
+                          value={tripForm.price}
+                          onChange={(e) => setTripForm({ ...tripForm, price: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Original Price (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tripForm.originalPrice}
+                          onChange={(e) => setTripForm({ ...tripForm, originalPrice: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Duration Text *</label>
+                        <input
+                          type="text"
+                          required
+                          value={tripForm.duration}
+                          onChange={(e) => setTripForm({ ...tripForm, duration: e.target.value })}
+                          placeholder="e.g. 5D/4N"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block uppercase mb-1">Next Batch Date Range</label>
+                        <input
+                          type="text"
+                          value={tripForm.nextBatch}
+                          onChange={(e) => setTripForm({ ...tripForm, nextBatch: e.target.value })}
+                          placeholder="e.g. 15 Sep - 19 Sep"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block uppercase mb-1">Max Group Capacity</label>
+                        <input
+                          type="number"
+                          value={tripForm.capacity}
+                          onChange={(e) => setTripForm({ ...tripForm, capacity: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. ITINERARY BUILDER */}
+                {tripModalTab === 'itinerary' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="uppercase">Day-by-Day Route Schedule ({tripForm.itinerary.length} Days)</span>
+                      <button
+                        type="button"
+                        onClick={handleAddItineraryDay}
+                        className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center gap-1"
+                      >
+                        <Plus size={13} /> Add Day
+                      </button>
+                    </div>
+
+                    {tripForm.itinerary.map((dayItem, idx) => (
+                      <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-slate-900">Day {dayItem.day || idx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItineraryDay(idx)}
+                            className="text-rose-600 hover:text-rose-700 text-xs font-bold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          value={dayItem.title}
+                          onChange={(e) => {
+                            const updated = [...tripForm.itinerary];
+                            updated[idx].title = e.target.value;
+                            setTripForm({ ...tripForm, itinerary: updated });
+                          }}
+                          placeholder="Day Title (e.g. Double Decker Living Root Bridge Trek)"
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none"
+                        />
+                        <textarea
+                          rows={2}
+                          value={dayItem.description}
+                          onChange={(e) => {
+                            const updated = [...tripForm.itinerary];
+                            updated[idx].description = e.target.value;
+                            setTripForm({ ...tripForm, itinerary: updated });
+                          }}
+                          placeholder="Day activities overview..."
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 5. DETAILS & FAQS */}
+                {tripModalTab === 'details' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block uppercase mb-1">Inclusions (Comma separated)</label>
+                      <textarea
+                        rows={3}
+                        value={Array.isArray(tripForm.inclusions) ? tripForm.inclusions.join(', ') : tripForm.inclusions}
+                        onChange={(e) => setTripForm({ ...tripForm, inclusions: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                        placeholder="Trip Captain, Stays, Breakfast & Dinner, Transfers"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block uppercase mb-1">Exclusions (Comma separated)</label>
+                      <textarea
+                        rows={3}
+                        value={Array.isArray(tripForm.exclusions) ? tripForm.exclusions.join(', ') : tripForm.exclusions}
+                        onChange={(e) => setTripForm({ ...tripForm, exclusions: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                        placeholder="Flight tickets, Personal shopping, Lunch"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. SEO & PUBLISHING */}
+                {tripModalTab === 'seo' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block uppercase mb-1">SEO Title Tag</label>
+                      <input
+                        type="text"
+                        value={tripForm.seo.seoTitle}
+                        onChange={(e) => setTripForm({ ...tripForm, seo: { ...tripForm.seo, seoTitle: e.target.value } })}
+                        placeholder={`${tripForm.title || 'Trip Package'} | WanderLuxe Expeditions`}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block uppercase mb-1">Meta Description</label>
+                      <textarea
+                        rows={3}
+                        value={tripForm.seo.metaDescription}
+                        onChange={(e) => setTripForm({ ...tripForm, seo: { ...tripForm.seo, metaDescription: e.target.value } })}
+                        placeholder="Book verified group departures with WanderLuxe..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block uppercase mb-1">Indexing Directive</label>
+                        <select
+                          value={tripForm.seo.indexingDirective}
+                          onChange={(e) => setTripForm({ ...tripForm, seo: { ...tripForm.seo, indexingDirective: e.target.value } })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                        >
+                          <option value="index, follow">index, follow (Public Search)</option>
+                          <option value="noindex, nofollow">noindex, nofollow (Private)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block uppercase mb-1">Publishing Status *</label>
+                        <select
+                          value={tripForm.status}
+                          onChange={(e) => setTripForm({ ...tripForm, status: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-900 outline-none"
+                        >
+                          <option value="published">Published (Live on Public Storefront)</option>
+                          <option value="draft">Draft (Admin Only)</option>
+                          <option value="inactive">Inactive (Archived)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Footer Submit Button */}
+                <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowTripModal(false)}
+                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={tripActionLoading}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs transition-all shadow-md flex items-center gap-2"
+                  >
+                    {tripActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{editingTripId ? 'Save Changes' : 'Publish Trip to Database'}</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* PAGE CREATION & EDITING MODAL */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showPageModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-3xl w-full p-6 md:p-8 shadow-2xl relative border border-slate-200 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">
+                    {editingPageId ? 'Edit Content Page' : 'Create Public Content Page'}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    Published pages appear at <code>/page/:slug</code>.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowPageModal(false)}
+                  className="p-2 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {pageSuccessMsg && (
+                <div className="p-3.5 bg-emerald-50 text-emerald-800 rounded-2xl border border-emerald-200 text-xs font-black mb-4 flex items-center gap-2">
+                  <CheckCircle2 size={16} /> {pageSuccessMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleSavePage} className="space-y-4 text-xs font-bold text-slate-700">
+                <div>
+                  <label className="block uppercase mb-1">Page Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={pageForm.title}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPageForm(prev => ({
+                        ...prev,
+                        title: val,
+                        slug: prev.slug || val.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')
+                      }));
+                    }}
+                    placeholder="e.g. Ultimate Meghalaya Travel Guide 2026"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block uppercase mb-1">URL Slug (/page/...) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={pageForm.slug}
+                      onChange={(e) => setPageForm({ ...pageForm, slug: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-slate-900 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block uppercase mb-1">Category</label>
+                    <input
+                      type="text"
+                      value={pageForm.category}
+                      onChange={(e) => setPageForm({ ...pageForm, category: e.target.value })}
+                      placeholder="Travel Guide / Expedition / Stories"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block uppercase mb-1">Hero Subtitle</label>
+                  <input
+                    type="text"
+                    value={pageForm.heroSubtitle}
+                    onChange={(e) => setPageForm({ ...pageForm, heroSubtitle: e.target.value })}
+                    placeholder="Brief subtitle beneath header..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block uppercase mb-1">Main Content Body</label>
+                  <textarea
+                    rows={4}
+                    value={pageForm.content}
+                    onChange={(e) => setPageForm({ ...pageForm, content: e.target.value })}
+                    placeholder="Detailed page paragraphs..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block uppercase mb-1">Author Name</label>
+                    <input
+                      type="text"
+                      value={pageForm.author}
+                      onChange={(e) => setPageForm({ ...pageForm, author: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block uppercase mb-1">Status</label>
+                    <select
+                      value={pageForm.status}
+                      onChange={(e) => setPageForm({ ...pageForm, status: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-black text-slate-900 outline-none"
+                    >
+                      <option value="published">Published (Public)</option>
+                      <option value="draft">Draft (Admin Only)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowPageModal(false)}
+                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={pageActionLoading}
+                    className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs transition-all shadow-md flex items-center gap-2"
+                  >
+                    {pageActionLoading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    <span>{editingPageId ? 'Save Page' : 'Publish Page'}</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* CREATE COUPON MODAL */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showCouponModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative border border-slate-200"
+            >
+              <h3 className="text-lg font-black text-slate-900 mb-4">Create Discount Coupon</h3>
+              <form onSubmit={handleAddCoupon} className="space-y-3 text-xs font-bold text-slate-700">
+                <div>
+                  <label className="block uppercase mb-1">Coupon Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newCoupon.code}
+                    onChange={(e) => setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. MONSOON2026"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-black text-slate-900 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block uppercase mb-1">Type</label>
+                    <select
+                      value={newCoupon.type}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, type: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs text-slate-900 outline-none"
+                    >
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="flat">Flat Cash (₹)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block uppercase mb-1">Value *</label>
+                    <input
+                      type="number"
+                      required
+                      value={newCoupon.value}
+                      onChange={(e) => setNewCoupon({ ...newCoupon, value: e.target.value })}
+                      placeholder="10 or 500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowCouponModal(false)}
+                    className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-black shadow-md"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

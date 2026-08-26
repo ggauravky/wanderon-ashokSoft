@@ -2,89 +2,196 @@ import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Trip from '../models/Trip.js';
 import Booking from '../models/Booking.js';
+import Lead from '../models/Lead.js';
+import Review from '../models/Review.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
 let couponsList = [
-  { id: 'c1', code: 'WANDER10', type: 'percentage', value: 10, expiry: '2026-12-31', maxUses: 500, usesCount: 142, active: true },
-  { id: 'c2', code: 'SUMMER500', type: 'flat', value: 500, expiry: '2026-09-30', maxUses: 300, usesCount: 89, active: true },
-  { id: 'c3', code: 'EARLYBIRD15', type: 'percentage', value: 15, expiry: '2026-10-15', maxUses: 200, usesCount: 45, active: true },
-  { id: 'c4', code: 'FESTIVE20', type: 'percentage', value: 20, expiry: '2026-11-01', maxUses: 100, usesCount: 12, active: false }
+  { id: 'c1', code: 'WANDER10', type: 'percentage', value: 10, expiry: '2026-12-31', maxUses: 500, usesCount: 0, active: true },
+  { id: 'c2', code: 'SUMMER500', type: 'flat', value: 500, expiry: '2026-09-30', maxUses: 300, usesCount: 0, active: true },
+  { id: 'c3', code: 'EARLYBIRD15', type: 'percentage', value: 15, expiry: '2026-10-15', maxUses: 200, usesCount: 0, active: true },
+  { id: 'c4', code: 'FESTIVE20', type: 'percentage', value: 20, expiry: '2026-11-01', maxUses: 100, usesCount: 0, active: false }
 ];
 
-let memoryUsers = [
-  {
-    _id: 'usr_admin',
-    name: 'Gaurav Kumar Yadav (Admin)',
-    email: 'gaurav999@gmail.com',
-    role: 'admin',
-    influencerStatus: 'approved',
-    phone: '8542036499',
-    createdAt: new Date('2026-01-01')
-  },
-  {
-    _id: 'usr_influencer',
-    name: 'Gaurav Kumar Yadav (Influencer)',
-    email: 'influencer@wanderluxe.in',
-    role: 'influencer',
-    influencerStatus: 'approved',
-    phone: '8542036499',
-    createdAt: new Date('2026-01-05')
-  }
-];
-
-let memoryBookings = [
-  {
-    bookingId: 'WLX-2026-849201',
-    customer: { name: 'Aarav Sharma', email: 'aarav@gmail.com', phone: '9876543210' },
-    tripSnapshot: { title: 'Meghalaya Backpacking', duration: '5D/4N' },
-    numberOfTravelers: 2,
-    pricing: { finalAmount: 37000 },
-    payment: { status: 'PAID' },
-    bookingStatus: 'CONFIRMED',
-    createdAt: new Date('2026-08-01')
-  }
-];
-
-// @desc    Get aggregate analytics dashboard statistics
+// @desc    Get aggregate analytics dashboard statistics (Real MongoDB Aggregation - ZERO Mock Data)
 // @route   GET /api/admin/stats
 // @access  Private/Admin
 export const getAdminStats = async (req, res) => {
   try {
-    let usersCount = memoryUsers.length;
-    if (isDbConnected()) {
-      try {
-        usersCount = await User.countDocuments() || memoryUsers.length;
-      } catch (e) {}
+    const { range = '30d' } = req.query;
+
+    let dateFilter = {};
+    const now = new Date();
+
+    if (range === '7d') {
+      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter = { createdAt: { $gte: past7 } };
+    } else if (range === '30d') {
+      const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      dateFilter = { createdAt: { $gte: past30 } };
+    } else if (range === '90d') {
+      const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      dateFilter = { createdAt: { $gte: past90 } };
+    } else if (range === 'year') {
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+      dateFilter = { createdAt: { $gte: startOfYear } };
     }
 
+    let totalUsers = 0;
+    let totalBookings = 0;
+    let confirmedBookings = 0;
+    let pendingBookings = 0;
+    let cancelledBookings = 0;
+    let totalRevenue = 0;
+    let activeTrips = 0;
+    let totalLeads = 0;
+    let convertedLeads = 0;
+    let totalReviews = 0;
+    let monthlyRevenue = [];
+    let destinationBreakdown = [];
+    let topTrips = [];
+
+    if (isDbConnected()) {
+      try {
+        // 1. Users Count
+        totalUsers = await User.countDocuments();
+
+        // 2. Active Trips
+        activeTrips = await Trip.countDocuments({ status: { $ne: 'draft' }, isActive: { $ne: false } });
+
+        // 3. Leads Count
+        totalLeads = await Lead.countDocuments(dateFilter);
+        convertedLeads = await Lead.countDocuments({ ...dateFilter, status: 'CONVERTED' });
+
+        // 4. Reviews Count
+        totalReviews = await Review.countDocuments();
+
+        // 5. Booking Counts
+        totalBookings = await Booking.countDocuments(dateFilter);
+        confirmedBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: 'CONFIRMED' });
+        pendingBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: { $in: ['PENDING_PAYMENT', 'PENDING'] } });
+        cancelledBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: 'CANCELLED' });
+
+        // 6. Verified Revenue (Only PAID / CONFIRMED bookings)
+        const revenueAgg = await Booking.aggregate([
+          {
+            $match: {
+              ...dateFilter,
+              $or: [{ 'payment.status': 'PAID' }, { bookingStatus: 'CONFIRMED' }]
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              totalAmount: { $sum: '$pricing.finalAmount' }
+            }
+          }
+        ]);
+        totalRevenue = revenueAgg[0]?.totalAmount || 0;
+
+        // 7. Monthly Revenue & Booking Trend (Last 12 Months)
+        const monthsMap = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthlyAgg = await Booking.aggregate([
+          {
+            $match: {
+              $or: [{ 'payment.status': 'PAID' }, { bookingStatus: 'CONFIRMED' }]
+            }
+          },
+          {
+            $group: {
+              _id: {
+                year: { $year: '$createdAt' },
+                month: { $month: '$createdAt' }
+              },
+              revenue: { $sum: '$pricing.finalAmount' },
+              bookings: { $sum: 1 }
+            }
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } }
+        ]);
+
+        if (monthlyAgg.length > 0) {
+          monthlyRevenue = monthlyAgg.map(item => ({
+            month: `${monthsMap[item._id.month - 1]} ${item._id.year}`,
+            revenue: item.revenue,
+            bookings: item.bookings
+          }));
+        }
+
+        // 8. Destination Breakdown from Verified Bookings
+        const destAgg = await Booking.aggregate([
+          {
+            $group: {
+              _id: { $ifNull: ['$tripSnapshot.destination', '$tripSnapshot.location'] },
+              count: { $sum: 1 },
+              revenue: { $sum: '$pricing.finalAmount' }
+            }
+          },
+          { $sort: { count: -1 } },
+          { $limit: 6 }
+        ]);
+
+        if (destAgg.length > 0 && totalBookings > 0) {
+          destinationBreakdown = destAgg.filter(d => d._id).map(d => ({
+            name: d._id || 'Expeditions',
+            count: d.count,
+            revenue: d.revenue,
+            percentage: Math.round((d.count / (totalBookings || 1)) * 100)
+          }));
+        }
+
+        // 9. Top Trips from Bookings
+        const topTripsAgg = await Booking.aggregate([
+          {
+            $group: {
+              _id: '$tripSnapshot.title',
+              bookingCount: { $sum: 1 },
+              totalRevenue: { $sum: '$pricing.finalAmount' }
+            }
+          },
+          { $sort: { bookingCount: -1 } },
+          { $limit: 5 }
+        ]);
+
+        topTrips = topTripsAgg.filter(t => t._id).map(t => ({
+          title: t._id,
+          bookingCount: t.bookingCount,
+          totalRevenue: t.totalRevenue
+        }));
+
+      } catch (dbErr) {
+        console.warn('Analytics Aggregation Notice:', dbErr.message);
+      }
+    }
+
+    const conversionRate = totalLeads > 0 
+      ? `${((convertedLeads / totalLeads) * 100).toFixed(1)}%` 
+      : (totalUsers > 0 && confirmedBookings > 0 ? `${((confirmedBookings / totalUsers) * 100).toFixed(1)}%` : '0%');
+
     const statsData = {
-      totalRevenue: 4850000,
-      totalBookings: 1240,
-      activeTrips: 18,
-      newLeads: 342,
-      conversionRate: '14.2%',
-      totalUsers: usersCount,
-      monthlyRevenue: [
-        { month: 'Jan', revenue: 320000, bookings: 85 },
-        { month: 'Feb', revenue: 410000, bookings: 102 },
-        { month: 'Mar', revenue: 580000, bookings: 145 },
-        { month: 'Apr', revenue: 620000, bookings: 160 },
-        { month: 'May', revenue: 790000, bookings: 198 },
-        { month: 'Jun', revenue: 940000, bookings: 230 },
-        { month: 'Jul', revenue: 1190000, bookings: 320 }
-      ],
-      destinationBreakdown: [
-        { name: 'Meghalaya Backpacking', percentage: 38, count: 470 },
-        { name: 'Spiti Valley Circuit', percentage: 28, count: 348 },
-        { name: 'Bali Island Escape', percentage: 22, count: 272 },
-        { name: 'Kerala Backwaters', percentage: 12, count: 150 }
-      ]
+      totalRevenue,
+      totalBookings,
+      confirmedBookings,
+      pendingBookings,
+      cancelledBookings,
+      activeTrips,
+      totalUsers,
+      totalLeads,
+      convertedLeads,
+      conversionRate,
+      totalReviews,
+      monthlyRevenue,
+      destinationBreakdown,
+      topTrips,
+      period: range,
+      isRealData: true
     };
 
     res.json(statsData);
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error' });
+    console.error('getAdminStats Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error generating analytics' });
   }
 };
 
@@ -172,10 +279,6 @@ export const getAdminUsers = async (req, res) => {
       } catch (e) {}
     }
 
-    if (users.length === 0) {
-      users = memoryUsers;
-    }
-
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });
@@ -192,10 +295,6 @@ export const getAdminBookings = async (req, res) => {
       try {
         bookings = await Booking.find().sort({ createdAt: -1 });
       } catch (e) {}
-    }
-
-    if (bookings.length === 0) {
-      bookings = memoryBookings;
     }
 
     res.json(bookings);
@@ -220,10 +319,6 @@ export const updateUserRole = async (req, res) => {
     }
 
     if (!user) {
-      user = memoryUsers.find((u) => String(u._id) === String(id));
-    }
-
-    if (!user) {
       return res.status(404).json({ message: 'User not found.' });
     }
 
@@ -237,6 +332,10 @@ export const updateUserRole = async (req, res) => {
     res.status(500).json({ message: error.message || 'Server Error' });
   }
 };
+
+// =========================================================================
+// PROTECTED FROM REFACTOR: INFLUENCER APPROVALS & VERIFICATION ENGINE
+// =========================================================================
 
 // @desc    Get all influencer applications
 // @route   GET /api/admin/influencer-applications
@@ -253,10 +352,6 @@ export const getInfluencerApplications = async (req, res) => {
           ]
         }).select('-password').sort({ updatedAt: -1 });
       } catch (e) {}
-    }
-
-    if (applications.length === 0) {
-      applications = memoryUsers.filter((u) => u.influencerStatus !== 'none' || u.role === 'influencer');
     }
 
     res.json(applications);
@@ -280,10 +375,6 @@ export const approveInfluencerApplication = async (req, res) => {
     }
 
     if (!user) {
-      user = memoryUsers.find((u) => String(u._id) === String(id));
-    }
-
-    if (!user) {
       return res.status(404).json({ message: 'Applicant user record not found.' });
     }
 
@@ -303,14 +394,14 @@ export const approveInfluencerApplication = async (req, res) => {
     }
 
     res.json({
-      message: 'Influencer application approved successfully.',
+      success: true,
+      message: `Applicant ${user.name} approved successfully.`,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
-        influencerStatus: user.influencerStatus,
-        influencerApplication: user.influencerApplication
+        influencerStatus: user.influencerStatus
       }
     });
   } catch (error) {
@@ -324,7 +415,7 @@ export const approveInfluencerApplication = async (req, res) => {
 export const rejectInfluencerApplication = async (req, res) => {
   try {
     const { id } = req.params;
-    const { reason } = req.body;
+    const { reason = 'Profile criteria not met' } = req.body;
 
     let user = null;
     if (isDbConnected()) {
@@ -334,21 +425,15 @@ export const rejectInfluencerApplication = async (req, res) => {
     }
 
     if (!user) {
-      user = memoryUsers.find((u) => String(u._id) === String(id));
-    }
-
-    if (!user) {
       return res.status(404).json({ message: 'Applicant user record not found.' });
     }
 
-    user.role = 'user';
     user.influencerStatus = 'rejected';
     user.influencerApplication = {
       ...(user.influencerApplication || {}),
       rejectedAt: new Date(),
-      reviewedAt: new Date(),
       reviewedBy: req.user?.email || 'admin@wanderluxe.in',
-      reviewNotes: reason || 'Criteria not met'
+      rejectionReason: reason
     };
 
     if (isDbConnected() && typeof user.save === 'function') {
@@ -356,14 +441,13 @@ export const rejectInfluencerApplication = async (req, res) => {
     }
 
     res.json({
-      message: 'Influencer application rejected successfully.',
+      success: true,
+      message: `Applicant ${user.name} rejected.`,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        influencerStatus: user.influencerStatus,
-        influencerApplication: user.influencerApplication
+        influencerStatus: user.influencerStatus
       }
     });
   } catch (error) {
@@ -371,7 +455,7 @@ export const rejectInfluencerApplication = async (req, res) => {
   }
 };
 
-// @desc    Update trip-level SEO configuration
+// @desc    Update trip-level SEO metadata
 // @route   PUT /api/admin/trips/:id/seo
 // @access  Private/Admin
 export const updateTripSeo = async (req, res) => {
@@ -382,42 +466,33 @@ export const updateTripSeo = async (req, res) => {
     let trip = null;
     if (isDbConnected()) {
       try {
-        trip = await Trip.findOne({ $or: [{ _id: id }, { slug: id }, { id: id }] });
+        trip = await Trip.findById(id);
       } catch (e) {}
     }
 
-    if (!trip && isDbConnected()) {
-      try {
-        trip = new Trip({
-          title: req.body.title || 'Meghalaya Backpacking Living Root Bridges',
-          slug: id,
-          location: 'Meghalaya',
-          duration: '5D/4N',
-          price: 18500,
-          image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-        });
-      } catch (e) {}
+    if (!trip) {
+      return res.status(404).json({ message: 'Trip package not found.' });
     }
 
-    const seoData = {
-      seoTitle: seoTitle || 'WanderLuxe Departure',
-      metaDescription: metaDescription || '',
-      canonicalUrl: canonicalUrl || `https://wanderluxe.in/trip/${id}`,
-      indexingDirective: indexingDirective || 'index, follow',
-      ogTitle: ogTitle || seoTitle || '',
-      ogDescription: ogDescription || metaDescription || '',
-      ogImage: ogImage || '',
+    trip.seo = {
+      seoTitle: seoTitle || trip.seo?.seoTitle || trip.title,
+      metaDescription: metaDescription || trip.seo?.metaDescription || trip.overview,
+      canonicalUrl: canonicalUrl || trip.seo?.canonicalUrl || `https://wanderluxe.in/trip/${trip.slug}`,
+      indexingDirective: indexingDirective || trip.seo?.indexingDirective || 'index, follow',
+      ogTitle: ogTitle || trip.seo?.ogTitle || trip.title,
+      ogDescription: ogDescription || trip.seo?.ogDescription || trip.overview,
+      ogImage: ogImage || trip.seo?.ogImage || trip.heroImage || trip.image,
       structuredSchemaType: 'Product'
     };
 
-    if (trip && typeof trip.save === 'function') {
-      trip.seo = seoData;
+    if (isDbConnected() && typeof trip.save === 'function') {
       await trip.save();
     }
 
     res.json({
-      message: 'Trip-Level SEO updated successfully.',
-      seo: seoData
+      success: true,
+      message: 'Trip SEO metadata saved and deployed successfully.',
+      seo: trip.seo
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error' });

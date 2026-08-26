@@ -1,4 +1,5 @@
 import travelKnowledge from '../data/travelKnowledge.json';
+import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import { 
   Mountain, Palmtree, Trees, Waves, Compass, 
   Heart, Award, Coffee, Sun, CloudRain, Luggage, 
@@ -267,6 +268,88 @@ export const buildAITravelContext = ({
   };
 };
 
+/**
+ * Normalize single trip object to guarantee all expected fields exist
+ */
+export const normalizeTripObject = (t) => {
+  if (!t || typeof t !== 'object') return null;
+  const rawId = t.id !== undefined && t.id !== null ? t.id : (t._id || t.slug);
+  const cleanId = typeof rawId === 'number' ? rawId : String(rawId);
+  const price = Number(t.price) || 18500;
+  const originalPrice = Number(t.originalPrice) || Math.round(price * 1.2);
+
+  return {
+    ...t,
+    id: cleanId,
+    _id: t._id || cleanId,
+    title: t.title || 'Curated Expedition',
+    slug: t.slug || String(t.title || 'trip').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+    location: t.location || t.destination || 'India',
+    destination: t.destination || 'India',
+    duration: t.duration || `${t.days || 5}D/${t.nights || 4}N`,
+    days: t.days || 5,
+    nights: t.nights || 4,
+    price,
+    originalPrice,
+    discount: t.discount || Math.round(((originalPrice - price) / (originalPrice || 1)) * 100),
+    image: t.image || t.heroImage || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800',
+    heroImage: t.heroImage || t.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200',
+    gallery: Array.isArray(t.gallery) && t.gallery.length > 0 ? t.gallery : [t.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'],
+    rating: Number(t.rating) || 4.8,
+    reviews: Number(t.reviews) || 24,
+    tags: Array.isArray(t.tags) && t.tags.length > 0 ? t.tags : ['Backpacking', 'Adventure'],
+    category: t.category || 'Backpacking',
+    mood: t.mood || 'Adventure',
+    overview: t.overview || t.shortDescription || '',
+    nextBatch: t.nextBatch || '15 Sep',
+    availableBatches: Array.isArray(t.availableBatches) && t.availableBatches.length > 0 ? t.availableBatches : [
+      { id: `b-${cleanId}-1`, dates: t.nextBatch || '15 Sep - 20 Sep, 2026', seatsLeft: 8, status: 'Available' }
+    ],
+    itinerary: Array.isArray(t.itinerary) ? t.itinerary : [],
+    inclusions: Array.isArray(t.inclusions) ? t.inclusions : [],
+    exclusions: Array.isArray(t.exclusions) ? t.exclusions : [],
+    faqs: Array.isArray(t.faqs) ? t.faqs : [],
+    isActive: t.isActive !== false && t.status !== 'inactive'
+  };
+};
+
+/**
+ * Get all trips from the static central knowledge base
+ */
+export const getAllStaticTrips = () => {
+  const base = (travelKnowledge.trips && travelKnowledge.trips.length > 0) ? travelKnowledge.trips : (UPCOMING_TRIPS || []);
+  return base.map(normalizeTripObject).filter(Boolean);
+};
+
+/**
+ * Merge live MongoDB trips with knowledge base trips seamlessly
+ */
+export const mergeTripsWithLive = (liveTrips = []) => {
+  const staticTrips = getAllStaticTrips();
+  if (!Array.isArray(liveTrips) || liveTrips.length === 0) {
+    return staticTrips;
+  }
+
+  const mergedMap = new Map();
+
+  // 1. Add all static knowledge trips
+  staticTrips.forEach(t => {
+    const key = String(t.slug || t.id);
+    mergedMap.set(key, t);
+  });
+
+  // 2. Overlay / add live MongoDB trips
+  liveTrips.forEach(raw => {
+    const t = normalizeTripObject(raw);
+    if (t) {
+      const key = String(t.slug || t._id || t.id);
+      mergedMap.set(key, t);
+    }
+  });
+
+  return Array.from(mergedMap.values());
+};
+
 export default {
   getDestinations,
   getDestinationBySlug,
@@ -277,6 +360,8 @@ export default {
   getActiveOccasionContext,
   getPackingRecommendations,
   buildAITravelContext,
+  getAllStaticTrips,
+  mergeTripsWithLive,
   getLucideIcon,
   ICON_MAP
 };
