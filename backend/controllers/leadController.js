@@ -237,22 +237,63 @@ export const createLead = async (req, res) => {
   }
 };
 
-// @desc    Get all lead inquiries for Admin CRM pipeline
+// @desc    Get lead inquiries with RBAC Scoping & Privacy Masking
 // @route   GET /api/leads
-// @access  Private/Admin
+// @access  Private (Super Admin, Admin, Operations, Sales, Marketing)
 export const getLeads = async (req, res) => {
   try {
+    const userRole = (req.user?.role || 'admin').toLowerCase();
+    const userId = req.user?._id || req.user?.id;
+    const userName = req.user?.name || '';
+
+    let filter = {};
+    // Sales role: Scoped to assigned leads or open unassigned pool
+    if (userRole === 'sales') {
+      filter = {
+        $or: [
+          { assignedToUser: userId },
+          { assignedTo: userName },
+          { assignedTo: 'Sales Concierge Team' },
+          { assignedTo: '' },
+          { assignedTo: null }
+        ]
+      };
+    }
+
     let leads = [];
     if (isDbConnected()) {
       try {
-        leads = await Lead.find().sort({ createdAt: -1 });
+        leads = await Lead.find(filter).sort({ createdAt: -1 });
       } catch (dbErr) {
         console.warn('Lead DB query warning:', dbErr.message);
       }
     }
 
     if (leads.length === 0) {
-      leads = memoryLeads;
+      if (userRole === 'sales') {
+        leads = memoryLeads.filter(l => 
+          String(l.assignedToUser) === String(userId) ||
+          l.assignedTo === userName ||
+          l.assignedTo === 'Sales Concierge Team' ||
+          !l.assignedTo
+        );
+      } else {
+        leads = memoryLeads;
+      }
+    }
+
+    // Marketing role: Privacy masking on customer contact data
+    if (userRole === 'marketing') {
+      leads = leads.map(l => {
+        const doc = l.toObject ? l.toObject() : { ...l };
+        if (doc.phone) {
+          doc.phone = doc.phone.replace(/(\+?\d{1,3}\s*\d{2})\d+(\d{2})/, '$1******$2');
+        }
+        if (doc.email) {
+          doc.email = doc.email.replace(/(.{2}).+(@.+)/, '$1***$2');
+        }
+        return doc;
+      });
     }
 
     res.json(leads);
@@ -261,13 +302,13 @@ export const getLeads = async (req, res) => {
   }
 };
 
-// @desc    Update lead status & notes (Admin CRM)
+// @desc    Update lead status & notes (Sales / Admin CRM)
 // @route   PUT /api/leads/:id/status
-// @access  Private/Admin
+// @access  Private (Sales/Admin)
 export const updateLeadStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, assignedTo } = req.body;
+    const { status, notes, assignedTo, assignedToUser } = req.body;
 
     let lead = null;
     if (isDbConnected()) {
@@ -282,8 +323,9 @@ export const updateLeadStatus = async (req, res) => {
         memoryLeads[memIndex] = {
           ...memoryLeads[memIndex],
           ...(status ? { status } : {}),
-          ...(notes ? { notes } : {}),
-          ...(assignedTo ? { assignedTo } : {})
+          ...(notes !== undefined ? { notes } : {}),
+          ...(assignedTo ? { assignedTo } : {}),
+          ...(assignedToUser ? { assignedToUser } : {})
         };
         return res.json(memoryLeads[memIndex]);
       }
@@ -293,6 +335,7 @@ export const updateLeadStatus = async (req, res) => {
     if (status) lead.status = status;
     if (notes !== undefined) lead.notes = notes;
     if (assignedTo) lead.assignedTo = assignedTo;
+    if (assignedToUser) lead.assignedToUser = assignedToUser;
 
     if (isDbConnected() && typeof lead.save === 'function') {
       await lead.save();
@@ -301,6 +344,62 @@ export const updateLeadStatus = async (req, res) => {
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error updating lead' });
+  }
+};
+
+// @desc    Assign lead to sales specialist
+// @route   PUT /api/leads/:id/assign
+// @access  Private (Super Admin / Admin)
+export const assignLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedTo, assignedToUser, notes } = req.body;
+
+    if (!assignedTo && !assignedToUser) {
+      return res.status(400).json({ message: 'Assignee name or user ID is required.' });
+    }
+
+    let lead = null;
+    if (isDbConnected()) {
+      try {
+        lead = await Lead.findById(id);
+      } catch (e) {}
+    }
+
+    if (!lead) {
+      const memIndex = memoryLeads.findIndex((l) => String(l._id) === String(id));
+      if (memIndex !== -1) {
+        memoryLeads[memIndex] = {
+          ...memoryLeads[memIndex],
+          assignedTo: assignedTo || memoryLeads[memIndex].assignedTo,
+          assignedToUser: assignedToUser || memoryLeads[memIndex].assignedToUser || null,
+          notes: notes !== undefined ? notes : memoryLeads[memIndex].notes
+        };
+        return res.json({
+          success: true,
+          message: `Lead assigned to ${assignedTo || 'Sales Specialist'}.`,
+          lead: memoryLeads[memIndex]
+        });
+      }
+      return res.status(404).json({ message: 'Lead record not found.' });
+    }
+
+    if (assignedTo) lead.assignedTo = assignedTo;
+    if (assignedToUser) lead.assignedToUser = assignedToUser;
+    if (notes !== undefined) lead.notes = notes;
+
+    if (isDbConnected() && typeof lead.save === 'function') {
+      await lead.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Lead assigned to ${assignedTo || 'Sales Specialist'}.`,
+      lead
+    });
+  } catch (error) {
+    console.error('Assign lead error:', error);
+    res.status(500).json({ message: error.message || 'Server Error assigning lead' });
   }
 };
 

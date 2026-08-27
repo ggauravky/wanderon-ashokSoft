@@ -216,6 +216,17 @@ const tripSchema = new mongoose.Schema(
         type: String,
         default: 'Product'
       }
+    },
+    // Traceability to Custom Quotation Origin
+    sourceQuotationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Quotation',
+      default: null,
+      index: true
+    },
+    isCustom: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

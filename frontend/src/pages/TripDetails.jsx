@@ -27,11 +27,12 @@ const TripDetails = () => {
 
   // Find trip from static catalog or initialize
   const [trip, setTrip] = useState(() => {
-    const staticList = typeof getAllStaticTrips === 'function' ? getAllStaticTrips() : UPCOMING_TRIPS.map(t => typeof normalizeTripObject === 'function' ? normalizeTripObject(t) : t);
+    const staticList = typeof getAllStaticTrips === 'function' ? getAllStaticTrips() : (UPCOMING_TRIPS || []).map(t => typeof normalizeTripObject === 'function' ? normalizeTripObject(t) : t);
     const found = (staticList || []).find(
       (t) => String(t.id) === String(id) || String(t._id) === String(id) || t.slug === id || t.id === parseInt(id)
     );
-    return found || staticList[0] || (typeof normalizeTripObject === 'function' ? normalizeTripObject(UPCOMING_TRIPS[0]) : UPCOMING_TRIPS[0]);
+    const resolved = found || (staticList && staticList[0]) || (typeof normalizeTripObject === 'function' ? normalizeTripObject(UPCOMING_TRIPS[0]) : UPCOMING_TRIPS[0]);
+    return typeof normalizeTripObject === 'function' ? normalizeTripObject(resolved) : resolved;
   });
 
   // Fetch live trip from backend if it was created in Admin
@@ -43,7 +44,7 @@ const TripDetails = () => {
         if (res.ok) {
           const json = await res.json();
           if (json.data) {
-            const normalized = normalizeTripObject(json.data);
+            const normalized = typeof normalizeTripObject === 'function' ? normalizeTripObject(json.data) : json.data;
             setTrip(normalized);
           }
         }
@@ -54,15 +55,15 @@ const TripDetails = () => {
     fetchLiveTrip();
   }, [id]);
 
-  const weather = trip.weather || getDestinationWeather(trip.location);
-  const season = getCurrentSeason();
+  const weather = trip?.weather || (trip?.location ? getDestinationWeather(trip.location) : (trip?.destination ? getDestinationWeather(trip.destination) : getDestinationWeather('meghalaya')));
+  const season = getCurrentSeason ? getCurrentSeason() : { name: 'Autumn', weatherAdvice: 'Pleasant season' };
 
   const [selectedBatch, setSelectedBatch] = useState(
-    trip.availableBatches?.[0] || { dates: trip.nextBatch || '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' }
+    trip?.availableBatches?.[0] || { dates: trip?.nextBatch || '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' }
   );
 
   useEffect(() => {
-    if (trip.availableBatches && trip.availableBatches.length > 0) {
+    if (trip?.availableBatches && trip.availableBatches.length > 0) {
       setSelectedBatch(trip.availableBatches[0]);
     }
   }, [trip]);
@@ -189,10 +190,10 @@ const TripDetails = () => {
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-32 lg:pb-24">
       <SEOHead
-        title={`${trip.title} (${trip.duration}) - ${trip.location} | WanderLuxe Group Expeditions`}
-        description={`Book official verified group tour package for ${trip.title}. Daily itinerary, boutique stays, certified captains, transparent pricing with 0% EMI.`}
-        canonical={`/trip/${trip.id}`}
-        ogImage={trip.image}
+        title={`${trip?.title || 'Expedition'} (${trip?.duration || '5D/4N'}) - ${trip?.location || trip?.destination || 'India'} | WanderLuxe Group Expeditions`}
+        description={`Book official verified group tour package for ${trip?.title || 'Curated Expedition'}. Daily itinerary, boutique stays, certified captains, transparent pricing with 0% EMI.`}
+        canonical={`/trip/${trip?.slug || trip?.id || id}`}
+        ogImage={trip?.image || ''}
         jsonLd={[productSchema, faqSchema]}
       />
 
@@ -200,7 +201,7 @@ const TripDetails = () => {
       <AIPlannerModal
         isOpen={isPlannerOpen}
         onClose={() => setIsPlannerOpen(false)}
-        initialDestination={trip.location.split(',')[0]}
+        initialDestination={trip?.location ? trip.location.split(',')[0] : (trip?.destination || 'Meghalaya')}
       />
 
       {/* Lightbox for Gallery Photos */}
@@ -220,7 +221,7 @@ const TripDetails = () => {
               <X size={24} />
             </button>
             <img
-              src={trip.gallery ? trip.gallery[lightboxIndex] : trip.image}
+              src={trip?.gallery && trip.gallery[lightboxIndex] ? trip.gallery[lightboxIndex] : (trip?.image || '')}
               alt="Expanded high-resolution view"
               className="max-w-4xl max-h-[85vh] rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
@@ -234,8 +235,8 @@ const TripDetails = () => {
         <Breadcrumbs
           items={[
             { label: 'Destinations', path: '/destinations' },
-            { label: trip.location.split(',')[0], path: '/destinations' },
-            { label: trip.title, path: null }
+            { label: trip?.location ? trip.location.split(',')[0] : (trip?.destination || 'Destination'), path: '/destinations' },
+            { label: trip?.title || 'Trip Details', path: null }
           ]}
         />
 

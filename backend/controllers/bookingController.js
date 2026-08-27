@@ -100,7 +100,7 @@ export const evaluatePartialPaymentEligibility = (batchDateStr, balanceDueDays =
   }
 
   const msPerDay = 24 * 60 * 60 * 1000;
-  const daysUntilDeparture = Math.floor((departureDate.getTime() - now.getTime()) / msPerDay);
+  const daysUntilDeparture = Math.round((departureDate.getTime() - now.getTime()) / msPerDay);
 
   // Partial payment disallowed if departure is too close (<= balanceDueDays)
   if (daysUntilDeparture <= balanceDueDays) {

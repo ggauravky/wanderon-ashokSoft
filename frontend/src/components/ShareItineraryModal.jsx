@@ -4,7 +4,6 @@ import {
   Sparkles, Download, MessageCircle, ExternalLink, ShieldCheck,
   ToggleLeft, ToggleRight, Loader2, FileText
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { toggleShareItineraryApi } from '../services/api.js';
 import { prepareShareableItinerary, copyToClipboard, getWhatsAppShareUrl } from '../services/itineraryShareService.js';
 

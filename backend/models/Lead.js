@@ -95,7 +95,13 @@ const leadSchema = new mongoose.Schema(
       sent: { type: Boolean, default: false },
       status: { type: String, default: 'PENDING' },
       sentAt: { type: Date }
-    }
+    },
+    quotations: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Quotation'
+      }
+    ]
   },
   { timestamps: true }
 );

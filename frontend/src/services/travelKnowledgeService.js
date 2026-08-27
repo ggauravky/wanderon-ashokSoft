@@ -442,6 +442,8 @@ export default {
   getActiveOccasionContext,
   getPackingRecommendations,
   buildAITravelContext,
+  extractMonthLabel,
+  normalizeTripObject,
   getAllStaticTrips,
   mergeTripsWithLive,
   getLucideIcon,

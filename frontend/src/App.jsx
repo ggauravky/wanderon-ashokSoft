@@ -27,6 +27,7 @@ import CreatorTrip from './pages/CreatorTrip';
 import CreatorStorefront from './pages/CreatorStorefront';
 import SharedItinerary from './pages/SharedItinerary';
 import DynamicPage from './pages/DynamicPage';
+import PublicQuotationView from './pages/PublicQuotationView';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 import ScrollToTop from './components/ScrollToTop';
@@ -50,6 +51,8 @@ function App() {
             <Route path="bookings/:bookingId" element={<BookingConfirmation />} />
             <Route path="booking/verify/:token" element={<BookingVerify />} />
             <Route path="itinerary/shared/:shareToken" element={<SharedItinerary />} />
+            <Route path="quotation/:token" element={<PublicQuotationView />} />
+            <Route path="quotations/:token" element={<PublicQuotationView />} />
             <Route path="profile" element={<Profile />} />
             
             {/* Admin Routes */}
@@ -57,6 +60,16 @@ function App() {
             <Route path="admin" element={
               <AdminRoute>
                 <AdminDashboard />
+              </AdminRoute>
+            } />
+            <Route path="admin/quotations" element={
+              <AdminRoute>
+                <AdminDashboard defaultTab="quotations" />
+              </AdminRoute>
+            } />
+            <Route path="admin/quotations/:quoteId/edit" element={
+              <AdminRoute>
+                <AdminDashboard defaultTab="quotations" />
               </AdminRoute>
             } />
 

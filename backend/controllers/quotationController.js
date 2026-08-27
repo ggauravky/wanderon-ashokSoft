@@ -1,0 +1,1422 @@
+import mongoose from 'mongoose';
+import crypto from 'crypto';
+import Quotation from '../models/Quotation.js';
+import Lead from '../models/Lead.js';
+import Trip from '../models/Trip.js';
+import Booking from '../models/Booking.js';
+import User from '../models/User.js';
+import { calculateQuotationPrice } from '../services/quotationPricingService.js';
+import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
+
+const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
+
+// In-Memory fallback store for quotations during offline tests
+export let memoryQuotations = [];
+
+// Helper: State Transition State Machine
+const ALLOWED_STATE_TRANSITIONS = {
+  DRAFT: ['SENT', 'REJECTED', 'EXPIRED'],
+  SENT: ['VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'DRAFT'],
+  VIEWED: ['APPROVED', 'REJECTED', 'EXPIRED', 'DRAFT'],
+  APPROVED: ['CONVERTED', 'REJECTED'],
+  REJECTED: ['DRAFT'],
+  EXPIRED: ['DRAFT'],
+  CONVERTED: [] // Terminal state
+};
+
+export const isValidStateTransition = (currentStatus, targetStatus) => {
+  if (currentStatus === targetStatus) return true;
+  const allowed = ALLOWED_STATE_TRANSITIONS[currentStatus] || [];
+  return allowed.includes(targetStatus);
+};
+
+// Helper: Sequence Number Generator (WL-Q-YYYY-XXXXX)
+export const generateUniqueQuotationNumber = async () => {
+  const currentYear = new Date().getFullYear();
+  const prefix = `WL-Q-${currentYear}-`;
+  
+  if (isDbConnected()) {
+    try {
+      const count = await Quotation.countDocuments({
+        quotationNumber: new RegExp(`^${prefix}`)
+      });
+      const seq = String(count + 1).padStart(5, '0');
+      const candidate = `${prefix}${seq}`;
+      
+      const exists = await Quotation.findOne({ quotationNumber: candidate });
+      if (!exists) return candidate;
+
+      // Entropy fallback if race condition
+      return `${prefix}${String(count + 1).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+    } catch (e) {
+      console.warn('Quotation sequence count fallback:', e.message);
+    }
+  }
+
+  const memCount = memoryQuotations.filter(q => q.quotationNumber?.startsWith(prefix)).length;
+  return `${prefix}${String(memCount + 1).padStart(5, '0')}`;
+};
+
+// Helper: Sanitize Quotation for Public Customer View (Zero Internal Costs / Profit Margins)
+export const sanitizeForCustomer = (quotation) => {
+  if (!quotation) return null;
+  const doc = quotation.toObject ? quotation.toObject() : JSON.parse(JSON.stringify(quotation));
+
+  // 1. Remove internal margin & cost fields from pricing breakdown
+  if (doc.pricing) {
+    delete doc.pricing.internalBaseCost;
+    delete doc.pricing.internalHotelCost;
+    delete doc.pricing.internalTransportCost;
+    delete doc.pricing.internalActivityCost;
+    delete doc.pricing.internalAddOnCost;
+    delete doc.pricing.totalInternalCost;
+    delete doc.pricing.markupPercent;
+    delete doc.pricing.markupAmount;
+    delete doc.pricing.projectedMargin;
+    delete doc.pricing.projectedMarginPercent;
+  }
+
+  // 2. Strip internal costs from hotel alternatives
+  if (Array.isArray(doc.hotelOptions)) {
+    doc.hotelOptions = doc.hotelOptions.map(h => {
+      const { costPerNight, totalCost, ...safeHotel } = h;
+      return safeHotel;
+    });
+  }
+
+  // 3. Strip internal costs from transport options
+  if (Array.isArray(doc.transportOptions)) {
+    doc.transportOptions = doc.transportOptions.map(t => {
+      const { unitCost, totalCost, provider, ...safeTransport } = t;
+      return safeTransport;
+    });
+  }
+
+  // 4. Strip internal costs from activities & add-ons
+  if (Array.isArray(doc.activities)) {
+    doc.activities = doc.activities.map(a => {
+      const { unitCost, totalCost, ...safeAct } = a;
+      return safeAct;
+    });
+  }
+  if (Array.isArray(doc.addOns)) {
+    doc.addOns = doc.addOns.map(a => {
+      const { unitCost, totalCost, ...safeAddon } = a;
+      return safeAddon;
+    });
+  }
+
+  // 5. Remove internal audit logs & administrative notes
+  delete doc.auditTrail;
+  return doc;
+};
+
+// ============================================================================
+// RBAC COMMERCIAL CONCESSION VALIDATION (PART 9 & 10)
+// ============================================================================
+export const validateCommercialConcessions = (user, pricing = {}) => {
+  const userRole = (user?.role || 'sales').toLowerCase();
+  const isAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
+                  user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+
+  if (isAdmin) return null; // Admins & Operations are unrestricted
+
+  const discountType = pricing.discountType || 'none';
+  const discountVal = Number(pricing.discountValue || 0);
+  const markupPercent = Number(pricing.markupPercent || pricing.markupValue || 0);
+
+  // Sales Role Thresholds
+  if (discountType === 'percentage' && discountVal > 10) {
+    return 'Sales role is restricted to a maximum 10% discount concession. Higher discounts require Manager / Admin Approval.';
+  }
+  if (discountType === 'flat' && discountVal > 10000) {
+    return 'Sales role is restricted to a maximum ₹10,000 flat discount concession. Higher concessions require Manager / Admin Approval.';
+  }
+  if (markupPercent > 30) {
+    return 'Sales role markup is restricted to a maximum of 30%. Higher adjustments require Manager / Admin Approval.';
+  }
+
+  return null;
+};
+
+// ============================================================================
+// 1. CALCULATE PRICING PREVIEW (API Endpoint)
+// ============================================================================
+// @desc    Calculate authoritative quotation pricing breakdown
+// @route   POST /api/quotations/calculate-preview
+// @access  Private (Sales/Admin)
+export const calculateQuotationPricingPreview = async (req, res) => {
+  try {
+    const calculated = calculateQuotationPrice(req.body);
+    res.json({
+      success: true,
+      pricing: calculated.pricing,
+      pricingRules: calculated.pricingRules,
+      hotelOptions: calculated.hotelOptions,
+      transportOptions: calculated.transportOptions,
+      activities: calculated.activities,
+      addOns: calculated.addOns,
+      paymentTerms: calculated.paymentTerms,
+      tripRequirements: calculated.tripRequirements
+    });
+  } catch (error) {
+    console.error('Pricing Calculation Error:', error);
+    res.status(400).json({ message: error.message || 'Error calculating quotation price' });
+  }
+};
+
+// ============================================================================
+// 2. CREATE QUOTATION (Draft)
+// ============================================================================
+// @desc    Create a new customized quotation draft
+// @route   POST /api/quotations
+// @access  Private (Sales/Admin)
+export const createQuotation = async (req, res) => {
+  try {
+    const {
+      leadId,
+      customerId,
+      customerSnapshot,
+      tripRequirements,
+      pricingRules,
+      itinerary,
+      hotelOptions,
+      transportOptions,
+      activities,
+      addOns,
+      inclusions,
+      exclusions,
+      termsAndConditions,
+      cancellationPolicy,
+      paymentTerms,
+      pricing,
+      sourceTripId,
+      notes
+    } = req.body;
+
+    if (!customerSnapshot || !customerSnapshot.name || !customerSnapshot.email || !customerSnapshot.phone) {
+      return res.status(400).json({ message: 'Customer name, email, and phone number are required.' });
+    }
+
+    if (!tripRequirements || !tripRequirements.title || !tripRequirements.destination) {
+      return res.status(400).json({ message: 'Trip title and destination are required.' });
+    }
+
+    // 0. RBAC Commercial Concession Validation
+    const concessionError = validateCommercialConcessions(req.user, pricing);
+    if (concessionError) {
+      return res.status(403).json({ message: concessionError });
+    }
+
+    // 1. Compute Authoritative Server-Side Pricing
+    const computed = calculateQuotationPrice({
+      tripRequirements,
+      pricingRules,
+      hotelOptions,
+      transportOptions,
+      activities,
+      addOns,
+      paymentTerms,
+      pricing
+    });
+
+    const quotationNumber = await generateUniqueQuotationNumber();
+    const shareToken = crypto.randomBytes(24).toString('hex');
+    const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days validity
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Specialist';
+
+    const quotationPayload = {
+      quotationNumber,
+      version: 1,
+      leadId: leadId || null,
+      customerId: customerId || null,
+      assignedTo: req.body.assignedTo || userId,
+      assignedToSnapshot: {
+        name: userName,
+        email: req.user?.email || '',
+        phone: req.user?.phone || ''
+      },
+      createdBy: userId,
+      updatedBy: userId,
+      customerSnapshot: {
+        name: customerSnapshot.name.trim(),
+        email: customerSnapshot.email.trim().toLowerCase(),
+        phone: customerSnapshot.phone.trim(),
+        city: customerSnapshot.city || '',
+        notes: customerSnapshot.notes || notes || ''
+      },
+      tripRequirements: computed.tripRequirements,
+      pricingRules: computed.pricingRules,
+      itinerary: itinerary || [],
+      hotelOptions: computed.hotelOptions,
+      transportOptions: computed.transportOptions,
+      activities: computed.activities,
+      addOns: computed.addOns,
+      inclusions: inclusions || undefined,
+      exclusions: exclusions || undefined,
+      termsAndConditions: termsAndConditions || undefined,
+      cancellationPolicy: cancellationPolicy || undefined,
+      paymentTerms: computed.paymentTerms,
+      pricing: computed.pricing,
+      status: 'DRAFT',
+      statusHistory: [
+        {
+          status: 'DRAFT',
+          changedBy: userId,
+          changedByName: userName,
+          changedAt: new Date(),
+          reason: 'Initial quotation created'
+        }
+      ],
+      validUntil,
+      publicShare: {
+        token: shareToken,
+        isPublic: true,
+        viewCount: 0
+      },
+      sourceTripId: sourceTripId || null,
+      auditTrail: [
+        {
+          action: 'QUOTATION_CREATED',
+          performedBy: userId,
+          performedByName: userName,
+          details: { quotationNumber, finalTotal: computed.pricing.finalTotal },
+          timestamp: new Date()
+        }
+      ]
+    };
+
+    let newQuotation = null;
+    if (isDbConnected()) {
+      try {
+        newQuotation = await Quotation.create(quotationPayload);
+
+        // If linked to a CRM Lead, update Lead status and push to lead.quotations
+        if (leadId && mongoose.Types.ObjectId.isValid(leadId)) {
+          await Lead.findByIdAndUpdate(leadId, {
+            status: 'IN_PROGRESS',
+            $addToSet: { quotations: newQuotation._id }
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Quotation DB Create warning:', dbErr.message);
+      }
+    }
+
+    if (!newQuotation) {
+      newQuotation = {
+        _id: 'quot_' + Date.now(),
+        ...quotationPayload,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      memoryQuotations.unshift(newQuotation);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Quotation ${quotationNumber} drafted successfully.`,
+      quotation: newQuotation
+    });
+  } catch (error) {
+    console.error('Create Quotation Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error creating quotation' });
+  }
+};
+
+// ============================================================================
+// 3. GET ALL QUOTATIONS (Filtered Pipeline)
+// ============================================================================
+// @desc    Get all quotations with search, status, and assignment filters
+// @route   GET /api/quotations
+// @access  Private (Sales/Admin)
+export const getQuotations = async (req, res) => {
+  try {
+    const { status, leadId, assignedTo, destination, search, sortBy = 'updated', page = 1, limit = 50 } = req.query;
+
+    const andConditions = [];
+
+    if (status && status !== 'all') {
+      andConditions.push({ status });
+    }
+    if (leadId) {
+      andConditions.push({ leadId });
+    }
+    if (destination && destination !== 'all') {
+      andConditions.push({ 'tripRequirements.destination': { $regex: destination.trim(), $options: 'i' } });
+    }
+
+    // Role-based filtering: Sales users only see quotations assigned to them, created by them, or unassigned
+    const userRole = (req.user?.role || 'admin').toLowerCase();
+    const userId = req.user?._id || req.user?.id;
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
+                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+
+    if (userRole === 'sales' && !isSuperOrAdmin) {
+      andConditions.push({
+        $or: [
+          { assignedTo: userId },
+          { createdBy: userId },
+          { assignedTo: null }
+        ]
+      });
+    } else if (assignedTo && assignedTo !== 'all') {
+      andConditions.push({ assignedTo });
+    }
+
+    if (search) {
+      const q = search.trim();
+      andConditions.push({
+        $or: [
+          { quotationNumber: { $regex: q, $options: 'i' } },
+          { 'customerSnapshot.name': { $regex: q, $options: 'i' } },
+          { 'customerSnapshot.email': { $regex: q, $options: 'i' } },
+          { 'customerSnapshot.phone': { $regex: q, $options: 'i' } },
+          { 'tripRequirements.destination': { $regex: q, $options: 'i' } },
+          { 'tripRequirements.title': { $regex: q, $options: 'i' } }
+        ]
+      });
+    }
+
+    const filter = andConditions.length > 0 ? { $and: andConditions } : {};
+
+    let sortObj = { updatedAt: -1 };
+    if (sortBy === 'newest') {
+      sortObj = { createdAt: -1 };
+    } else if (sortBy === 'value') {
+      sortObj = { 'pricing.finalTotal': -1 };
+    } else if (sortBy === 'updated') {
+      sortObj = { updatedAt: -1 };
+    }
+
+    let quotations = [];
+    if (isDbConnected()) {
+      try {
+        quotations = await Quotation.find(filter)
+          .sort(sortObj)
+          .limit(Number(limit))
+          .skip((Number(page) - 1) * Number(limit))
+          .populate('leadId', 'name email phone status')
+          .populate('assignedTo', 'name email');
+      } catch (dbErr) {
+        console.warn('Quotation find warning:', dbErr.message);
+      }
+    }
+
+    if (quotations.length === 0) {
+      quotations = memoryQuotations.filter(q => {
+        if (userRole === 'sales' && !isSuperOrAdmin) {
+          const isAssigned = String(q.assignedTo) === String(userId) || String(q.createdBy) === String(userId) || !q.assignedTo;
+          if (!isAssigned) return false;
+        }
+        if (status && status !== 'all' && q.status !== status) return false;
+        if (leadId && String(q.leadId) !== String(leadId)) return false;
+        if (destination && destination !== 'all') {
+          if (!((q.tripRequirements?.destination || '').toLowerCase().includes(destination.toLowerCase()))) return false;
+        }
+        if (search) {
+          const s = search.toLowerCase();
+          const matches = (q.quotationNumber || '').toLowerCase().includes(s) ||
+                          (q.customerSnapshot?.name || '').toLowerCase().includes(s) ||
+                          (q.customerSnapshot?.email || '').toLowerCase().includes(s) ||
+                          (q.tripRequirements?.destination || '').toLowerCase().includes(s);
+          if (!matches) return false;
+        }
+        return true;
+      });
+
+      if (sortBy === 'value') {
+        quotations.sort((a, b) => (b.pricing?.finalTotal || 0) - (a.pricing?.finalTotal || 0));
+      } else if (sortBy === 'newest') {
+        quotations.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      } else {
+        quotations.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+      }
+    }
+
+    // Marketing role: Field-level security strips internal costs and profit margins
+    if (userRole === 'marketing') {
+      quotations = quotations.map(q => sanitizeForCustomer(q));
+    }
+
+    res.json({
+      success: true,
+      count: quotations.length,
+      quotations
+    });
+  } catch (error) {
+    console.error('Get Quotations Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error fetching quotations' });
+  }
+};
+
+// ============================================================================
+// 4. GET QUOTATION BY ID
+// ============================================================================
+// @desc    Get single full quotation by ID (Includes Internal Costs for authorized roles, sanitized for Marketing)
+// @route   GET /api/quotations/:id
+// @access  Private (Sales/Admin/Operations/Marketing)
+export const getQuotationById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userRole = (req.user?.role || 'admin').toLowerCase();
+
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          quotation = await Quotation.findById(id)
+            .populate('leadId')
+            .populate('assignedTo', 'name email phone')
+            .populate('createdBy', 'name email')
+            .populate('convertedTripId', 'title slug price')
+            .populate('bookingId', 'bookingId bookingStatus paymentStatus');
+        }
+        if (!quotation) {
+          quotation = await Quotation.findOne({ quotationNumber: id });
+        }
+      } catch (e) {}
+    }
+
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation record not found.' });
+    }
+
+    let responseQuotation = quotation;
+    if (userRole === 'marketing') {
+      responseQuotation = sanitizeForCustomer(quotation);
+    }
+
+    res.json({
+      success: true,
+      quotation: responseQuotation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error fetching quotation' });
+  }
+};
+
+// ============================================================================
+// 5. UPDATE QUOTATION (Draft Edit & Recalculation)
+// ============================================================================
+// @desc    Update quotation details & recalculate price
+// @route   PATCH /api/quotations/:id
+// @access  Private (Sales/Admin)
+export const updateQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation record not found.' });
+    }
+
+    if (['CONVERTED'].includes(quotation.status)) {
+      return res.status(400).json({ message: 'Cannot edit a quotation that has already been converted to a Booking or Catalog Trip.' });
+    }
+
+    // 0. RBAC Commercial Concession Validation
+    const concessionError = validateCommercialConcessions(req.user, req.body.pricing || quotation.pricing);
+    if (concessionError) {
+      return res.status(403).json({ message: concessionError });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Specialist';
+
+    // Merge & recalculate pricing
+    const mergedData = {
+      tripRequirements: req.body.tripRequirements || quotation.tripRequirements,
+      pricingRules: req.body.pricingRules || quotation.pricingRules,
+      hotelOptions: req.body.hotelOptions || quotation.hotelOptions,
+      transportOptions: req.body.transportOptions || quotation.transportOptions,
+      activities: req.body.activities || quotation.activities,
+      addOns: req.body.addOns || quotation.addOns,
+      paymentTerms: req.body.paymentTerms || quotation.paymentTerms,
+      pricing: req.body.pricing || quotation.pricing
+    };
+
+    const computed = calculateQuotationPrice(mergedData);
+
+    // Apply updates
+    if (req.body.customerSnapshot) {
+      quotation.customerSnapshot = { ...quotation.customerSnapshot, ...req.body.customerSnapshot };
+    }
+    if (req.body.itinerary) quotation.itinerary = req.body.itinerary;
+    if (req.body.inclusions) quotation.inclusions = req.body.inclusions;
+    if (req.body.exclusions) quotation.exclusions = req.body.exclusions;
+    if (req.body.termsAndConditions) quotation.termsAndConditions = req.body.termsAndConditions;
+    if (req.body.cancellationPolicy) quotation.cancellationPolicy = req.body.cancellationPolicy;
+    if (req.body.assignedTo) quotation.assignedTo = req.body.assignedTo;
+
+    quotation.tripRequirements = computed.tripRequirements;
+    quotation.pricingRules = computed.pricingRules;
+    quotation.hotelOptions = computed.hotelOptions;
+    quotation.transportOptions = computed.transportOptions;
+    quotation.activities = computed.activities;
+    quotation.addOns = computed.addOns;
+    quotation.paymentTerms = computed.paymentTerms;
+    quotation.pricing = computed.pricing;
+    quotation.updatedBy = userId;
+
+    if (Array.isArray(quotation.auditTrail)) {
+      quotation.auditTrail.push({
+        action: 'QUOTATION_UPDATED',
+        performedBy: userId,
+        performedByName: userName,
+        details: { finalTotal: computed.pricing.finalTotal },
+        timestamp: new Date()
+      });
+    }
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Quotation updated and recalculated successfully.',
+      quotation
+    });
+  } catch (error) {
+    console.error('Update Quotation Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error updating quotation' });
+  }
+};
+
+// ============================================================================
+// 6. DELETE QUOTATION
+// ============================================================================
+// @desc    Delete draft/rejected quotation (Admin Only)
+// @route   DELETE /api/quotations/:id
+// @access  Private (Admin Only)
+export const deleteQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      const deleted = await Quotation.findByIdAndDelete(id);
+      if (!deleted) return res.status(404).json({ message: 'Quotation not found.' });
+      return res.json({ success: true, message: 'Quotation deleted successfully.' });
+    }
+
+    const index = memoryQuotations.findIndex(q => String(q._id) === String(id) || q.quotationNumber === id);
+    if (index === -1) {
+      return res.status(404).json({ message: 'Quotation not found.' });
+    }
+    memoryQuotations.splice(index, 1);
+
+    res.json({ success: true, message: 'Quotation deleted successfully.' });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error deleting quotation' });
+  }
+};
+
+// ============================================================================
+// 7. SEND QUOTATION TO CUSTOMER (Status -> SENT) (PART 14)
+// ============================================================================
+// @desc    Mark quotation as SENT, capture price snapshot & notify traveler
+// @route   POST /api/quotations/:id/send
+// @access  Private (Sales/Admin)
+export const sendQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    if (!isValidStateTransition(quotation.status, 'SENT')) {
+      return res.status(400).json({ message: `Cannot send quotation from status "${quotation.status}".` });
+    }
+
+    // PART 12: Validate quotation completeness before sending
+    if (!quotation.customerSnapshot?.name?.trim() || !quotation.customerSnapshot?.email?.trim() || !quotation.customerSnapshot?.phone?.trim()) {
+      return res.status(400).json({ message: 'Cannot dispatch incomplete quotation: Customer name, email, and phone are required.' });
+    }
+    if (!quotation.tripRequirements?.title?.trim() || !quotation.tripRequirements?.destination?.trim()) {
+      return res.status(400).json({ message: 'Cannot dispatch incomplete quotation: Trip title and destination are required.' });
+    }
+    if (!Array.isArray(quotation.itinerary) || quotation.itinerary.length === 0) {
+      return res.status(400).json({ message: 'Cannot dispatch incomplete quotation: At least 1 day itinerary is required.' });
+    }
+    if (!Array.isArray(quotation.hotelOptions) || quotation.hotelOptions.length === 0) {
+      return res.status(400).json({ message: 'Cannot dispatch incomplete quotation: At least 1 accommodation option is required.' });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    quotation.status = 'SENT';
+    quotation.sentAt = new Date();
+    if (!quotation.publicShare?.token) {
+      quotation.publicShare = {
+        token: crypto.randomBytes(24).toString('hex'),
+        isPublic: true,
+        viewCount: 0
+      };
+    }
+
+    // Capture immutable price snapshot at the moment of sending (PART 14)
+    quotation.priceSnapshot = {
+      capturedAt: new Date(),
+      version: quotation.version || 1,
+      pricing: quotation.pricing,
+      hotelOptions: quotation.hotelOptions,
+      transportOptions: quotation.transportOptions,
+      activities: quotation.activities,
+      addOns: quotation.addOns,
+      tripRequirements: quotation.tripRequirements
+    };
+
+    quotation.statusHistory.push({
+      status: 'SENT',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason: 'Quotation dispatched to customer with immutable price snapshot'
+    });
+
+    quotation.auditTrail.push({
+      action: 'QUOTATION_SENT',
+      performedBy: userId,
+      performedByName: userName,
+      details: { token: quotation.publicShare.token, snapshotVersion: quotation.version || 1 },
+      timestamp: new Date()
+    });
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Quotation ${quotation.quotationNumber} sent to ${quotation.customerSnapshot?.email}.`,
+      token: quotation.publicShare.token,
+      publicUrl: `/quotation/${quotation.publicShare.token}`,
+      quotation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error sending quotation' });
+  }
+};
+
+// ============================================================================
+// 7B. CREATE QUOTATION REVISION (PART 15)
+// ============================================================================
+// @desc    Unlock a sent/viewed quotation, increment version & archive historical snapshot
+// @route   POST /api/quotations/:id/create-revision
+// @access  Private (Sales/Admin)
+export const createQuotationRevision = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Client requested modifications to itinerary / stay' } = req.body;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    if (quotation.status === 'CONVERTED') {
+      return res.status(400).json({ message: 'Cannot revise a quotation that has already been converted to a Booking.' });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    // 1. Archive current snapshot in revisions history
+    if (!Array.isArray(quotation.revisions)) quotation.revisions = [];
+    quotation.revisions.push({
+      version: quotation.version || 1,
+      revisedAt: new Date(),
+      revisedBy: userId,
+      revisedByName: userName,
+      reason: reason,
+      priceSnapshot: quotation.priceSnapshot || quotation.pricing
+    });
+
+    // 2. Increment version and reset status to DRAFT for editing
+    const oldVersion = quotation.version || 1;
+    quotation.version = oldVersion + 1;
+    quotation.status = 'DRAFT';
+    quotation.priceSnapshot = null; // Unfreeze for newly active draft
+
+    quotation.statusHistory.push({
+      status: 'DRAFT',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason: `Created Revision v${quotation.version}: ${reason}`
+    });
+
+    if (Array.isArray(quotation.auditTrail)) {
+      quotation.auditTrail.push({
+        action: 'REVISION_CREATED',
+        performedBy: userId,
+        performedByName: userName,
+        details: { previousVersion: oldVersion, newVersion: quotation.version, reason },
+        timestamp: new Date()
+      });
+    }
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Quotation unlocked for Revision v${quotation.version}.`,
+      quotation
+    });
+  } catch (error) {
+    console.error('Create Revision Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error creating quotation revision' });
+  }
+};
+
+// ============================================================================
+// 8. APPROVE QUOTATION (Status -> APPROVED)
+// ============================================================================
+// @desc    Record quotation approval
+// @route   POST /api/quotations/:id/approve
+// @access  Private (Sales/Admin)
+export const approveQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Approved by customer / sales' } = req.body;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    if (!isValidStateTransition(quotation.status, 'APPROVED')) {
+      return res.status(400).json({ message: `Cannot approve quotation from current status "${quotation.status}".` });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    quotation.status = 'APPROVED';
+    quotation.statusHistory.push({
+      status: 'APPROVED',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason
+    });
+
+    quotation.auditTrail.push({
+      action: 'QUOTATION_APPROVED',
+      performedBy: userId,
+      performedByName: userName,
+      details: { reason },
+      timestamp: new Date()
+    });
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Quotation ${quotation.quotationNumber} approved. Ready for booking conversion.`,
+      quotation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error approving quotation' });
+  }
+};
+
+// ============================================================================
+// 9. REJECT QUOTATION (Status -> REJECTED)
+// ============================================================================
+// @desc    Record quotation rejection / decline
+// @route   POST /api/quotations/:id/reject
+// @access  Private (Sales/Admin)
+export const rejectQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Customer declined quotation' } = req.body;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    if (!isValidStateTransition(quotation.status, 'REJECTED')) {
+      return res.status(400).json({ message: `Cannot reject quotation from current status "${quotation.status}".` });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    quotation.status = 'REJECTED';
+    quotation.statusHistory.push({
+      status: 'REJECTED',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason
+    });
+
+    quotation.auditTrail.push({
+      action: 'QUOTATION_REJECTED',
+      performedBy: userId,
+      performedByName: userName,
+      details: { reason },
+      timestamp: new Date()
+    });
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Quotation ${quotation.quotationNumber} marked as REJECTED.`,
+      quotation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error rejecting quotation' });
+  }
+};
+
+// ============================================================================
+// 10. CONVERT TO CATALOG TRIP (PATH A)
+// ============================================================================
+// @desc    Convert an approved customized quotation into a public Trip catalog package (Draft)
+// @route   POST /api/quotations/:id/convert-to-trip
+// @access  Private (Admin/Operations)
+export const convertToTrip = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Idempotency Check: Prevent duplicate conversions
+    if (quotation.status === 'CONVERTED' && quotation.convertedTripId) {
+      let existingTrip = null;
+      if (isDbConnected() && mongoose.Types.ObjectId.isValid(quotation.convertedTripId)) {
+        try {
+          existingTrip = await Trip.findById(quotation.convertedTripId);
+        } catch (e) {}
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'Quotation has already been converted to a Catalog Trip.',
+        trip: existingTrip || { _id: quotation.convertedTripId, title: quotation.tripRequirements?.title, status: 'draft' },
+        quotation,
+        isExisting: true
+      });
+    }
+
+    // Only APPROVED quotations can be converted
+    if (quotation.status !== 'APPROVED') {
+      return res.status(400).json({ message: `Cannot convert quotation in "${quotation.status}" status. Only APPROVED quotations can be converted to a Catalog Trip.` });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Admin Operations';
+
+    const slug = (quotation.tripRequirements.title || 'custom-trip')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '') + '-' + Date.now().toString().slice(-4);
+
+    const perPaxPrice = quotation.pricing?.perPersonPrice || Math.round((quotation.pricing?.finalTotal || 35000) / (quotation.tripRequirements.totalTravelers || 2));
+    const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
+    const selectedTransport = quotation.transportOptions?.find(t => t.selected) || quotation.transportOptions?.[0];
+
+    const tripData = {
+      title: quotation.tripRequirements.title,
+      slug,
+      location: quotation.tripRequirements.destination,
+      destination: quotation.tripRequirements.destination,
+      duration: quotation.tripRequirements.duration || `${quotation.tripRequirements.days || 5}D/${quotation.tripRequirements.nights || 4}N`,
+      days: quotation.tripRequirements.days || 5,
+      nights: quotation.tripRequirements.nights || 4,
+      price: perPaxPrice,
+      originalPrice: Math.round(perPaxPrice * 1.15),
+      discount: 15,
+      currency: 'INR',
+      image: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+      heroImage: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+      gallery: quotation.hotelOptions?.map(h => h.imageUrl).filter(Boolean) || [],
+      category: quotation.tripRequirements.travelStyle || 'Backpacking',
+      mood: quotation.tripRequirements.travelStyle || 'Adventure',
+      tags: [quotation.tripRequirements.destination, quotation.tripRequirements.travelStyle || 'Adventure', 'Curated Expedition'],
+      itinerary: Array.isArray(quotation.itinerary) ? quotation.itinerary : [],
+      inclusions: Array.isArray(quotation.inclusions) ? quotation.inclusions : [],
+      exclusions: Array.isArray(quotation.exclusions) ? quotation.exclusions : [],
+      sourceQuotationId: quotation._id,
+      isCustom: false,
+      status: 'draft', // DRAFT ONLY - Admin completes photography, SEO, batches before publishing
+      isActive: true,
+      pickupPoints: selectedTransport ? [`${selectedTransport.vehicle || 'Dedicated Vehicle'} Arrival Point`] : ['Airport / Railway Station Terminal'],
+      seo: {
+        seoTitle: `${quotation.tripRequirements.title} | WanderLuxe Journeys`,
+        metaDescription: `Experience ${quotation.tripRequirements.title} in ${quotation.tripRequirements.destination}. ${quotation.tripRequirements.duration} curated luxury itinerary.`,
+        indexingDirective: 'index, follow'
+      }
+    };
+
+    let createdTrip = null;
+    if (isDbConnected()) {
+      try {
+        createdTrip = await Trip.create(tripData);
+        quotation.convertedTripId = createdTrip._id;
+        quotation.status = 'CONVERTED';
+        quotation.statusHistory.push({
+          status: 'CONVERTED',
+          changedBy: userId,
+          changedByName: userName,
+          changedAt: new Date(),
+          reason: `Converted to Draft Catalog Trip "${createdTrip.title}" (${createdTrip.slug})`
+        });
+        quotation.auditTrail.push({
+          action: 'CONVERT_TO_TRIP',
+          performedBy: userId,
+          performedByName: userName,
+          details: { tripId: createdTrip._id, tripSlug: createdTrip.slug },
+          timestamp: new Date()
+        });
+        await quotation.save();
+      } catch (dbErr) {
+        console.warn('Trip Create DB error:', dbErr.message);
+      }
+    }
+
+    if (!createdTrip) {
+      createdTrip = {
+        _id: 'trip_' + Date.now(),
+        ...tripData,
+        createdAt: new Date()
+      };
+      quotation.convertedTripId = createdTrip._id;
+      quotation.status = 'CONVERTED';
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Quotation ${quotation.quotationNumber} successfully converted to Draft Catalog Trip. Complete SEO & batches in Trip CMS to publish.`,
+      trip: createdTrip,
+      quotation
+    });
+  } catch (error) {
+    console.error('Convert to Trip Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error converting quotation to trip' });
+  }
+};
+
+// ============================================================================
+// 11. CONVERT TO PRIVATE BOOKING (PATH B)
+// ============================================================================
+// @desc    Convert an approved quotation into a live Booking order ready for payment
+// @route   POST /api/quotations/:id/create-booking
+// @access  Private (Sales/Admin)
+export const createBookingFromQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Idempotency Check: Prevent duplicate bookings
+    if (quotation.status === 'CONVERTED' && (quotation.bookingId || quotation.bookingCode)) {
+      let existingBooking = null;
+      if (isDbConnected() && quotation.bookingId && mongoose.Types.ObjectId.isValid(quotation.bookingId)) {
+        try {
+          existingBooking = await Booking.findById(quotation.bookingId);
+        } catch (e) {}
+      }
+      return res.status(200).json({
+        success: true,
+        message: `Quotation has already been converted to Booking order ${quotation.bookingCode || 'existing'}.`,
+        booking: existingBooking || { _id: quotation.bookingId, bookingId: quotation.bookingCode },
+        checkoutUrl: `/checkout?bookingId=${quotation.bookingCode || ''}`,
+        quotation,
+        isExisting: true
+      });
+    }
+
+    // Only APPROVED quotations can be converted
+    if (quotation.status !== 'APPROVED') {
+      return res.status(400).json({ message: `Cannot create booking for quotation in "${quotation.status}" status. Only APPROVED quotations can be converted to a Booking order.` });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    const bookingId = 'WLX-2026-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const verificationToken = crypto.randomBytes(16).toString('hex');
+    const isPartial = quotation.paymentTerms?.paymentMode === 'PARTIAL';
+    const depositAmount = quotation.pricing?.depositRequired || Math.round((quotation.pricing?.finalTotal || 0) * 0.10);
+    const balanceAmount = quotation.pricing?.balanceAmount || ((quotation.pricing?.finalTotal || 0) - depositAmount);
+
+    const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
+
+    const bookingData = {
+      bookingId,
+      userId: quotation.customerId || userId || new mongoose.Types.ObjectId('64f000000000000000000001'),
+      tripId: quotation.sourceTripId || ('custom-quotation-' + quotation.quotationNumber),
+      tripSnapshot: {
+        title: quotation.tripRequirements.title,
+        location: quotation.tripRequirements.destination,
+        destination: quotation.tripRequirements.destination,
+        image: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
+        duration: quotation.tripRequirements.duration || `${quotation.tripRequirements.days}D/${quotation.tripRequirements.nights}N`,
+        batchDate: quotation.tripRequirements.startDate 
+          ? new Date(quotation.tripRequirements.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+          : 'Bespoke Private Expedition'
+      },
+      customer: {
+        name: quotation.customerSnapshot.name,
+        email: quotation.customerSnapshot.email,
+        phone: quotation.customerSnapshot.phone,
+        city: quotation.customerSnapshot.city || ''
+      },
+      travelers: [
+        {
+          name: quotation.customerSnapshot.name,
+          phone: quotation.customerSnapshot.phone,
+          email: quotation.customerSnapshot.email
+        }
+      ],
+      numberOfTravelers: quotation.tripRequirements.totalTravelers || 2,
+      occupancy: selectedHotel?.tier || 'Double Sharing',
+      paymentPlan: {
+        type: isPartial ? 'PARTIAL' : 'FULL',
+        depositPercent: quotation.paymentTerms?.depositPercent || 10,
+        balanceDueDays: quotation.paymentTerms?.balanceDueDays || 6
+      },
+      pricing: {
+        basePricePerPerson: quotation.pricing?.perPersonPrice || Math.round((quotation.pricing?.finalTotal || 0) / (quotation.tripRequirements.totalTravelers || 2)),
+        subtotal: quotation.pricing?.subtotal || 0,
+        discount: quotation.pricing?.discountAmount || 0,
+        taxes: quotation.pricing?.gstAmount || 0,
+        finalAmount: quotation.pricing?.finalTotal || 0,
+        amountPaid: 0,
+        amountOutstanding: isPartial ? balanceAmount : (quotation.pricing?.finalTotal || 0),
+        balanceDueDate: new Date(Date.now() + (quotation.paymentTerms?.balanceDueDays || 6) * 24 * 60 * 60 * 1000),
+        currency: 'INR'
+      },
+      bookingStatus: 'PENDING_PAYMENT',
+      paymentStatus: 'UNPAID',
+      sourceQuotationId: quotation._id,
+      leadId: quotation.leadId || null,
+      isCustomQuotationBooking: true,
+      qrCode: {
+        verificationToken,
+        verificationUrl: `https://wanderluxe.in/booking/verify/${verificationToken}`
+      }
+    };
+
+    let createdBooking = null;
+    if (isDbConnected()) {
+      try {
+        createdBooking = await Booking.create(bookingData);
+        quotation.bookingId = createdBooking._id;
+        quotation.bookingCode = bookingId;
+        quotation.status = 'CONVERTED';
+        quotation.statusHistory.push({
+          status: 'CONVERTED',
+          changedBy: userId,
+          changedByName: userName,
+          changedAt: new Date(),
+          reason: `Converted to Live Private Booking Order ${bookingId} (10% Deposit: ₹${depositAmount.toLocaleString()})`
+        });
+        quotation.auditTrail.push({
+          action: 'CONVERT_TO_BOOKING',
+          performedBy: userId,
+          performedByName: userName,
+          details: { bookingId: createdBooking._id, bookingCode: bookingId, depositDue: depositAmount },
+          timestamp: new Date()
+        });
+        await quotation.save();
+
+        if (quotation.leadId) {
+          await Lead.findByIdAndUpdate(quotation.leadId, { 
+            status: 'CONVERTED',
+            notes: `Lead successfully converted to Booking ${bookingId} from Quote ${quotation.quotationNumber}`
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Booking Create DB error:', dbErr.message);
+      }
+    }
+
+    if (!createdBooking) {
+      createdBooking = {
+        _id: 'book_' + Date.now(),
+        ...bookingData,
+        createdAt: new Date()
+      };
+      quotation.bookingId = createdBooking._id;
+      quotation.bookingCode = bookingId;
+      quotation.status = 'CONVERTED';
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Booking order ${bookingId} created from Quotation ${quotation.quotationNumber}. Deposit due: ₹${depositAmount.toLocaleString()}.`,
+      booking: createdBooking,
+      checkoutUrl: `/checkout?bookingId=${bookingId}`,
+      quotation
+    });
+  } catch (error) {
+    console.error('Convert to Booking Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error creating booking from quotation' });
+  }
+};
+
+// ============================================================================
+// 12. PUBLIC CUSTOMER ENDPOINTS (Sanitized View & Direct Selection)
+// ============================================================================
+// @desc    Fetch sanitized proposal by public share token
+// @route   GET /api/quotations/public/:token
+// @access  Public
+export const getPublicQuotationByToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        quotation = await Quotation.findOne({ 'publicShare.token': token });
+      } catch (e) {}
+    }
+
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
+    }
+
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation proposal not found or link has expired.' });
+    }
+
+    // Auto-advance status from SENT -> VIEWED
+    if (quotation.status === 'SENT') {
+      quotation.status = 'VIEWED';
+      if (!quotation.publicShare.firstViewedAt) {
+        quotation.publicShare.firstViewedAt = new Date();
+      }
+    }
+    quotation.publicShare.viewCount = (quotation.publicShare.viewCount || 0) + 1;
+    quotation.publicShare.lastViewedAt = new Date();
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    const sanitized = sanitizeForCustomer(quotation);
+
+    res.json({
+      success: true,
+      quotation: sanitized
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error retrieving public quotation' });
+  }
+};
+
+// @desc    Customer updates selected hotel / transport options via public interactive preview
+// @route   POST /api/quotations/public/:token/select-options
+// @access  Public
+export const updatePublicSelectedOptions = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { selectedHotelId, selectedHotelIds, selectedTransportId, selectedAddOnIds } = req.body;
+
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        quotation = await Quotation.findOne({ 'publicShare.token': token });
+      } catch (e) {}
+    }
+
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
+    }
+
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation proposal not found.' });
+    }
+
+    if (['APPROVED', 'CONVERTED', 'REJECTED', 'EXPIRED'].includes(quotation.status)) {
+      return res.status(400).json({ message: `Options cannot be modified while quotation status is "${quotation.status}".` });
+    }
+
+    // Update selection flags
+
+    if (selectedHotelId && Array.isArray(quotation.hotelOptions)) {
+      const targetHotel = quotation.hotelOptions.find(h => h.optionId === selectedHotelId);
+      const targetSeg = targetHotel?.segmentId || 'seg_default';
+      quotation.hotelOptions.forEach(h => {
+        if ((h.segmentId || 'seg_default') === targetSeg) {
+          h.selected = (h.optionId === selectedHotelId);
+        }
+      });
+    } else if (Array.isArray(selectedHotelIds) && Array.isArray(quotation.hotelOptions)) {
+      quotation.hotelOptions.forEach(h => {
+        h.selected = selectedHotelIds.includes(h.optionId);
+      });
+    }
+
+    if (selectedTransportId && Array.isArray(quotation.transportOptions)) {
+      quotation.transportOptions.forEach(t => {
+        t.selected = (t.optionId === selectedTransportId);
+      });
+    }
+
+    if (Array.isArray(selectedAddOnIds) && Array.isArray(quotation.addOns)) {
+      quotation.addOns.forEach(a => {
+        a.selected = selectedAddOnIds.includes(a.addonId);
+      });
+    }
+
+    // Recalculate authoritative pricing
+    const computed = calculateQuotationPrice(quotation);
+    quotation.hotelOptions = computed.hotelOptions;
+    quotation.transportOptions = computed.transportOptions;
+    quotation.activities = computed.activities;
+    quotation.addOns = computed.addOns;
+    quotation.pricing = computed.pricing;
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    const sanitized = sanitizeForCustomer(quotation);
+
+    res.json({
+      success: true,
+      message: 'Selections updated and pricing recalculated.',
+      quotation: sanitized
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error updating quotation options' });
+  }
+};
+
+// @desc    Customer records Accept / Decline decision directly on public proposal
+// @route   POST /api/quotations/public/:token/decision
+// @access  Public
+export const customerQuotationDecision = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { decision, customerNotes } = req.body; // decision: 'APPROVE' | 'REJECT'
+
+    if (!decision || !['APPROVE', 'REJECT'].includes(decision.toUpperCase())) {
+      return res.status(400).json({ message: 'Valid decision ("APPROVE" or "REJECT") is required.' });
+    }
+
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        quotation = await Quotation.findOne({ 'publicShare.token': token });
+      } catch (e) {}
+    }
+
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
+    }
+
+    if (!quotation) {
+      return res.status(404).json({ message: 'Quotation proposal not found.' });
+    }
+
+    const targetStatus = decision.toUpperCase() === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+
+    // PART 15: Expiry Guard Check
+    const isExpired = quotation.validUntil && new Date(quotation.validUntil).getTime() < Date.now();
+    if (isExpired && targetStatus === 'APPROVED') {
+      return res.status(400).json({
+        message: 'This quotation proposal has expired. Please contact your concierge specialist for a revised proposal.'
+      });
+    }
+
+    if (!isValidStateTransition(quotation.status, targetStatus)) {
+      return res.status(400).json({ message: `Quotation cannot be transitioned to "${targetStatus}" from current status "${quotation.status}".` });
+    }
+
+    quotation.status = targetStatus;
+    quotation.publicShare.customerDecisionAt = new Date();
+    if (targetStatus === 'APPROVED') {
+      quotation.approvedAt = new Date();
+    }
+    if (customerNotes) quotation.publicShare.customerNotes = customerNotes;
+
+    quotation.statusHistory.push({
+      status: targetStatus,
+      changedByName: quotation.customerSnapshot?.name || 'Customer',
+      changedAt: new Date(),
+      reason: customerNotes || `Decision recorded directly by traveler (${targetStatus})`
+    });
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    const sanitized = sanitizeForCustomer(quotation);
+
+    res.json({
+      success: true,
+      message: targetStatus === 'APPROVED' 
+        ? 'Thank you! Your quotation has been approved. Our concierge team is preparing your booking order.' 
+        : 'Thank you for your feedback. Our specialist will contact you with a revised proposal.',
+      quotation: sanitized
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error processing customer decision' });
+  }
+};

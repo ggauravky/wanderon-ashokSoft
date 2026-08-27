@@ -72,11 +72,42 @@ export const protect = async (req, res, next) => {
   }
 };
 
-// @desc Middleware to enforce Admin role server-side
+// @desc Reusable role requirement middleware
+export const requireRoles = (...allowedRoles) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  const userRole = (req.user.role || 'user').toLowerCase();
+  const isSuperEmail = req.user.email?.toLowerCase() === ADMIN_EMAIL;
+
+  if (isSuperEmail || userRole === 'super_admin' || allowedRoles.map(r => r.toLowerCase()).includes(userRole)) {
+    return next();
+  }
+  return res.status(403).json({
+    message: `Access denied: Action requires one of following roles: [${allowedRoles.join(', ')}]. Current role: "${userRole}".`
+  });
+};
+
+// @desc Middleware to enforce Super Admin role server-side
+export const superAdminOnly = (req, res, next) => {
+  if (
+    req.user && (
+      req.user.role === 'super_admin' ||
+      req.user.email?.toLowerCase() === ADMIN_EMAIL
+    )
+  ) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Super Admin privileges required.' });
+  }
+};
+
+// @desc Middleware to enforce Admin or Super Admin role server-side
 export const adminOnly = (req, res, next) => {
   if (
     req.user && (
       req.user.role === 'admin' || 
+      req.user.role === 'super_admin' ||
       req.user.email?.toLowerCase() === ADMIN_EMAIL
     )
   ) {
@@ -86,12 +117,55 @@ export const adminOnly = (req, res, next) => {
   }
 };
 
+// @desc Middleware to enforce Sales, Operations, or Admin roles
+export const salesOrAdmin = (req, res, next) => {
+  if (
+    req.user && (
+      ['admin', 'super_admin', 'operations', 'sales'].includes(req.user.role) ||
+      req.user.email?.toLowerCase() === ADMIN_EMAIL
+    )
+  ) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Sales, Operations, or Admin privileges required.' });
+  }
+};
+
+// @desc Middleware to enforce Operations or Admin roles (Blocks Sales & Marketing)
+export const operationsOrAdmin = (req, res, next) => {
+  if (
+    req.user && (
+      ['admin', 'super_admin', 'operations'].includes(req.user.role) ||
+      req.user.email?.toLowerCase() === ADMIN_EMAIL
+    )
+  ) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Operations or Admin privileges required.' });
+  }
+};
+
+// @desc Middleware to enforce Marketing or Admin roles
+export const marketingOrAdmin = (req, res, next) => {
+  if (
+    req.user && (
+      ['admin', 'super_admin', 'marketing'].includes(req.user.role) ||
+      req.user.email?.toLowerCase() === ADMIN_EMAIL
+    )
+  ) {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied: Marketing or Admin privileges required.' });
+  }
+};
+
 // @desc Middleware to enforce Influencer/Creator approval status server-side
 export const influencerOnly = (req, res, next) => {
   const isApproved = req.user && (
     req.user.role === 'admin' ||
-    req.user.role === 'influencer' ||
-    req.user.influencerStatus === 'approved'
+    req.user.role === 'super_admin' ||
+    req.user.influencerStatus === 'approved' ||
+    req.user.email?.toLowerCase() === ADMIN_EMAIL
   );
 
   if (isApproved) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
   DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, 
   Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, 
   Globe, Save, Upload, FileText, ArrowUpRight, MessageSquare, 
-  Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle
+  Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
+  Share2, Copy, Send, CreditCard, ExternalLink, Compass, Hotel, Car
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,19 +16,25 @@ import {
   deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi,
   getAdminTripsApi, createTripApi, updateTripApi, deleteTripApi, uploadImageApi,
   getAllAdminPagesApi, createPageApi, updatePageApi, deletePageApi,
-  getAdminLeadsApi, updateLeadStatusApi
+  getAdminLeadsApi, updateLeadStatusApi, assignLeadApi,
+  getQuotationsApi, deleteQuotationApi, sendQuotationApi, createBookingFromQuotationApi, convertQuotationToTripApi
 } from '../services/api.js';
 import { getDestinations } from '../services/travelKnowledgeService.js';
+import QuotationBuilderWizard from '../components/QuotationBuilderWizard';
+import QuotationPreviewModal from '../components/QuotationPreviewModal';
+import ShareQuotationModal from '../components/ShareQuotationModal';
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const { 
     user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility,
     influencerApplications, fetchInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication
   } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { quoteId } = useParams();
 
   // Active Main Navigation Tab
-  const [activeTab, setActiveTab] = useState('analytics');
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || defaultTab || 'analytics');
 
   // ==========================================
   // 1. REAL ANALYTICS STATE (ZERO MOCK DATA)
@@ -174,6 +181,23 @@ const AdminDashboard = () => {
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [newCoupon, setNewCoupon] = useState({ code: '', type: 'percentage', value: '', expiry: '2026-12-31', maxUses: 500 });
 
+  // ==========================================
+  // 6. QUOTATIONS PIPELINE STATE (PHASE 2)
+  // ==========================================
+  const [quotations, setQuotations] = useState([]);
+  const [quotationsLoading, setQuotationsLoading] = useState(false);
+  const [quotationSearch, setQuotationSearch] = useState('');
+  const [quotationStatusFilter, setQuotationStatusFilter] = useState('all');
+  const [quotationDestinationFilter, setQuotationDestinationFilter] = useState('all');
+  const [quotationSalesFilter, setQuotationSalesFilter] = useState('all');
+  const [quotationSort, setQuotationSort] = useState('updated');
+  const [showQuotationWizard, setShowQuotationWizard] = useState(false);
+  const [activeQuotationId, setActiveQuotationId] = useState(quoteId || null);
+  const [activeQuotationLead, setActiveQuotationLead] = useState(null);
+  const [copiedQuoteToken, setCopiedQuoteToken] = useState(null);
+  const [previewQuotation, setPreviewQuotation] = useState(null);
+  const [shareModalQuotation, setShareModalQuotation] = useState(null);
+
   // Load All Real Admin Data
   const fetchAllAdminData = async () => {
     try {
@@ -207,6 +231,10 @@ const AdminDashboard = () => {
     }
 
     try {
+      setBookingsLoading?.(true);
+    } catch (e) {}
+
+    try {
       const bookingsRes = await getAdminBookingsApi();
       setBookings(Array.isArray(bookingsRes) ? bookingsRes : []);
     } catch (err) {
@@ -218,6 +246,16 @@ const AdminDashboard = () => {
       setLeads(Array.isArray(leadsRes) ? leadsRes : []);
     } catch (err) {
       console.warn('Leads fetch warning:', err.message);
+    }
+
+    try {
+      setQuotationsLoading(true);
+      const quoteRes = await getQuotationsApi({ sortBy: quotationSort });
+      setQuotations(Array.isArray(quoteRes.quotations) ? quoteRes.quotations : []);
+    } catch (err) {
+      console.warn('Quotations fetch warning:', err.message);
+    } finally {
+      setQuotationsLoading(false);
     }
 
     try {
@@ -239,6 +277,136 @@ const AdminDashboard = () => {
         await fetchInfluencerApplications();
       } catch (e) {}
     }
+  };
+
+  const fetchQuotationsList = async () => {
+    try {
+      setQuotationsLoading(true);
+      const params = {};
+      if (quotationStatusFilter !== 'all') params.status = quotationStatusFilter;
+      if (quotationDestinationFilter !== 'all') params.destination = quotationDestinationFilter;
+      if (quotationSalesFilter !== 'all') params.assignedTo = quotationSalesFilter;
+      if (quotationSearch.trim()) params.search = quotationSearch.trim();
+      params.sortBy = quotationSort;
+
+      const res = await getQuotationsApi(params);
+      setQuotations(Array.isArray(res.quotations) ? res.quotations : []);
+    } catch (err) {
+      console.warn('Filter quotations warning:', err.message);
+    } finally {
+      setQuotationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'quotations') {
+      fetchQuotationsList();
+    }
+  }, [activeTab, quotationStatusFilter, quotationDestinationFilter, quotationSalesFilter, quotationSort]);
+
+  useEffect(() => {
+    if (quoteId) {
+      setActiveTab('quotations');
+      setActiveQuotationId(quoteId);
+      setActiveQuotationLead(null);
+      setShowQuotationWizard(true);
+    } else if (initialAction === 'new') {
+      setActiveTab('quotations');
+      setActiveQuotationId(null);
+      setActiveQuotationLead(null);
+      setShowQuotationWizard(true);
+    }
+  }, [quoteId, initialAction]);
+
+  const handleCreateNewQuotation = () => {
+    setActiveQuotationId(null);
+    setActiveQuotationLead(null);
+    setShowQuotationWizard(true);
+  };
+
+  const handleCreateQuotationFromLead = (lead) => {
+    setActiveQuotationId(null);
+    setActiveQuotationLead(lead);
+    setShowQuotationWizard(true);
+  };
+
+  const handleEditQuotation = (id) => {
+    setActiveQuotationId(id);
+    setActiveQuotationLead(null);
+    setShowQuotationWizard(true);
+  };
+
+  const handleDeleteQuotation = async (id, quoteNum) => {
+    if (!window.confirm(`Permanently delete quotation ${quoteNum || ''}? This action cannot be undone.`)) return;
+    try {
+      await deleteQuotationApi(id);
+      setQuotations(prev => prev.filter(q => String(q._id || q.id) !== String(id)));
+    } catch (err) {
+      alert(err.message || 'Failed to delete quotation');
+    }
+  };
+
+  const handleSendQuotationAction = async (id, quoteNum, custEmail) => {
+    if (!window.confirm(`Send quotation ${quoteNum} to ${custEmail}?`)) return;
+    try {
+      const res = await sendQuotationApi(id);
+      if (res.quotation) {
+        setQuotations(prev => prev.map(q => (String(q._id || q.id) === String(id) ? res.quotation : q)));
+        alert(`Quotation ${quoteNum} sent successfully!`);
+      }
+    } catch (err) {
+      alert('Failed to send: ' + err.message);
+    }
+  };
+
+  const handleConvertQuotationToBookingAction = async (id, quoteNum) => {
+    if (!window.confirm(`Convert quotation ${quoteNum} into a live private booking order?`)) return;
+    try {
+      const res = await createBookingFromQuotationApi(id);
+      if (res.booking) {
+        alert(res.message || `Booking order ${res.booking.bookingId} created successfully!`);
+        fetchQuotationsList();
+        fetchAllAdminData();
+      }
+    } catch (err) {
+      alert('Failed to convert to booking: ' + err.message);
+    }
+  };
+
+  const handleConvertQuotationToTripAction = async (id, quoteNum) => {
+    if (!window.confirm(`Convert quotation ${quoteNum} into a Draft Catalog Trip package?`)) return;
+    try {
+      const res = await convertQuotationToTripApi(id);
+      if (res.trip) {
+        alert(res.message || `Draft Catalog Trip "${res.trip.title}" created successfully! Complete SEO & availability in Trip CMS.`);
+        fetchQuotationsList();
+        fetchAllAdminData();
+      }
+    } catch (err) {
+      alert('Failed to convert to trip: ' + err.message);
+    }
+  };
+
+  const handleAssignLeadAction = async (leadId, currentAssignee) => {
+    const newAssignee = window.prompt(`Assign lead to Sales Specialist:`, currentAssignee || 'Sales Concierge Specialist');
+    if (!newAssignee) return;
+    try {
+      const res = await assignLeadApi(leadId, { assignedTo: newAssignee });
+      if (res.lead) {
+        setLeads(prev => prev.map(l => (String(l._id || l.id) === String(leadId) ? res.lead : l)));
+        alert(`Lead successfully assigned to ${newAssignee}!`);
+      }
+    } catch (err) {
+      alert('Failed to assign lead: ' + err.message);
+    }
+  };
+
+  const handleCopyProposalLink = (token) => {
+    if (!token) return;
+    const url = `${window.location.origin}/quotation/${token}`;
+    navigator.clipboard.writeText(url);
+    setCopiedQuoteToken(token);
+    setTimeout(() => setCopiedQuoteToken(null), 3000);
   };
 
   useEffect(() => {
@@ -623,31 +791,43 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Master Tab Selector */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-8">
-          {[
-            { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} /> },
-            { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} /> },
-            { id: 'pages', label: 'Pages CMS', icon: <FileText size={15} /> },
-            { id: 'bookings_crm', label: 'Bookings & CRM', icon: <Ticket size={15} /> },
-            { id: 'influencer_verification', label: 'Creator Approvals', icon: <UserCheck size={15} /> },
-            { id: 'payouts', label: 'Payouts', icon: <Wallet size={15} /> },
-            { id: 'coupons', label: 'Discounts', icon: <Tag size={15} /> },
-            { id: 'users', label: 'Users & Roles', icon: <Users size={15} /> }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`p-3 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-xs ${
-                activeTab === tab.id
-                  ? 'bg-slate-900 text-white shadow-md border-b-2 border-emerald-500'
-                  : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* Role-Adaptive Master Tab Selector */}
+        {(() => {
+          const userRole = (user?.role || 'admin').toLowerCase();
+          const isSuperOrAdmin = ['admin', 'super_admin'].includes(userRole) || user?.email?.toLowerCase() === 'gaurav999@gmail.com';
+
+          const allTabDefs = [
+            { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
+            { id: 'quotations', label: 'Quotations', icon: <FileText size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
+            { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
+            { id: 'pages', label: 'Pages CMS', icon: <Globe size={15} />, roles: ['super_admin', 'admin', 'marketing'] },
+            { id: 'bookings_crm', label: 'Bookings & CRM', icon: <Ticket size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales'] },
+            { id: 'influencer_verification', label: 'Creator Approvals', icon: <UserCheck size={15} />, roles: ['super_admin', 'admin'] },
+            { id: 'payouts', label: 'Payouts', icon: <Wallet size={15} />, roles: ['super_admin', 'admin'] },
+            { id: 'coupons', label: 'Discounts', icon: <Tag size={15} />, roles: ['super_admin', 'admin'] },
+            { id: 'users', label: 'Users & Roles', icon: <Users size={15} />, roles: ['super_admin', 'admin'] }
+          ];
+
+          const visibleTabs = allTabDefs.filter(t => isSuperOrAdmin || t.roles.includes(userRole));
+
+          return (
+            <div className="flex flex-wrap gap-2 mb-8">
+              {visibleTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-4 py-3 rounded-2xl text-xs font-black transition-all flex items-center justify-center gap-2 whitespace-nowrap shadow-xs ${
+                    activeTab === tab.id
+                      ? 'bg-slate-900 text-white shadow-md border-b-2 border-emerald-500'
+                      : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50'
+                  }`}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ========================================================================= */}
         {/* TAB 1: REAL ANALYTICS ENGINE (ZERO MOCK / ZERO RANDOM NUMBERS) */}
@@ -735,6 +915,39 @@ const AdminDashboard = () => {
               </div>
             </div>
 
+            {/* Quotation Pipeline Conversion KPIs (Phase 5) */}
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText size={18} className="text-emerald-600" />
+                  <h3 className="font-black text-slate-900 text-sm uppercase">Quotation Conversion Pipeline</h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-400 font-mono">Live Proposal Lifecycle</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Quotes Drafted</div>
+                  <div className="text-xl font-black text-slate-900 mt-1">{stats.totalQuotations || quotations.length || 0}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Commercial Proposals</div>
+                </div>
+                <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
+                  <div className="text-[10px] font-bold text-blue-600 uppercase">Quotes Sent / Viewed</div>
+                  <div className="text-xl font-black text-blue-900 mt-1">{stats.sentQuotations || quotations.filter(q => ['SENT', 'VIEWED', 'APPROVED', 'CONVERTED'].includes(q.status)).length || 0}</div>
+                  <div className="text-[10px] text-blue-600 mt-0.5">Delivered to Clients</div>
+                </div>
+                <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/50">
+                  <div className="text-[10px] font-bold text-emerald-600 uppercase">Quotes Approved</div>
+                  <div className="text-xl font-black text-emerald-900 mt-1">{stats.approvedQuotations || quotations.filter(q => ['APPROVED', 'CONVERTED'].includes(q.status)).length || 0}</div>
+                  <div className="text-[10px] text-emerald-600 mt-0.5">Client Verified</div>
+                </div>
+                <div className="bg-purple-50/50 p-4 rounded-2xl border border-purple-100/50">
+                  <div className="text-[10px] font-bold text-purple-600 uppercase">Quote ➔ Booking Conv.</div>
+                  <div className="text-xl font-black text-purple-900 mt-1">{stats.quotationConversionRate || (quotations.length > 0 ? `${((quotations.filter(q => q.status === 'CONVERTED').length / quotations.length) * 100).toFixed(1)}%` : '0.0%')}</div>
+                  <div className="text-[10px] text-purple-600 mt-0.5">{stats.convertedQuotations || quotations.filter(q => q.status === 'CONVERTED').length || 0} Converted Orders</div>
+                </div>
+              </div>
+            </div>
+
             {/* Monthly Trend & Destination Breakdown */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Monthly Revenue Chart / List */}
@@ -803,7 +1016,374 @@ const AdminDashboard = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: TRIP CMS (FULL 10-SECTION CREATOR / EDITOR WIZARD) */}
+        {/* TAB 2: QUOTATIONS CMS & PIPELINE (PHASE 2) */}
+        {/* ========================================================================= */}
+        {activeTab === 'quotations' && (
+          <div className="space-y-6">
+            {/* Header & Quick Action */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <FileText size={22} className="text-emerald-600" /> Quotation Proposals & Custom Journeys ({quotations.length})
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  Authoritative multi-tier quotation engine. Build custom itineraries, alternative hotel/fleet tiers, and convert to bookings.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                <button
+                  onClick={fetchQuotationsList}
+                  disabled={quotationsLoading}
+                  className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Refresh Quotations"
+                >
+                  <RefreshCw size={15} className={quotationsLoading ? 'animate-spin' : ''} />
+                </button>
+
+                <button
+                  onClick={handleCreateNewQuotation}
+                  className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2 shrink-0 cursor-pointer"
+                >
+                  <Plus size={16} /> Create New Quotation
+                </button>
+              </div>
+            </div>
+
+            {/* Comprehensive Filters Bar */}
+            <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+                {/* Search */}
+                <div className="relative md:col-span-2">
+                  <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    value={quotationSearch}
+                    onChange={(e) => setQuotationSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && fetchQuotationsList()}
+                    placeholder="Search Quotation #, customer, destination..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-2.5 text-xs font-bold text-slate-900 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <select
+                    value={quotationStatusFilter}
+                    onChange={(e) => setQuotationStatusFilter(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="DRAFT">Draft</option>
+                    <option value="SENT">Sent</option>
+                    <option value="VIEWED">Viewed</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                    <option value="EXPIRED">Expired</option>
+                    <option value="CONVERTED">Converted</option>
+                  </select>
+                </div>
+
+                {/* Destination Filter */}
+                <div>
+                  <select
+                    value={quotationDestinationFilter}
+                    onChange={(e) => setQuotationDestinationFilter(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="all">All Destinations</option>
+                    {getDestinations().map((d) => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort Order */}
+                <div>
+                  <select
+                    value={quotationSort}
+                    onChange={(e) => setQuotationSort(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  >
+                    <option value="updated">Recently Updated</option>
+                    <option value="newest">Newest Created</option>
+                    <option value="value">Highest Value</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="bg-white rounded-3xl shadow-xs border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[1050px]">
+                  <thead className="bg-slate-900 text-white uppercase font-black text-[10px]">
+                    <tr>
+                      <th className="p-4">Quotation #</th>
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Destination & Dates</th>
+                      <th className="p-4">Amount & Deposit</th>
+                      <th className="p-4">Assigned Sales</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4">Updated</th>
+                      <th className="p-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {quotations.length > 0 ? (
+                      quotations.map((q) => {
+                        const cust = q.customerSnapshot || {};
+                        const reqs = q.tripRequirements || {};
+                        const pricing = q.pricing || {};
+                        const isConverted = q.status === 'CONVERTED';
+                        const isApproved = q.status === 'APPROVED';
+                        const cleanPhone = String(cust.phone || '').replace(/\D/g, '');
+                        const waLink = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(`Hi ${cust.name || 'Traveler'}, this is regarding your WanderLuxe journey quotation ${q.quotationNumber}. Let us know if you need any adjustments!`)}`;
+
+                        return (
+                          <tr key={q._id || q.id} className="hover:bg-slate-50 transition-colors">
+                            {/* Quotation Number & Lead badge */}
+                            <td className="p-4">
+                              <div className="space-y-1">
+                                <div className="font-mono font-black text-slate-900 text-xs flex items-center gap-1.5">
+                                  <span>{q.quotationNumber || 'WL-Q-2026-DRAFT'}</span>
+                                </div>
+                                {q.leadId && (
+                                  <span className="text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200 inline-block">
+                                    CRM Lead
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Customer Contact */}
+                            <td className="p-4">
+                              <div className="space-y-1">
+                                <div className="font-bold text-slate-900">{cust.name || 'Anonymous Traveler'}</div>
+                                <div className="text-[11px] text-slate-400 font-mono">{cust.email}</div>
+                                {cust.phone && (
+                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                    <a
+                                      href={`tel:${cust.phone}`}
+                                      className="text-[10px] font-bold text-slate-700 hover:text-emerald-600 flex items-center gap-1 bg-slate-100 px-1.5 py-0.5 rounded"
+                                    >
+                                      <Phone size={9} /> {cust.phone}
+                                    </a>
+                                    <a
+                                      href={waLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] font-black text-emerald-700 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded"
+                                    >
+                                      <MessageSquare size={9} /> WA
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Destination & Dates */}
+                            <td className="p-4">
+                              <div className="space-y-0.5 max-w-[220px]">
+                                <div className="font-black text-slate-800 truncate" title={reqs.title || reqs.destination}>
+                                  {reqs.destination || 'Custom Destination'}
+                                </div>
+                                <div className="text-[10px] text-indigo-700 font-bold flex items-center gap-1">
+                                  <Clock size={10} /> {reqs.duration || '5D/4N'} • {reqs.totalTravelers || 2} Pax
+                                </div>
+                                {reqs.startDate && (
+                                  <div className="text-[10px] text-slate-400">
+                                    Depart: {new Date(reqs.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Amount & Deposit */}
+                            <td className="p-4">
+                              <div className="space-y-0.5">
+                                <div className="font-mono font-black text-slate-900 text-sm">
+                                  ₹{(pricing.finalTotal || 0).toLocaleString()}
+                                </div>
+                                <div className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-block font-mono">
+                                  Dep: ₹{(pricing.depositRequired || 0).toLocaleString()} (10%)
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Assigned Sales */}
+                            <td className="p-4">
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-slate-800">
+                                  {q.assignedToSnapshot?.name || (q.assignedTo?.name || 'Sales Team')}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  {q.assignedToSnapshot?.email || q.assignedTo?.email || 'sales@wanderluxe.in'}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Status Badge */}
+                            <td className="p-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase whitespace-nowrap ${
+                                q.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                q.status === 'SENT' ? 'bg-blue-100 text-blue-800 border border-blue-300' :
+                                q.status === 'VIEWED' ? 'bg-indigo-100 text-indigo-800 border border-indigo-300' :
+                                q.status === 'CONVERTED' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
+                                q.status === 'REJECTED' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                                q.status === 'EXPIRED' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                              }`}>
+                                {q.status || 'DRAFT'}
+                              </span>
+                            </td>
+
+                            {/* Updated Date */}
+                            <td className="p-4 font-mono text-[11px] text-slate-400">
+                              {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Recent'}
+                            </td>
+
+                            {/* Action Buttons */}
+                            <td className="p-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Edit / Open Builder */}
+                                <button
+                                  onClick={() => handleEditQuotation(q._id || q.id)}
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
+                                  title="Edit / Open Builder"
+                                >
+                                  <Edit3 size={13} />
+                                </button>
+
+                                {/* Preview Proposal Document Modal */}
+                                <button
+                                  onClick={() => setPreviewQuotation(q)}
+                                  className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors cursor-pointer"
+                                  title="Preview Official Proposal Document"
+                                >
+                                  <Eye size={13} />
+                                </button>
+
+                                {/* Share Link & WhatsApp Modal */}
+                                <button
+                                  onClick={() => setShareModalQuotation(q)}
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
+                                  title="Share Proposal via WhatsApp / Copy Link / PDF"
+                                >
+                                  <Share2 size={13} />
+                                </button>
+
+                                {/* Open Public Link in New Tab */}
+                                {q.publicShare?.token && (
+                                  <a
+                                    href={`/quotation/${q.publicShare.token}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl transition-colors"
+                                    title="Open Public Customer Proposal"
+                                  >
+                                    <ExternalLink size={13} />
+                                  </a>
+                                )}
+
+                                {/* Send */}
+                                {q.status === 'DRAFT' && (
+                                  <button
+                                    onClick={() => handleSendQuotationAction(q._id || q.id, q.quotationNumber, cust.email)}
+                                    className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-colors cursor-pointer"
+                                    title="Send to Customer"
+                                  >
+                                    <Send size={13} />
+                                  </button>
+                                )}
+
+                                {/* Conversion Actions (Path A & Path B) */}
+                                {!isConverted && (
+                                  <>
+                                    {/* Convert to Private Booking (Path B) */}
+                                    <button
+                                      onClick={() => handleConvertQuotationToBookingAction(q._id || q.id, q.quotationNumber)}
+                                      className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                      title="Convert to Live Private Booking Order (Path B)"
+                                    >
+                                      <CreditCard size={11} /> Booking
+                                    </button>
+
+                                    {/* Convert to Catalog Trip (Path A) */}
+                                    <button
+                                      onClick={() => handleConvertQuotationToTripAction(q._id || q.id, q.quotationNumber)}
+                                      className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black flex items-center gap-1 transition-all shadow-xs cursor-pointer"
+                                      title="Convert to Draft Catalog Trip Package (Path A)"
+                                    >
+                                      <Compass size={11} /> Trip
+                                    </button>
+                                  </>
+                                )}
+
+                                {/* Converted Traceability Badges */}
+                                {isConverted && (
+                                  <div className="flex items-center gap-1">
+                                    {q.bookingCode && (
+                                      <button
+                                        onClick={() => {
+                                          setActiveTab('bookings');
+                                          setBookingSearch?.(q.bookingCode);
+                                        }}
+                                        className="px-2 py-0.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-lg text-[9px] font-black flex items-center gap-1 transition-colors cursor-pointer"
+                                        title="View Converted Booking Order"
+                                      >
+                                        <CreditCard size={10} /> {q.bookingCode}
+                                      </button>
+                                    )}
+                                    {q.convertedTripId && (
+                                      <button
+                                        onClick={() => {
+                                          setActiveTab('trips');
+                                        }}
+                                        className="px-2 py-0.5 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 rounded-lg text-[9px] font-black flex items-center gap-1 transition-colors cursor-pointer"
+                                        title="View Converted Draft Trip in CMS"
+                                      >
+                                        <Compass size={10} /> Draft Trip
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Delete */}
+                                <button
+                                  onClick={() => handleDeleteQuotation(q._id || q.id, q.quotationNumber)}
+                                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors cursor-pointer"
+                                  title="Delete Quotation"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={8} className="p-12 text-center text-slate-400 space-y-3">
+                          <FileText size={32} className="mx-auto text-slate-300" />
+                          <div className="text-xs font-bold">No quotations found matching active filter criteria.</div>
+                          <button
+                            onClick={handleCreateNewQuotation}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black cursor-pointer"
+                          >
+                            + Create First Quotation
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: TRIP CMS (FULL 10-SECTION CREATOR / EDITOR WIZARD) */}
         {/* ========================================================================= */}
         {activeTab === 'trips' && (
           <div className="space-y-6">
@@ -1120,7 +1700,7 @@ const AdminDashboard = () => {
                         <th className="p-4">Preferred Call Window</th>
                         <th className="p-4">Travelers / Message</th>
                         <th className="p-4">Status</th>
-                        <th className="p-4 text-right">Update Status</th>
+                        <th className="p-4 text-right">Actions & Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
@@ -1237,20 +1817,38 @@ const AdminDashboard = () => {
                                 </span>
                               </td>
 
-                              {/* Status Dropdown */}
+                              {/* Status Dropdown & Action Buttons */}
                               <td className="p-4 text-right">
-                                <select
-                                  value={l.status}
-                                  onChange={(e) => handleUpdateLeadStatus(l._id || l.id, e.target.value)}
-                                  className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-300"
-                                >
-                                  <option value="NEW">NEW</option>
-                                  <option value="CONTACTED">CONTACTED</option>
-                                  <option value="IN_PROGRESS">IN_PROGRESS</option>
-                                  <option value="QUALIFIED">QUALIFIED</option>
-                                  <option value="CONVERTED">CONVERTED</option>
-                                  <option value="LOST">LOST</option>
-                                </select>
+                                <div className="flex items-center justify-end gap-2">
+                                  {/* Lead Assignee Button (Admin/Super Admin) */}
+                                  <button
+                                    onClick={() => handleAssignLeadAction(l._id || l.id, l.assignedTo)}
+                                    className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap"
+                                    title="Assign Lead to Sales Concierge"
+                                  >
+                                    <UserCheck size={12} /> {l.assignedTo && l.assignedTo !== 'Sales Concierge Team' ? l.assignedTo : 'Assign'}
+                                  </button>
+
+                                  <button
+                                    onClick={() => handleCreateQuotationFromLead(l)}
+                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                                    title="Create tailored quotation for this lead"
+                                  >
+                                    <FileText size={12} /> Create Quote
+                                  </button>
+                                  <select
+                                    value={l.status}
+                                    onChange={(e) => handleUpdateLeadStatus(l._id || l.id, e.target.value)}
+                                    className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-300"
+                                  >
+                                    <option value="NEW">NEW</option>
+                                    <option value="CONTACTED">CONTACTED</option>
+                                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                                    <option value="QUALIFIED">QUALIFIED</option>
+                                    <option value="CONVERTED">CONVERTED</option>
+                                    <option value="LOST">LOST</option>
+                                  </select>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2248,6 +2846,53 @@ const AdminDashboard = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ========================================================================= */}
+      {/* QUOTATION BUILDER & MULTI-TIER PROPOSAL WIZARD (PHASE 2) */}
+      {/* ========================================================================= */}
+      <AnimatePresence>
+        {showQuotationWizard && (
+          <QuotationBuilderWizard
+            quotationId={activeQuotationId}
+            initialLead={activeQuotationLead}
+            onClose={() => {
+              setShowQuotationWizard(false);
+              setActiveQuotationId(null);
+              setActiveQuotationLead(null);
+            }}
+            onQuotationSaved={() => {
+              fetchQuotationsList();
+              fetchAllAdminData();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Quotation Preview Modal */}
+      {previewQuotation && (
+        <QuotationPreviewModal
+          isOpen={Boolean(previewQuotation)}
+          onClose={() => setPreviewQuotation(null)}
+          quotation={previewQuotation}
+          onSendQuotation={(targetQ) => {
+            handleSendQuotationAction(targetQ._id || targetQ.id, targetQ.quotationNumber, targetQ.customerSnapshot?.email);
+            setPreviewQuotation(null);
+          }}
+        />
+      )}
+
+      {/* Quotation Multi-Channel Share Modal */}
+      {shareModalQuotation && (
+        <ShareQuotationModal
+          isOpen={Boolean(shareModalQuotation)}
+          onClose={() => setShareModalQuotation(null)}
+          quotation={shareModalQuotation}
+          onExportPdf={() => {
+            setPreviewQuotation(shareModalQuotation);
+            setShareModalQuotation(null);
+          }}
+        />
+      )}
 
     </div>
   );

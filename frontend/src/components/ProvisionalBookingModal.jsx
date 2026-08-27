@@ -5,7 +5,6 @@ import {
   Clock, ArrowRight, Lock, CreditCard, Sparkles, BedDouble
 } from 'lucide-react';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import { getProvisionalLetterApi } from '../services/api.js';
 
 export const ProvisionalBookingModal = ({ 

@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export function getHeaders() {
   const token = localStorage.getItem('wanderluxe_token');
@@ -545,6 +545,21 @@ export async function updateLeadStatusApi(leadId, statusPayload) {
   return data;
 }
 
+export async function assignLeadApi(leadId, assignPayload) {
+  const body = typeof assignPayload === 'string' ? { assignedTo: assignPayload } : assignPayload;
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/assign`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to assign lead');
+  }
+  return data;
+}
+
 export async function getTripReviewsApi(tripId) {
   const response = await fetch(`${API_BASE_URL}/reviews/trip/${tripId}`, {
     method: 'GET',
@@ -840,6 +855,167 @@ export async function deletePageApi(pageId) {
   return data;
 }
 
+// ==========================================
+// QUOTATION BUILDER & MANAGEMENT APIS (PHASE 2)
+// ==========================================
+export async function calculateQuotationPricingPreviewApi(quotationData) {
+  const response = await fetch(`${API_BASE_URL}/quotations/calculate-preview`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to calculate quotation pricing');
+  return data;
+}
+
+export async function createQuotationApi(quotationData) {
+  const response = await fetch(`${API_BASE_URL}/quotations`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create quotation');
+  return data;
+}
+
+export async function getQuotationsApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const response = await fetch(`${API_BASE_URL}/quotations${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch quotations');
+  return data;
+}
+
+export async function getQuotationByIdApi(id) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch quotation details');
+  return data;
+}
+
+export async function updateQuotationApi(id, quotationData) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update quotation');
+  return data;
+}
+
+export async function deleteQuotationApi(id) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to delete quotation');
+  return data;
+}
+
+export async function sendQuotationApi(id) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/send`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to send quotation');
+  return data;
+}
+
+export async function approveQuotationApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/approve`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to approve quotation');
+  return data;
+}
+
+export async function rejectQuotationApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/reject`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to reject quotation');
+  return data;
+}
+
+export async function convertQuotationToTripApi(id) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/convert-to-trip`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to convert quotation to trip');
+  return data;
+}
+
+export async function createBookingFromQuotationApi(id) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/create-booking`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to convert quotation to booking');
+  return data;
+}
+
+export async function createQuotationRevisionApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/create-revision`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create quotation revision');
+  return data;
+}
+
+export async function getPublicQuotationByTokenApi(token) {
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}`, {
+    method: 'GET'
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to load quotation proposal');
+  return data;
+}
+
+export async function updatePublicSelectedOptionsApi(token, payload) {
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}/select-options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update proposal options');
+  return data;
+}
+
+export async function customerQuotationDecisionApi(token, payload) {
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to record customer decision');
+  return data;
+}
+
 export default {
   getHeaders,
   registerApi,
@@ -902,5 +1078,20 @@ export default {
   getPageBySlugApi,
   createPageApi,
   updatePageApi,
-  deletePageApi
+  deletePageApi,
+  calculateQuotationPricingPreviewApi,
+  createQuotationApi,
+  getQuotationsApi,
+  getQuotationByIdApi,
+  updateQuotationApi,
+  deleteQuotationApi,
+  sendQuotationApi,
+  createQuotationRevisionApi,
+  approveQuotationApi,
+  rejectQuotationApi,
+  convertQuotationToTripApi,
+  createBookingFromQuotationApi,
+  getPublicQuotationByTokenApi,
+  updatePublicSelectedOptionsApi,
+  customerQuotationDecisionApi
 };

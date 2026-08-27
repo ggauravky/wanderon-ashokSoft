@@ -14,6 +14,7 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import seoRoutes from './routes/seoRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import aiItineraryRoutes from './routes/aiItineraryRoutes.js';
+import quotationRoutes from './routes/quotationRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -82,6 +83,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/seo', seoRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/ai', aiItineraryRoutes);
+app.use('/api/quotations', quotationRoutes);
 
 // Public Sitemap & Robots.txt Direct Access
 app.use('/sitemap.xml', seoRoutes);

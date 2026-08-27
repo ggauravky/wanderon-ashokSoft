@@ -126,6 +126,23 @@ const bookingSchema = new mongoose.Schema(
       messageSid: { type: String, default: '' },
       phone: { type: String, default: '' },
       error: { type: String, default: '' }
+    },
+    // Traceability to Custom Quotation & CRM Lead
+    sourceQuotationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Quotation',
+      default: null,
+      index: true
+    },
+    leadId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Lead',
+      default: null,
+      index: true
+    },
+    isCustomQuotationBooking: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }

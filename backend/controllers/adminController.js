@@ -4,6 +4,7 @@ import Trip from '../models/Trip.js';
 import Booking from '../models/Booking.js';
 import Lead from '../models/Lead.js';
 import Review from '../models/Review.js';
+import Quotation from '../models/Quotation.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -184,8 +185,47 @@ export const getAdminStats = async (req, res) => {
           totalRevenue: t.totalRevenue
         }));
 
+        // 7. Quotation Conversion Metrics (Real Pipeline Aggregation)
+        const totalQuotations = await Quotation.countDocuments(dateFilter);
+        const sentQuotations = await Quotation.countDocuments({ ...dateFilter, status: { $in: ['SENT', 'VIEWED', 'APPROVED', 'CONVERTED'] } });
+        const approvedQuotations = await Quotation.countDocuments({ ...dateFilter, status: { $in: ['APPROVED', 'CONVERTED'] } });
+        const convertedQuotations = await Quotation.countDocuments({ ...dateFilter, status: 'CONVERTED' });
+        const quotationConversionRate = totalQuotations > 0
+          ? `${((convertedQuotations / totalQuotations) * 100).toFixed(1)}%`
+          : '0.0%';
+
+        const conversionRate = totalLeads > 0 
+          ? `${((convertedLeads / totalLeads) * 100).toFixed(1)}%` 
+          : (totalUsers > 0 && confirmedBookings > 0 ? `${((confirmedBookings / totalUsers) * 100).toFixed(1)}%` : '0%');
+
+        const statsData = {
+          totalRevenue,
+          totalBookings,
+          confirmedBookings,
+          pendingBookings,
+          cancelledBookings,
+          activeTrips,
+          totalUsers,
+          totalLeads,
+          convertedLeads,
+          conversionRate,
+          totalReviews,
+          // Quotation Metrics
+          totalQuotations,
+          sentQuotations,
+          approvedQuotations,
+          convertedQuotations,
+          quotationConversionRate,
+          monthlyRevenue,
+          destinationBreakdown,
+          topTrips,
+          period: range,
+          isRealData: true
+        };
+
+        return res.json(statsData);
       } catch (dbErr) {
-        console.warn('Analytics Aggregation Notice:', dbErr.message);
+        console.warn('MongoDB Analytics aggregate error:', dbErr.message);
       }
     }
 
@@ -205,6 +245,11 @@ export const getAdminStats = async (req, res) => {
       convertedLeads,
       conversionRate,
       totalReviews,
+      totalQuotations: 0,
+      sentQuotations: 0,
+      approvedQuotations: 0,
+      convertedQuotations: 0,
+      quotationConversionRate: '0.0%',
       monthlyRevenue,
       destinationBreakdown,
       topTrips,

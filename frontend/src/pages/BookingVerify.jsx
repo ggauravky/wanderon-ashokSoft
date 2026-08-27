@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ShieldCheck, CheckCircle2, MapPin, Calendar, Users, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
 import { verifyBookingTokenApi } from '../services/api.js';
 
 const BookingVerify = () => {
