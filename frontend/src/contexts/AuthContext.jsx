@@ -1,9 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  loginApi, registerApi, influencerLoginApi, influencerApplyApi, getMeApi, 
-  updateProfileApi, addBookingApi, cancelBookingApi, getInfluencerApplicationsApi, 
-  approveInfluencerApplicationApi, rejectInfluencerApplicationApi 
-} from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const loginApi = async (...args) => (apiService.loginApi || apiService.default?.loginApi)?.(...args);
+const registerApi = async (...args) => (apiService.registerApi || apiService.default?.registerApi)?.(...args);
+const influencerLoginApi = async (...args) => (apiService.influencerLoginApi || apiService.default?.influencerLoginApi)?.(...args);
+const influencerApplyApi = async (...args) => (apiService.influencerApplyApi || apiService.default?.influencerApplyApi)?.(...args);
+const getMeApi = async (...args) => (apiService.getMeApi || apiService.default?.getMeApi)?.(...args);
+const updateProfileApi = async (...args) => (apiService.updateProfileApi || apiService.default?.updateProfileApi)?.(...args);
+const addBookingApi = async (...args) => (apiService.addBookingApi || apiService.default?.addBookingApi)?.(...args);
+const cancelBookingApi = async (...args) => (apiService.cancelBookingApi || apiService.default?.cancelBookingApi)?.(...args);
+const getInfluencerApplicationsApi = async (...args) => (apiService.getInfluencerApplicationsApi || apiService.default?.getInfluencerApplicationsApi)?.(...args);
+const approveInfluencerApplicationApi = async (...args) => (apiService.approveInfluencerApplicationApi || apiService.default?.approveInfluencerApplicationApi)?.(...args);
+const rejectInfluencerApplicationApi = async (...args) => (apiService.rejectInfluencerApplicationApi || apiService.default?.rejectInfluencerApplicationApi)?.(...args);
 
 const AuthContext = createContext();
 

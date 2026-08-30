@@ -11,13 +11,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { exportElementToPdf } from '../utils/pdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
-import { 
-  getMyBookingsApi, 
-  getMySavedItinerariesApi, 
-  deleteSavedItineraryApi,
-  payRemainingBalanceApi, 
-  verifyRemainingBalanceApi 
-} from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const getMyBookingsApi = async (...args) => (apiService.getMyBookingsApi || apiService.default?.getMyBookingsApi)?.(...args);
+const getMySavedItinerariesApi = async (...args) => (apiService.getMySavedItinerariesApi || apiService.default?.getMySavedItinerariesApi)?.(...args);
+const deleteSavedItineraryApi = async (...args) => (apiService.deleteSavedItineraryApi || apiService.default?.deleteSavedItineraryApi)?.(...args);
+const payRemainingBalanceApi = async (...args) => (apiService.payRemainingBalanceApi || apiService.default?.payRemainingBalanceApi)?.(...args);
+const verifyRemainingBalanceApi = async (...args) => (apiService.verifyRemainingBalanceApi || apiService.default?.verifyRemainingBalanceApi)?.(...args);
 import { 
   getSavedAIItineraries, deleteSavedAIItinerary, 
   getWishlistIds, toggleWishlistItem, getRecentlyViewedTrips 

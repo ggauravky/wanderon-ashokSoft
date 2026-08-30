@@ -16,10 +16,30 @@ import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
 import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas.js';
 import { UPCOMING_TRIPS } from '../constants/mockData.js';
-import { getAllStaticTrips, normalizeTripObject } from '../services/travelKnowledgeService.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine.js';
 import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory.js';
 import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine.js';
+
+const getAllStaticTrips = () => {
+  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.getAllStaticTrips();
+  }
+  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.default.getAllStaticTrips();
+  }
+  return UPCOMING_TRIPS || [];
+};
+
+const normalizeTripObject = (t) => {
+  if (typeof travelKnowledgeService.normalizeTripObject === 'function') {
+    return travelKnowledgeService.normalizeTripObject(t);
+  }
+  if (typeof travelKnowledgeService.default?.normalizeTripObject === 'function') {
+    return travelKnowledgeService.default.normalizeTripObject(t);
+  }
+  return t;
+};
 
 const TripDetails = () => {
   const { id } = useParams();

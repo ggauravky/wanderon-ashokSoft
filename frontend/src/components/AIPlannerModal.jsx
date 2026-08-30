@@ -11,13 +11,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 import { saveAIItinerary } from '../utils/userHistory';
-import { 
-  generateAIItineraryApi, 
-  saveAIItineraryApi, 
-  updateAIItineraryApi, 
-  regenerateDayApi 
-} from '../services/api.js';
-import { getDestinations, getTravelStyles } from '../services/travelKnowledgeService.js';
+import * as apiService from '../services/api.js';
+
+const generateAIItineraryApi = async (...args) => (apiService.generateAIItineraryApi || apiService.default?.generateAIItineraryApi)?.(...args);
+const saveAIItineraryApi = async (...args) => (apiService.saveAIItineraryApi || apiService.default?.saveAIItineraryApi)?.(...args);
+const updateAIItineraryApi = async (...args) => (apiService.updateAIItineraryApi || apiService.default?.updateAIItineraryApi)?.(...args);
+const regenerateDayApi = async (...args) => (apiService.regenerateDayApi || apiService.default?.regenerateDayApi)?.(...args);
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+
+const getDestinations = () => (travelKnowledgeService.getDestinations || travelKnowledgeService.default?.getDestinations)?.() || [];
+const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 import { useAuth } from '../contexts/AuthContext';
 import AIItineraryDocument from './AIItineraryDocument';
 import ShareItineraryModal from './ShareItineraryModal';

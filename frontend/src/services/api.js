@@ -1058,6 +1058,7 @@ export default {
   createLeadApi,
   getAdminLeadsApi,
   updateLeadStatusApi,
+  assignLeadApi,
   getTripReviewsApi,
   createReviewApi,
   generateAIItineraryApi,

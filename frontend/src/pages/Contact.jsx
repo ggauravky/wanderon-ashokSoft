@@ -5,7 +5,9 @@ import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getFAQSchema } from '../utils/seoSchemas';
 import { useAuth } from '../contexts/AuthContext';
-import { createLeadApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const createLeadApi = async (...args) => (apiService.createLeadApi || apiService.default?.createLeadApi)?.(...args);
 
 const Contact = () => {
   const { user } = useAuth();

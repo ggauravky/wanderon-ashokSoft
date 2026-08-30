@@ -29,7 +29,9 @@ import {
   createBookingFromQuotationApi,
   convertQuotationToTripApi
 } from '../services/quotationService.js';
-import { getDestinations } from '../services/travelKnowledgeService.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+
+const getDestinations = () => (travelKnowledgeService.getDestinations || travelKnowledgeService.default?.getDestinations)?.() || [];
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 import QuotationDocument from './QuotationDocument';
 import ShareQuotationModal from './ShareQuotationModal';

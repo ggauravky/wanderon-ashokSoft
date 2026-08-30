@@ -1,93 +1,169 @@
-import * as apiModule from './api.js';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+function getHeaders() {
+  const token = localStorage.getItem('wanderluxe_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
+}
 
 export async function calculateQuotationPricingPreviewApi(quotationData) {
-  const fn = apiModule.calculateQuotationPricingPreviewApi || apiModule.default?.calculateQuotationPricingPreviewApi;
-  if (typeof fn !== 'function') throw new Error('calculateQuotationPricingPreviewApi is not available');
-  return fn(quotationData);
+  const response = await fetch(`${API_BASE_URL}/quotations/calculate-preview`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to calculate quotation preview pricing');
+  return data;
 }
 
 export async function createQuotationApi(quotationData) {
-  const fn = apiModule.createQuotationApi || apiModule.default?.createQuotationApi;
-  if (typeof fn !== 'function') throw new Error('createQuotationApi is not available');
-  return fn(quotationData);
+  const response = await fetch(`${API_BASE_URL}/quotations`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create quotation');
+  return data;
 }
 
-export async function getQuotationsApi(params) {
-  const fn = apiModule.getQuotationsApi || apiModule.default?.getQuotationsApi;
-  if (typeof fn !== 'function') throw new Error('getQuotationsApi is not available');
-  return fn(params);
+export async function getQuotationsApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const response = await fetch(`${API_BASE_URL}/quotations${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch quotations');
+  return data;
 }
 
 export async function getQuotationByIdApi(id) {
-  const fn = apiModule.getQuotationByIdApi || apiModule.default?.getQuotationByIdApi;
-  if (typeof fn !== 'function') throw new Error('getQuotationByIdApi is not available');
-  return fn(id);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch quotation details');
+  return data;
 }
 
 export async function updateQuotationApi(id, quotationData) {
-  const fn = apiModule.updateQuotationApi || apiModule.default?.updateQuotationApi;
-  if (typeof fn !== 'function') throw new Error('updateQuotationApi is not available');
-  return fn(id, quotationData);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify(quotationData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update quotation');
+  return data;
 }
 
 export async function deleteQuotationApi(id) {
-  const fn = apiModule.deleteQuotationApi || apiModule.default?.deleteQuotationApi;
-  if (typeof fn !== 'function') throw new Error('deleteQuotationApi is not available');
-  return fn(id);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to delete quotation');
+  return data;
 }
 
 export async function sendQuotationApi(id) {
-  const fn = apiModule.sendQuotationApi || apiModule.default?.sendQuotationApi;
-  if (typeof fn !== 'function') throw new Error('sendQuotationApi is not available');
-  return fn(id);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/send`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to send quotation');
+  return data;
 }
 
-export async function createQuotationRevisionApi(id, payload) {
-  const fn = apiModule.createQuotationRevisionApi || apiModule.default?.createQuotationRevisionApi;
-  if (typeof fn !== 'function') throw new Error('createQuotationRevisionApi is not available');
-  return fn(id, payload);
+export async function createQuotationRevisionApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/create-revision`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create quotation revision');
+  return data;
 }
 
-export async function approveQuotationApi(id, payload) {
-  const fn = apiModule.approveQuotationApi || apiModule.default?.approveQuotationApi;
-  if (typeof fn !== 'function') throw new Error('approveQuotationApi is not available');
-  return fn(id, payload);
+export async function approveQuotationApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/approve`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to approve quotation');
+  return data;
 }
 
-export async function rejectQuotationApi(id, payload) {
-  const fn = apiModule.rejectQuotationApi || apiModule.default?.rejectQuotationApi;
-  if (typeof fn !== 'function') throw new Error('rejectQuotationApi is not available');
-  return fn(id, payload);
+export async function rejectQuotationApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/reject`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to reject quotation');
+  return data;
 }
 
 export async function convertQuotationToTripApi(id) {
-  const fn = apiModule.convertQuotationToTripApi || apiModule.default?.convertQuotationToTripApi;
-  if (typeof fn !== 'function') throw new Error('convertQuotationToTripApi is not available');
-  return fn(id);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/convert-to-trip`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to convert quotation to trip');
+  return data;
 }
 
 export async function createBookingFromQuotationApi(id) {
-  const fn = apiModule.createBookingFromQuotationApi || apiModule.default?.createBookingFromQuotationApi;
-  if (typeof fn !== 'function') throw new Error('createBookingFromQuotationApi is not available');
-  return fn(id);
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/create-booking`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to convert quotation to booking');
+  return data;
 }
 
 export async function getPublicQuotationByTokenApi(token) {
-  const fn = apiModule.getPublicQuotationByTokenApi || apiModule.default?.getPublicQuotationByTokenApi;
-  if (typeof fn !== 'function') throw new Error('getPublicQuotationByTokenApi is not available');
-  return fn(token);
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}`, {
+    method: 'GET'
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to load quotation proposal');
+  return data;
 }
 
 export async function updatePublicSelectedOptionsApi(token, payload) {
-  const fn = apiModule.updatePublicSelectedOptionsApi || apiModule.default?.updatePublicSelectedOptionsApi;
-  if (typeof fn !== 'function') throw new Error('updatePublicSelectedOptionsApi is not available');
-  return fn(token, payload);
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}/select-options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update proposal options');
+  return data;
 }
 
 export async function customerQuotationDecisionApi(token, payload) {
-  const fn = apiModule.customerQuotationDecisionApi || apiModule.default?.customerQuotationDecisionApi;
-  if (typeof fn !== 'function') throw new Error('customerQuotationDecisionApi is not available');
-  return fn(token, payload);
+  const response = await fetch(`${API_BASE_URL}/quotations/public/${token}/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to record customer decision');
+  return data;
 }
 
 export const TRANSPORT_TYPES = [

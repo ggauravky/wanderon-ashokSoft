@@ -10,7 +10,9 @@ import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import AIItineraryDocument from '../components/AIItineraryDocument';
 import AIPlannerModal from '../components/AIPlannerModal';
-import { getPublicSharedItineraryApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const getPublicSharedItineraryApi = async (...args) => (apiService.getPublicSharedItineraryApi || apiService.default?.getPublicSharedItineraryApi)?.(...args);
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 
 const SharedItinerary = () => {

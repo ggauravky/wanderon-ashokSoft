@@ -8,9 +8,35 @@ import {
 } from 'lucide-react';
 import SEOHead from '../components/SEOHead.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
-import { getAllStaticTrips, normalizeTripObject } from '../services/travelKnowledgeService.js';
-import { calculateBookingPricingApi } from '../services/api.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+import * as apiService from '../services/api.js';
 import { UPCOMING_TRIPS } from '../constants/mockData.js';
+
+const calculateBookingPricingApi = async (...args) => {
+  const fn = apiService.calculateBookingPricingApi || apiService.default?.calculateBookingPricingApi;
+  if (typeof fn === 'function') return fn(...args);
+  throw new Error('calculateBookingPricingApi is not available');
+};
+
+const getAllStaticTrips = () => {
+  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.getAllStaticTrips();
+  }
+  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.default.getAllStaticTrips();
+  }
+  return UPCOMING_TRIPS || [];
+};
+
+const normalizeTripObject = (t) => {
+  if (typeof travelKnowledgeService.normalizeTripObject === 'function') {
+    return travelKnowledgeService.normalizeTripObject(t);
+  }
+  if (typeof travelKnowledgeService.default?.normalizeTripObject === 'function') {
+    return travelKnowledgeService.default.normalizeTripObject(t);
+  }
+  return t;
+};
 
 const BookingDates = () => {
   const { tripSlug } = useParams();

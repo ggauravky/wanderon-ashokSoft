@@ -3,15 +3,15 @@
 // Consumes Central Travel Knowledge Base
 // ================================================================
 
-import { 
-  getSeasonContext, 
-  getDestinationWeather, 
-  getActiveOccasionContext as getCentralOccasionContext,
-  getPackingRecommendations,
-  getDestinationBySlug,
-  normalizeDestinationSlug
-} from '../services/travelKnowledgeService.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import { getRecentlyViewedTrips, getWishlistIds } from './userHistory.js';
+
+const getSeasonContext = (date) => (travelKnowledgeService.getSeasonContext || travelKnowledgeService.default?.getSeasonContext)?.(date);
+const getDestinationWeather = (loc) => (travelKnowledgeService.getDestinationWeather || travelKnowledgeService.default?.getDestinationWeather)?.(loc);
+const getCentralOccasionContext = (date) => (travelKnowledgeService.getActiveOccasionContext || travelKnowledgeService.default?.getActiveOccasionContext)?.(date);
+const getPackingRecommendations = (...args) => (travelKnowledgeService.getPackingRecommendations || travelKnowledgeService.default?.getPackingRecommendations)?.(...args);
+const getDestinationBySlug = (slug) => (travelKnowledgeService.getDestinationBySlug || travelKnowledgeService.default?.getDestinationBySlug)?.(slug);
+const normalizeDestinationSlug = (slug) => (travelKnowledgeService.normalizeDestinationSlug || travelKnowledgeService.default?.normalizeDestinationSlug)?.(slug);
 
 /**
  * 1. Time-of-Day Context

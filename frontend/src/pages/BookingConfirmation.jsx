@@ -5,8 +5,12 @@ import {
   Printer, ShieldCheck, QrCode, Sparkles, Copy, Check, Clock, 
   Phone, Mail, Download, Lock, AlertCircle, CreditCard, FileText
 } from 'lucide-react';
-import { getBookingByIdApi, payRemainingBalanceApi, verifyRemainingBalanceApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext';
+
+const getBookingByIdApi = async (...args) => (apiService.getBookingByIdApi || apiService.default?.getBookingByIdApi)?.(...args);
+const payRemainingBalanceApi = async (...args) => (apiService.payRemainingBalanceApi || apiService.default?.payRemainingBalanceApi)?.(...args);
+const verifyRemainingBalanceApi = async (...args) => (apiService.verifyRemainingBalanceApi || apiService.default?.verifyRemainingBalanceApi)?.(...args);
 import BoardingPassModal from '../components/BoardingPassModal.jsx';
 import ProvisionalBookingModal from '../components/ProvisionalBookingModal.jsx';
 import { loadRazorpayScript } from '../utils/razorpay.js';

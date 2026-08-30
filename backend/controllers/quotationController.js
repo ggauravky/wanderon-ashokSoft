@@ -176,8 +176,6 @@ export const createQuotation = async (req, res) => {
     const {
       leadId,
       customerId,
-      customerSnapshot,
-      tripRequirements,
       pricingRules,
       itinerary,
       hotelOptions,
@@ -194,11 +192,22 @@ export const createQuotation = async (req, res) => {
       notes
     } = req.body;
 
-    if (!customerSnapshot || !customerSnapshot.name || !customerSnapshot.email || !customerSnapshot.phone) {
+    const customerSnapshot = req.body.customerSnapshot || req.body.customer || {};
+    const tripRequirements = req.body.tripRequirements || {
+      title: req.body.tripTitle || req.body.title || 'Custom Curated Expedition',
+      destination: req.body.destination || 'Custom Destination',
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      durationDays: req.body.durationDays || 5,
+      durationNights: req.body.durationNights || 4,
+      travelers: req.body.travelers || customerSnapshot.numberOfTravelers || 2
+    };
+
+    if (!customerSnapshot.name || !customerSnapshot.email || !customerSnapshot.phone) {
       return res.status(400).json({ message: 'Customer name, email, and phone number are required.' });
     }
 
-    if (!tripRequirements || !tripRequirements.title || !tripRequirements.destination) {
+    if (!tripRequirements.title || !tripRequirements.destination) {
       return res.status(400).json({ message: 'Trip title and destination are required.' });
     }
 

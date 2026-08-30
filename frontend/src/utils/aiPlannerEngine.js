@@ -4,13 +4,15 @@
 // ================================================================
 
 import { UPCOMING_TRIPS } from '../constants/mockData';
-import { 
-  getDestinationBySlug, 
-  getSeasonContext, 
-  getDestinationWeather,
-  buildAITravelContext
-} from '../services/travelKnowledgeService.js';
-import { generateAIItineraryApi } from '../services/api.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+import * as apiService from '../services/api.js';
+
+const generateAIItineraryApi = async (...args) => (apiService.generateAIItineraryApi || apiService.default?.generateAIItineraryApi)?.(...args);
+
+const getDestinationBySlug = (s) => (travelKnowledgeService.getDestinationBySlug || travelKnowledgeService.default?.getDestinationBySlug)?.(s);
+const getSeasonContext = (d) => (travelKnowledgeService.getSeasonContext || travelKnowledgeService.default?.getSeasonContext)?.(d);
+const getDestinationWeather = (l) => (travelKnowledgeService.getDestinationWeather || travelKnowledgeService.default?.getDestinationWeather)?.(l);
+const buildAITravelContext = (p) => (travelKnowledgeService.buildAITravelContext || travelKnowledgeService.default?.buildAITravelContext)?.(p);
 
 /**
  * Generate a complete, intelligent, personalized travel itinerary

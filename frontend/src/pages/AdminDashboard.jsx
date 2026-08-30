@@ -11,15 +11,36 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  getAdminStatsApi, getCouponsApi, createCouponApi, toggleCouponApi, 
-  deleteCouponApi, getAdminUsersApi, updateUserRoleApi, getAdminBookingsApi,
-  getAdminTripsApi, createTripApi, updateTripApi, deleteTripApi, uploadImageApi,
-  getAllAdminPagesApi, createPageApi, updatePageApi, deletePageApi,
-  getAdminLeadsApi, updateLeadStatusApi, assignLeadApi,
-  getQuotationsApi, deleteQuotationApi, sendQuotationApi, createBookingFromQuotationApi, convertQuotationToTripApi
-} from '../services/api.js';
-import { getDestinations } from '../services/travelKnowledgeService.js';
+import * as apiService from '../services/api.js';
+
+const getAdminStatsApi = async (...args) => (apiService.getAdminStatsApi || apiService.default?.getAdminStatsApi)?.(...args);
+const getCouponsApi = async (...args) => (apiService.getCouponsApi || apiService.default?.getCouponsApi)?.(...args);
+const createCouponApi = async (...args) => (apiService.createCouponApi || apiService.default?.createCouponApi)?.(...args);
+const toggleCouponApi = async (...args) => (apiService.toggleCouponApi || apiService.default?.toggleCouponApi)?.(...args);
+const deleteCouponApi = async (...args) => (apiService.deleteCouponApi || apiService.default?.deleteCouponApi)?.(...args);
+const getAdminUsersApi = async (...args) => (apiService.getAdminUsersApi || apiService.default?.getAdminUsersApi)?.(...args);
+const updateUserRoleApi = async (...args) => (apiService.updateUserRoleApi || apiService.default?.updateUserRoleApi)?.(...args);
+const getAdminBookingsApi = async (...args) => (apiService.getAdminBookingsApi || apiService.default?.getAdminBookingsApi)?.(...args);
+const getAdminTripsApi = async (...args) => (apiService.getAdminTripsApi || apiService.default?.getAdminTripsApi)?.(...args);
+const createTripApi = async (...args) => (apiService.createTripApi || apiService.default?.createTripApi)?.(...args);
+const updateTripApi = async (...args) => (apiService.updateTripApi || apiService.default?.updateTripApi)?.(...args);
+const deleteTripApi = async (...args) => (apiService.deleteTripApi || apiService.default?.deleteTripApi)?.(...args);
+const uploadImageApi = async (...args) => (apiService.uploadImageApi || apiService.default?.uploadImageApi)?.(...args);
+const getAllAdminPagesApi = async (...args) => (apiService.getAllAdminPagesApi || apiService.default?.getAllAdminPagesApi)?.(...args);
+const createPageApi = async (...args) => (apiService.createPageApi || apiService.default?.createPageApi)?.(...args);
+const updatePageApi = async (...args) => (apiService.updatePageApi || apiService.default?.updatePageApi)?.(...args);
+const deletePageApi = async (...args) => (apiService.deletePageApi || apiService.default?.deletePageApi)?.(...args);
+const getAdminLeadsApi = async (...args) => (apiService.getAdminLeadsApi || apiService.default?.getAdminLeadsApi)?.(...args);
+const updateLeadStatusApi = async (...args) => (apiService.updateLeadStatusApi || apiService.default?.updateLeadStatusApi)?.(...args);
+const assignLeadApi = async (...args) => (apiService.assignLeadApi || apiService.default?.assignLeadApi)?.(...args);
+const getQuotationsApi = async (...args) => (apiService.getQuotationsApi || apiService.default?.getQuotationsApi)?.(...args);
+const deleteQuotationApi = async (...args) => (apiService.deleteQuotationApi || apiService.default?.deleteQuotationApi)?.(...args);
+const sendQuotationApi = async (...args) => (apiService.sendQuotationApi || apiService.default?.sendQuotationApi)?.(...args);
+const createBookingFromQuotationApi = async (...args) => (apiService.createBookingFromQuotationApi || apiService.default?.createBookingFromQuotationApi)?.(...args);
+const convertQuotationToTripApi = async (...args) => (apiService.convertQuotationToTripApi || apiService.default?.convertQuotationToTripApi)?.(...args);
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+
+const getDestinations = () => (travelKnowledgeService.getDestinations || travelKnowledgeService.default?.getDestinations)?.() || [];
 import QuotationBuilderWizard from '../components/QuotationBuilderWizard';
 import QuotationPreviewModal from '../components/QuotationPreviewModal';
 import ShareQuotationModal from '../components/ShareQuotationModal';

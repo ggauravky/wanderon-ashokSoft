@@ -5,7 +5,27 @@ import {
 } from '../utils/travelContextEngine.js';
 import { getCurrentSeason, getDestinationWeather } from '../utils/weatherSeasonEngine.js';
 import { getRecentlyViewedTrips, getWishlistIds, getSavedAIItineraries } from '../utils/userHistory.js';
-import { getAllStaticTrips, mergeTripsWithLive } from '../services/travelKnowledgeService.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+
+const getAllStaticTrips = () => {
+  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.getAllStaticTrips();
+  }
+  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.default.getAllStaticTrips();
+  }
+  return [];
+};
+
+const mergeTripsWithLive = (liveTrips) => {
+  if (typeof travelKnowledgeService.mergeTripsWithLive === 'function') {
+    return travelKnowledgeService.mergeTripsWithLive(liveTrips);
+  }
+  if (typeof travelKnowledgeService.default?.mergeTripsWithLive === 'function') {
+    return travelKnowledgeService.default.mergeTripsWithLive(liveTrips);
+  }
+  return getAllStaticTrips();
+};
 
 export const useTravelContext = (customTrips) => {
   const [liveTrips, setLiveTrips] = useState([]);

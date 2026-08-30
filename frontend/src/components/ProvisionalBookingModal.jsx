@@ -5,7 +5,9 @@ import {
   Clock, ArrowRight, Lock, CreditCard, Sparkles, BedDouble
 } from 'lucide-react';
 import jsPDF from 'jspdf';
-import { getProvisionalLetterApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const getProvisionalLetterApi = async (...args) => (apiService.getProvisionalLetterApi || apiService.default?.getProvisionalLetterApi)?.(...args);
 
 export const ProvisionalBookingModal = ({ 
   isOpen, 

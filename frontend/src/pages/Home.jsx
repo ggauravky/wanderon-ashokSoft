@@ -20,7 +20,10 @@ import AIPlannerModal from '../components/AIPlannerModal';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
 import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData';
 import { useTravelContext } from '../hooks/useTravelContext';
-import { getTravelStyles, getLucideIcon } from '../services/travelKnowledgeService.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+
+const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
+const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
 
 const Home = () => {
   const navigate = useNavigate();

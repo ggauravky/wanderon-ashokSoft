@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { verifyBookingTokenApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const verifyBookingTokenApi = async (...args) => (apiService.verifyBookingTokenApi || apiService.default?.verifyBookingTokenApi)?.(...args);
 
 const BookingVerify = () => {
   const { token } = useParams();

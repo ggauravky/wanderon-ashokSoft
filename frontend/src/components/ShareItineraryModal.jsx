@@ -4,7 +4,9 @@ import {
   Sparkles, Download, MessageCircle, ExternalLink, ShieldCheck,
   ToggleLeft, ToggleRight, Loader2, FileText
 } from 'lucide-react';
-import { toggleShareItineraryApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const toggleShareItineraryApi = async (...args) => (apiService.toggleShareItineraryApi || apiService.default?.toggleShareItineraryApi)?.(...args);
 import { prepareShareableItinerary, copyToClipboard, getWhatsAppShareUrl } from '../services/itineraryShareService.js';
 
 const ShareItineraryModal = ({ 

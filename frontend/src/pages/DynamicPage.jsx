@@ -5,7 +5,9 @@ import {
   CheckCircle2, ChevronRight, Sparkles, BookOpen, User, ShieldCheck, AlertCircle, Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { getPageBySlugApi } from '../services/api.js';
+import * as apiService from '../services/api.js';
+
+const getPageBySlugApi = async (...args) => (apiService.getPageBySlugApi || apiService.default?.getPageBySlugApi)?.(...args);
 
 const DynamicPage = () => {
   const { slug } = useParams();

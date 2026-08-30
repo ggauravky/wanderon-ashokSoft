@@ -6,7 +6,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    strictPort: false, // Automatically fallback to 5174, 5175 if 5173 is occupied
+    strictPort: true, // Fail immediately if 5173 is occupied so no stale port confusion occurs
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:5000',

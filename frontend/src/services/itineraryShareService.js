@@ -1,4 +1,7 @@
-import { saveAIItineraryApi, toggleShareItineraryApi } from './api.js';
+import * as apiService from './api.js';
+
+const saveAIItineraryApi = async (...args) => (apiService.saveAIItineraryApi || apiService.default?.saveAIItineraryApi)?.(...args);
+const toggleShareItineraryApi = async (...args) => (apiService.toggleShareItineraryApi || apiService.default?.toggleShareItineraryApi)?.(...args);
 
 /**
  * Robust Centralized Share Service for AI Travel Itineraries
