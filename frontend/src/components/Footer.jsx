@@ -21,7 +21,7 @@ const Footer = () => {
 
   return (
     <footer className="bg-[#080d1e] text-white pt-20 pb-12 border-t border-slate-800">
-      <div className="container mx-auto px-4 md:px-8">
+      <div className="travel-container">
         {/* Top Newsletter & Trust Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-8 md:p-12 border border-slate-800 shadow-2xl mb-16 flex flex-col lg:flex-row items-center justify-between gap-8">
           <div className="max-w-xl">

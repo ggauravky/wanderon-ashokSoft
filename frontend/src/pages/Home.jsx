@@ -1,53 +1,147 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   Search, MapPin, Calendar, Users, ShieldCheck, HeartHandshake, 
-  Compass, CreditCard, Star, Award, Sparkles, CloudSun, ArrowRight,
-  Sun, CheckCircle2, TrendingUp, Clock, Flame, Mountain, Palmtree,
-  Trees, Waves, History, Shuffle, X, Tag, DollarSign, ChevronRight
+  Compass, CreditCard, Star, Sparkles, CloudSun, ArrowRight,
+  TrendingUp, Clock, Mountain, Palmtree, Shuffle, ChevronRight,
+  Plane, Heart, Backpack, CheckCircle2, PhoneCall, Image as ImageIcon
 } from 'lucide-react';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Pagination } from 'swiper/modules';
-import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/pagination';
 
-import TripCard from '../components/TripCard';
-import SEOHead from '../components/SEOHead';
-import WeatherBadge from '../components/WeatherBadge';
-import AIPlannerModal from '../components/AIPlannerModal';
-import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas';
-import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData';
-import { useTravelContext } from '../hooks/useTravelContext';
+import TripCard from '../components/TripCard.jsx';
+import DestinationCard from '../components/DestinationCard.jsx';
+import CallbackForm from '../components/CallbackForm.jsx';
+import SEOHead from '../components/SEOHead.jsx';
+import AIPlannerModal from '../components/AIPlannerModal.jsx';
+import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas.js';
+import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
+import { useTravelContext } from '../hooks/useTravelContext.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 
 const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
 
+// Curated Journey Gallery Moments
+const GALLERY_MOMENTS = [
+  {
+    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=800&auto=format&fit=crop',
+    title: 'Key Monastery Sunrise',
+    location: 'Spiti Valley, Himachal'
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?q=80&w=800&auto=format&fit=crop',
+    title: 'Crystal Clear Umngot River',
+    location: 'Dawki, Meghalaya'
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?q=80&w=800&auto=format&fit=crop',
+    title: 'Kelingking T-Rex Cliff',
+    location: 'Nusa Penida, Bali'
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?q=80&w=800&auto=format&fit=crop',
+    title: 'Pangong Tso Alpine Blue',
+    location: 'Ladakh'
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1593181629936-11c609b8db9b?q=80&w=800&auto=format&fit=crop',
+    title: 'Dal Lake Shikara Morning',
+    location: 'Srinagar, Kashmir'
+  },
+  {
+    image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?q=80&w=800&auto=format&fit=crop',
+    title: 'Varkala Cliff Sunset',
+    location: 'Kerala'
+  }
+];
+
+const TRENDING_SEARCH_CHIPS = [
+  { label: 'Spiti Valley', query: 'spiti' },
+  { label: 'Bali & Penida', query: 'bali' },
+  { label: 'Meghalaya', query: 'meghalaya' },
+  { label: 'Kashmir', query: 'kashmir' },
+  { label: 'Ladakh', query: 'ladakh' },
+  { label: 'Kasol & Jibhi', query: 'kasol' },
+  { label: 'Kerala Backwaters', query: 'kerala' }
+];
+
 const Home = () => {
   const navigate = useNavigate();
   const { 
-    timeContext, dayContext, season, occasion, 
-    userPreferences, updatePreferences, recommendedTrips, 
-    weekendGetaways, recentlyViewed, savedAIPlans, getWeatherFor 
-  } = useTravelContext();
+    timeContext = { greeting: 'Welcome Explorer', period: 'Day', heroTitle: 'Explore India & The World In Community.', heroSubtitle: 'Curated social group trips, high-altitude backpacking circuits & boutique mountain stays with certified captains.' }, 
+    season = { name: 'Autumn Expeditions', heroTag: 'Ideal Mountain Weather' }, 
+    recommendedTrips = UPCOMING_TRIPS || [], 
+    getWeatherFor = () => null
+  } = useTravelContext() || {};
 
   const [searchQuery, setSearchQuery] = useState('');
   const [budgetFilter, setBudgetFilter] = useState('all');
   const [durationFilter, setDurationFilter] = useState('all');
-  const [typeQuery, setTypeQuery] = useState('group');
+  const [selectedMonth, setSelectedMonth] = useState("SEP '26");
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
+
+  // Dynamic Departure Months derived from real batches
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set();
+    (UPCOMING_TRIPS || []).forEach(t => {
+      if (Array.isArray(t.availableBatches)) {
+        t.availableBatches.forEach(b => {
+          if (b.monthLabel) monthSet.add(b.monthLabel);
+          else if (b.dates) {
+            const m = b.dates.match(/([A-Za-z]{3})\s*(?:20)?(\d{2})?/);
+            if (m) monthSet.add(`${m[1].toUpperCase()} '${m[2] || '26'}`);
+          }
+        });
+      }
+    });
+    const months = Array.from(monthSet);
+    return months.length > 0 ? months.slice(0, 5) : ["SEP '26", "OCT '26", "NOV '26", "DEC '26"];
+  }, []);
+
+  // Trips Filtered for Upcoming Community Trips Section by Month
+  const upcomingCommunityTrips = useMemo(() => {
+    const cleanMonth = selectedMonth.split(' ')[0].replace(/[^A-Za-z]/g, '').toLowerCase();
+    const filtered = (UPCOMING_TRIPS || []).filter(t => {
+      const bText = Array.isArray(t.availableBatches) ? t.availableBatches.map(b => b.dates || '').join(' ').toLowerCase() : '';
+      const nextB = (t.nextBatch || '').toLowerCase();
+      return bText.includes(cleanMonth) || nextB.includes(cleanMonth);
+    });
+    return filtered.length > 0 ? filtered : (UPCOMING_TRIPS || []).slice(0, 8);
+  }, [selectedMonth]);
+
+  // Featured India Trips
+  const indiaTrips = useMemo(() => {
+    return (UPCOMING_TRIPS || []).filter(t => {
+      const dest = (t.destination || t.location || '').toLowerCase();
+      const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
+      return !intlKeywords.some(kw => dest.includes(kw));
+    }).slice(0, 8);
+  }, []);
+
+  // Featured International Trips
+  const internationalTrips = useMemo(() => {
+    return (UPCOMING_TRIPS || []).filter(t => {
+      const dest = (t.destination || t.location || t.category || '').toLowerCase();
+      const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
+      return intlKeywords.some(kw => dest.includes(kw));
+    }).slice(0, 4);
+  }, []);
+
+  // Weekend Trips (2-4 Days)
+  const weekendTrips = useMemo(() => {
+    return (UPCOMING_TRIPS || []).filter(t => {
+      const dur = (t.duration || '').toLowerCase();
+      const cat = (t.category || '').toLowerCase();
+      return cat.includes('weekend') || dur.includes('2n') || dur.includes('3d') || dur.includes('3n/4d') || dur.includes('4d');
+    }).slice(0, 4);
+  }, []);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     const params = new URLSearchParams();
-    if (searchQuery) params.set('q', searchQuery);
-    if (budgetFilter && budgetFilter !== 'all') {
-      const budgetMap = { under10k: 'under15k', under20k: '15k_25k', luxury: 'above35k' };
-      params.set('budget', budgetMap[budgetFilter] || budgetFilter);
-    }
+    if (searchQuery.trim()) params.set('q', searchQuery.trim());
+    if (budgetFilter && budgetFilter !== 'all') params.set('budget', budgetFilter);
     if (durationFilter && durationFilter !== 'all') params.set('dur', durationFilter);
     const queryString = params.toString();
     navigate(`/trips${queryString ? `?${queryString}` : ''}`);
@@ -58,43 +152,13 @@ const Home = () => {
     setIsPlannerOpen(true);
   };
 
-  const handleMoodSelect = (moodQuery) => {
-    const qLower = (moodQuery || '').toLowerCase();
-    if (qLower.includes('adventure')) navigate('/adventure-treks');
-    else if (qLower.includes('backpack')) navigate('/backpacking-trips');
-    else if (qLower.includes('weekend')) navigate('/weekend-trips');
-    else if (qLower.includes('romantic') || qLower.includes('honeymoon')) navigate('/romantic-escapes');
-    else if (qLower.includes('culture') || qLower.includes('heritage')) navigate('/culture-heritage');
-    else if (qLower.includes('community') || qLower.includes('group')) navigate('/community-trips');
-    else navigate(`/trips?q=${encodeURIComponent(moodQuery)}`);
-  };
-
-  // Dynamically load Travel Styles from Central Knowledge Base
-  const travelStylesList = useMemo(() => {
-    const rawStyles = getTravelStyles();
-    return rawStyles.map((s) => {
-      const IconComponent = getLucideIcon(s.icon);
-      const matchingCount = (UPCOMING_TRIPS || []).filter((t) => {
-        const tags = (t.tags || []).map((tag) => String(tag).toLowerCase());
-        const cat = String(t.category || '').toLowerCase();
-        const q = String(s.query || '').toLowerCase();
-        return tags.some((tag) => tag.includes(q)) || cat.includes(q);
-      }).length;
-      return {
-        ...s,
-        IconComponent,
-        count: `${matchingCount > 0 ? matchingCount : 4}+ Trips`
-      };
-    });
-  }, []);
-
   const organizationSchemas = [getOrganizationSchema(), getTravelAgencySchema()];
 
   return (
-    <div className="w-full bg-brand-light">
+    <div className="w-full bg-[#f8fafc] text-slate-900 font-sans">
       <SEOHead
-        title="WanderLuxe | Luxury Group Travel, Backpacking Expeditions & AI Travel Planner"
-        description="Book premium group trips and backpacking expeditions across Meghalaya, Spiti Valley, Kashmir, Bali, and Ladakh. Plan custom itineraries with our AI Travel Intelligence."
+        title="WanderLuxe | Luxury Group Travel, Backpacking Expeditions & Community Trips"
+        description="Book premium community group trips and backpacking expeditions across Spiti Valley, Meghalaya, Kashmir, Bali, Ladakh and Himachal. Certified captains, boutique stays & transparent pricing."
         canonical="/"
         jsonLd={organizationSchemas}
       />
@@ -106,38 +170,42 @@ const Home = () => {
         initialDestination={plannerDestination}
       />
 
-      {/* Context-Aware Hero Section */}
-      <section className="relative min-h-[90vh] flex items-center justify-center pt-24 pb-20 overflow-hidden">
-        {/* Background Image & Ambient Gradients */}
-        <div className="absolute inset-0 z-0 bg-brand-navy">
+      {/* ========================================================================= */}
+      {/* 1. CINEMATIC TRAVEL HERO & DISCOVERY SEARCH */}
+      {/* ========================================================================= */}
+      <section className="relative min-h-[90vh] flex items-center justify-center pt-28 pb-20 overflow-hidden bg-slate-950">
+        {/* Cinematic Backdrop Image */}
+        <div className="absolute inset-0 z-0">
           <img 
-            src="https://images.pexels.com/photos/6239996/pexels-photo-6239996.jpeg" 
-            alt="WanderLuxe luxury group travel landscape background" 
-            className="w-full h-full object-cover opacity-50 scale-105 transition-transform duration-1000"
+            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop" 
+            alt="WanderLuxe mountain group travel landscape" 
+            className="w-full h-full object-cover opacity-45 scale-105 transition-transform duration-1000"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-navy/80 via-brand-navy/40 to-brand-light"></div>
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/50 to-[#f8fafc]" />
         </div>
 
-        <div className="container relative z-10 mx-auto px-4 text-center mt-[-20px]">
-          {/* Live Contextual Badge */}
+        <div className="travel-container relative z-10 text-center mt-[-10px]">
+          
+          {/* Live Contextual Weather & Season Pill */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-xs font-black text-emerald-300 mb-6 shadow-xl"
           >
             <CloudSun size={15} className="text-emerald-400" />
-            <span>{season.heroTag}</span>
+            <span>{season.heroTag || 'Autumn Clear Skies'}</span>
             <span className="text-white/30">•</span>
-            <span className="text-white/90 font-medium">{timeContext.greeting}</span>
+            <span className="text-white/90 font-medium">{timeContext.greeting || 'Welcome Explorer'}</span>
           </motion.div>
 
+          {/* Main Hero Headline */}
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="text-3xl sm:text-5xl md:text-6xl font-black text-white tracking-tight mb-4 max-w-4xl mx-auto leading-tight"
+            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight mb-4 max-w-5xl mx-auto leading-[1.1]"
           >
-            {timeContext.heroTitle}
+            Explore India & The World <span className="text-emerald-400">In Community.</span>
           </motion.h1>
 
           <motion.p 
@@ -146,33 +214,51 @@ const Home = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-sm sm:text-base md:text-lg text-slate-200 max-w-2xl mx-auto mb-8 font-medium"
           >
-            {timeContext.heroSubtitle}
+            Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.
           </motion.p>
 
-          {/* Smart Contextual Search Card */}
+          {/* Contextual Discovery Search Card */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-white/95 backdrop-blur-xl p-4 md:p-5 rounded-3xl shadow-2xl max-w-4xl mx-auto border border-white/40 text-left"
+            className="bg-white/95 backdrop-blur-2xl p-4 sm:p-5 rounded-3xl shadow-2xl max-w-4xl mx-auto border border-white/60 text-left"
           >
             <form onSubmit={handleSearchSubmit} className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {/* Search Input */}
+                
+                {/* Destination Input */}
                 <div className="md:col-span-2 relative">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
-                    Destination / State
+                    Where do you want to go?
                   </label>
                   <div className="relative">
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input 
                       type="text" 
-                      placeholder="Where do you want to go? (e.g. Spiti, Bali)..."
+                      placeholder="e.g. Spiti Valley, Bali, Meghalaya, Kasol..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
+                </div>
+
+                {/* Duration Filter */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
+                    Duration
+                  </label>
+                  <select
+                    value={durationFilter}
+                    onChange={(e) => setDurationFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="all">All Durations</option>
+                    <option value="weekend">Weekend (2–3 Days)</option>
+                    <option value="short">Short Break (4–5 Days)</option>
+                    <option value="expedition">Expedition (6–8 Days)</option>
+                  </select>
                 </div>
 
                 {/* Budget Filter */}
@@ -186,318 +272,428 @@ const Home = () => {
                     className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="all">All Budgets</option>
-                    <option value="under10k">Under ₹10,000</option>
-                    <option value="under20k">Under ₹20,000</option>
-                    <option value="luxury">Premium ₹30,000+</option>
-                  </select>
-                </div>
-
-                {/* Duration Filter */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
-                    Trip Duration
-                  </label>
-                  <select
-                    value={durationFilter}
-                    onChange={(e) => setDurationFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="all">All Durations</option>
-                    <option value="weekend">Weekend (2-3 Days)</option>
-                    <option value="medium">4 to 5 Days</option>
-                    <option value="week">1 Week+ (6-8 Days)</option>
+                    <option value="under15k">Under ₹15,000</option>
+                    <option value="15k_25k">₹15,000 – ₹25,000</option>
+                    <option value="above35k">Premium ₹35,000+</option>
                   </select>
                 </div>
               </div>
 
+              {/* Bottom Action Row */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       const pick = UPCOMING_TRIPS[Math.floor(Math.random() * UPCOMING_TRIPS.length)];
-                      navigate(`/trip/${pick.id}`);
+                      navigate(`/trip/${pick.slug || pick.id}`);
                     }}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Shuffle size={13} className="text-emerald-500" /> I'm Flexible (Surprise Me)
+                    <Shuffle size={13} className="text-emerald-500" /> Surprise Me
                   </button>
 
                   <button
                     type="button"
                     onClick={() => openAIPlannerFor(searchQuery || 'Meghalaya')}
-                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-black rounded-xl transition-all border border-emerald-200 flex items-center gap-1.5"
+                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-black rounded-xl transition-all border border-emerald-200 flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Sparkles size={13} /> Custom Plan with AI
+                    <Sparkles size={13} /> Custom Route with AI
                   </button>
                 </div>
 
                 <button 
                   type="submit"
-                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md"
+                  className="w-full sm:w-auto px-7 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
                 >
                   <Search size={15} /> Find 50+ Packages
                 </button>
               </div>
             </form>
           </motion.div>
+
+          {/* Trending Search Chips */}
+          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap text-xs text-slate-300">
+            <span className="font-bold text-slate-400 flex items-center gap-1">
+              <TrendingUp size={13} className="text-emerald-400" /> Trending:
+            </span>
+            {TRENDING_SEARCH_CHIPS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => navigate(`/trips?q=${chip.query}`)}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold rounded-lg backdrop-blur-md border border-white/15 transition-all cursor-pointer"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
         </div>
       </section>
 
-      {/* Trust Badges Strip */}
-      <section className="bg-brand-navy text-white py-6 border-y border-white/10 relative z-20 shadow-md">
-        <div className="container mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-6 text-center text-xs md:text-sm font-bold">
+      {/* ========================================================================= */}
+      {/* 2. TRUST & SOCIAL PROOF STRIP */}
+      {/* ========================================================================= */}
+      <section className="bg-slate-900 text-white py-5 border-y border-slate-800 relative z-20 shadow-md">
+        <div className="travel-container grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-center text-xs md:text-sm font-bold">
           <div className="flex items-center justify-center gap-2">
-            <Star className="text-amber-400 fill-amber-400 shrink-0" size={18} />
-            <span>4.9★ Verified Rating (12k+ Reviews)</span>
+            <Star className="text-amber-400 fill-amber-400 shrink-0" size={17} />
+            <span>4.9★ Community Rating (12k+ Reviews)</span>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <Users className="text-brand-emerald shrink-0" size={18} />
-            <span>50,000+ Community Travelers</span>
+            <Users className="text-emerald-400 shrink-0" size={17} />
+            <span>50,000+ Explorers Hosted</span>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <ShieldCheck className="text-brand-emerald shrink-0" size={18} />
+            <ShieldCheck className="text-emerald-400 shrink-0" size={17} />
             <span>100% Certified Trip Captains</span>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <CreditCard className="text-brand-emerald shrink-0" size={18} />
-            <span>0% No-Cost EMI & Instant QR Pass</span>
+            <CreditCard className="text-emerald-400 shrink-0" size={17} />
+            <span>0% EMI & 10% Booking Deposit</span>
           </div>
         </div>
       </section>
 
-      {/* "Continue Your Journey / Resume Planning" Row (if user has views or AI plans) */}
-      {(recentlyViewed.length > 0 || savedAIPlans.length > 0) && (
-        <section className="py-10 bg-slate-50 border-b border-slate-200/80">
-          <div className="container mx-auto px-4 md:px-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <History size={20} className="text-emerald-600" />
-                <h2 className="text-xl md:text-2xl font-black text-slate-900">
-                  Continue Your Journey
-                </h2>
-              </div>
-              <Link to="/profile" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-                View All History <ArrowRight size={14} />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {/* If there is a saved AI plan, highlight it as first card */}
-              {savedAIPlans.length > 0 && (
-                <div className="bg-gradient-to-br from-slate-900 to-emerald-950 rounded-3xl p-5 text-white flex flex-col justify-between shadow-md border border-slate-800">
-                  <div>
-                    <span className="text-[10px] font-black uppercase text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-400/30">
-                      Unbooked AI Route
-                    </span>
-                    <h3 className="text-base font-black mt-2 leading-snug">{savedAIPlans[0].title}</h3>
-                    <p className="text-xs text-slate-300 line-clamp-2 mt-1">{savedAIPlans[0].tagline}</p>
-                  </div>
-
-                  <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-300">{savedAIPlans[0].daysCount} Days</span>
-                    <button
-                      onClick={() => openAIPlannerFor(savedAIPlans[0].destination)}
-                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1"
-                    >
-                      Resume <ChevronRight size={13} />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {recentlyViewed.slice(0, savedAIPlans.length > 0 ? 3 : 4).map((trip) => (
-                <TripCard key={trip.id} trip={trip} showWeather={true} customBadge="Recently Viewed" />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* "Recommended For You" Contextual Discovery Section */}
-      <section className="py-16 container mx-auto px-4 md:px-8">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-wider mb-2 border border-emerald-200">
-              <Sparkles size={13} />
-              Personalized for {timeContext.period} & {season.name.split(' ')[0]}
-            </div>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900">
-              Recommended Expeditions For You
-            </h2>
-            <p className="text-xs md:text-sm text-slate-500 font-medium mt-0.5">
-              Ranked dynamically by climate suitability, upcoming departures, and community ratings.
-            </p>
-          </div>
-
-          <Link to="/destinations" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-            Browse All 50 Expeditions <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {recommendedTrips.slice(0, 8).map((trip) => (
-            <TripCard key={trip.id} trip={trip} showWeather={true} />
-          ))}
-        </div>
-      </section>
-
-      {/* Travel by Mood / Category Discovery */}
-      <section className="py-12 bg-slate-50 border-y border-slate-200/80">
-        <div className="container mx-auto px-4 md:px-8">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-6">
+      {/* ========================================================================= */}
+      {/* 3. POPULAR DESTINATIONS / WHERE NEXT? */}
+      {/* ========================================================================= */}
+      <section className="travel-section">
+        <div className="travel-container">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
             <div>
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block">
-                Tailored Travel Vibe
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                Explore Destinations
               </span>
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900">
-                Explore Journeys by Mood & Style
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                Popular Mountain & Island Hubs
               </h2>
             </div>
-            <Link to="/destinations" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-              Browse All Categories <ArrowRight size={14} />
+            <Link 
+              to="/trips" 
+              className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
+            >
+              Browse All 50+ Circuits <ArrowRight size={14} />
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-            {travelStylesList.slice(0, 5).map((m) => (
-              <div
-                key={m.id || m.label}
-                onClick={() => handleMoodSelect(m.query)}
-                className={`p-4 rounded-3xl bg-white border transition-all cursor-pointer group flex flex-col justify-between ${
-                  userPreferences.mood === m.query
-                    ? 'border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
-                    : 'border-slate-200/80 hover:border-emerald-500 hover:shadow-md'
-                }`}
-              >
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                  <m.IconComponent size={20} />
-                </div>
-                <div>
-                  <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-600 transition-colors">
-                    {m.label}
-                  </h3>
-                  <span className="text-[11px] font-bold text-slate-400 mt-0.5 block">{m.count}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Interactive AI Trip Planner Hero Banner */}
-      <section className="container mx-auto px-4 md:px-8 py-16">
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950 rounded-3xl p-8 md:p-12 text-white shadow-2xl border border-slate-800 flex flex-col lg:flex-row items-center justify-between gap-8 relative overflow-hidden">
-          <div className="max-w-xl relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-wider mb-3 border border-emerald-500/30">
-              <Sparkles size={14} /> WanderLuxe AI Travel Planner
-            </div>
-            <h2 className="text-2xl md:text-4xl font-black mb-3 leading-tight">
-              Can't Find Your Exact Route? Let AI Build One in Seconds.
-            </h2>
-            <p className="text-slate-300 text-xs md:text-sm font-medium leading-relaxed mb-6">
-              Get an instant day-by-day plan with hidden mountain waterfalls, estimated stay and food budgets, packing checklists, and verified captain departures.
-            </p>
-            <button
-              onClick={() => openAIPlannerFor('Meghalaya')}
-              className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/30 flex items-center gap-2"
-            >
-              <Sparkles size={16} /> Plan Custom Itinerary with AI
-            </button>
-          </div>
-
-          <div className="relative z-10 w-full lg:w-96 bg-white/10 backdrop-blur-xl border border-white/20 p-6 rounded-3xl space-y-4">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">Sample AI Generation</span>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center p-2.5 rounded-xl bg-white/10">
-                <span className="font-bold">Spiti Valley Circuit</span>
-                <span className="text-emerald-300 font-bold">6 Days</span>
-              </div>
-              <div className="flex justify-between items-center p-2.5 rounded-xl bg-white/10">
-                <span className="font-bold">Meghalaya Root Bridges</span>
-                <span className="text-emerald-300 font-bold">5 Days</span>
-              </div>
-              <div className="flex justify-between items-center p-2.5 rounded-xl bg-white/10">
-                <span className="font-bold">Bali & Nusa Penida</span>
-                <span className="text-emerald-300 font-bold">5 Days</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Destination Hubs (9 Geographies with Dynamic Counts) */}
-      <section className="py-16 bg-white border-y border-slate-200/80">
-        <div className="container mx-auto px-4 md:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-10">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-emerald-600">
-              Handpicked Geographies
-            </span>
-            <h2 className="text-2xl md:text-4xl font-black text-slate-900 mt-1 mb-2">
-              Featured Travel Hubs
-            </h2>
-            <p className="text-slate-500 text-xs md:text-sm font-medium">
-              Explore destinations with real-time climate data and verified active departures.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-5">
-            {DESTINATIONS.map(dest => {
-              const destWeather = getWeatherFor(dest.name);
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+            {DESTINATIONS.slice(0, 8).map(dest => {
               const activeCount = getDestinationPackageCount(dest.name, UPCOMING_TRIPS);
+              const destWeather = getWeatherFor(dest.name);
               return (
-                <motion.div 
-                  key={dest.id}
-                  whileHover={{ y: -4 }}
-                  onClick={() => navigate(`/trips/${dest.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)}
-                  className="relative rounded-3xl overflow-hidden aspect-[4/3] group cursor-pointer shadow-sm border border-slate-100"
-                >
-                  <img 
-                    src={dest.image} 
-                    alt={`${dest.name} travel tour package destination`} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-brand-navy/90 via-brand-navy/25 to-transparent flex flex-col justify-between p-4">
-                    <div className="self-end">
-                      <WeatherBadge weather={destWeather} size="sm" showCondition={false} />
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-black tracking-wider text-emerald-400 block">{dest.region || dest.category}</span>
-                      <h3 className="text-white font-extrabold text-base leading-tight">{dest.name}</h3>
-                      <p className="text-emerald-300 text-[11px] font-bold mt-0.5">
-                        {activeCount} Active {activeCount === 1 ? 'Package' : 'Packages'}
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
+                <DestinationCard 
+                  key={dest.id} 
+                  destination={dest} 
+                  activeCount={activeCount}
+                  weather={destWeather}
+                  aspect="aspect-[3/4]"
+                />
               );
             })}
           </div>
         </div>
       </section>
 
-      {/* Community Testimonials */}
-      <section className="py-20 bg-brand-light">
-        <div className="container mx-auto px-4 md:px-8">
-          <div className="text-center mb-16 max-w-2xl mx-auto">
-            <span className="text-xs font-black uppercase tracking-wider text-emerald-600">Real Community Stories</span>
-            <h2 className="text-2xl md:text-4xl font-black text-slate-900 mt-1 mb-2">Loved by 50,000+ Solo & Group Explorers</h2>
-            <p className="text-slate-500 text-xs md:text-sm font-medium">Read verified experiences from real community members across India.</p>
+      {/* ========================================================================= */}
+      {/* 4. EXPLORE TRAVEL STYLES */}
+      {/* ========================================================================= */}
+      <section className="py-12 bg-white border-y border-slate-200/80">
+        <div className="travel-container">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-6">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                Curated Travel Formats
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
+                Explore by Travel Style
+              </h2>
+            </div>
+            <Link to="/trips" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+              View All Formats <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            {[
+              { label: 'Community Trips', count: '50 Trips', path: '/community-trips', icon: HeartHandshake },
+              { label: 'Weekend Getaways', count: '19 Trips', path: '/weekend-trips', icon: Clock },
+              { label: 'Backpacking Circuits', count: '15 Trips', path: '/backpacking-trips', icon: Backpack },
+              { label: 'Adventure & Treks', count: '19 Trips', path: '/adventure-treks', icon: Mountain },
+              { label: 'Romantic Escapes', count: '20 Trips', path: '/romantic-escapes', icon: Heart },
+              { label: 'Culture & Heritage', count: '12 Trips', path: '/culture-heritage', icon: Compass }
+            ].map((style) => {
+              const IconComp = style.icon;
+              return (
+                <Link
+                  key={style.label}
+                  to={style.path}
+                  className="p-4 rounded-3xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200/80 hover:border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between group"
+                >
+                  <div className="w-10 h-10 rounded-2xl bg-white text-emerald-600 flex items-center justify-center mb-3 shadow-xs group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                    <IconComp size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-600 transition-colors">
+                      {style.label}
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-400 mt-0.5 block">{style.count}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 5. UPCOMING COMMUNITY TRIPS (WITH DEPARTURE MONTH TABS) */}
+      {/* ========================================================================= */}
+      <section className="travel-section">
+        <div className="travel-container">
+          <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                Fixed Batch Departures
+              </span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                Upcoming Community Trips
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                Social group expeditions with like-minded travelers and certified trip leaders.
+              </p>
+            </div>
+
+            {/* Departure Month Selector Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+              {availableMonths.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setSelectedMonth(m)}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                    selectedMonth === m
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+            {upcomingCommunityTrips.map((trip) => (
+              <TripCard key={trip.id} trip={trip} showWeather={true} />
+            ))}
+          </div>
+
+          <div className="mt-10 text-center">
+            <Link
+              to="/community-trips"
+              className="inline-flex items-center gap-2 px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-md transition-all"
+            >
+              <span>View All 50 Community Departures</span>
+              <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 6. EXPLORE INDIA CIRCUITS */}
+      {/* ========================================================================= */}
+      <section className="travel-section bg-slate-100/70 border-y border-slate-200/80">
+        <div className="travel-container">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                Domestic Escapes
+              </span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                Explore India Circuits
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                From high-altitude Himalayan passes to pristine Northeast valleys and coastal backwaters.
+              </p>
+            </div>
+            <Link 
+              to="/trips/india" 
+              className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
+            >
+              View All 46 India Trips <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+            {indiaTrips.map((trip) => (
+              <TripCard key={trip.id} trip={trip} showWeather={true} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 7. INTERNATIONAL ESCAPES */}
+      {/* ========================================================================= */}
+      {internationalTrips.length > 0 && (
+        <section className="travel-section">
+          <div className="travel-container">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                  Global Adventures
+                </span>
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                  International Escapes
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  Seamless visa guidance, boutique private villas & certified local tour specialists.
+                </p>
+              </div>
+              <Link 
+                to="/trips/international" 
+                className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
+              >
+                All International Trips <ArrowRight size={14} />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+              {internationalTrips.map((trip) => (
+                <TripCard key={trip.id} trip={trip} showWeather={true} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. WEEKEND GETAWAYS (2–4 DAYS) */}
+      {/* ========================================================================= */}
+      {weekendTrips.length > 0 && (
+        <section className="travel-section bg-slate-100/70 border-y border-slate-200/80">
+          <div className="travel-container">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
+              <div>
+                <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                  Quick Breaks
+                </span>
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                  Weekend Getaways
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
+                  Overnight departures from Delhi & Chandigarh. Zero leave needed.
+                </p>
+              </div>
+              <Link 
+                to="/weekend-trips" 
+                className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
+              >
+                View 19 Weekend Trips <ArrowRight size={14} />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+              {weekendTrips.map((trip) => (
+                <TripCard key={trip.id} trip={trip} showWeather={true} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. WHY CHOOSE WANDERLUXE */}
+      {/* ========================================================================= */}
+      <section className="travel-section bg-white">
+        <div className="travel-container">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+              The WanderLuxe Promise
+            </span>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+              Why 50,000+ Explorers Choose Us
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-6 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                <ShieldCheck size={24} />
+              </div>
+              <h3 className="text-base font-black text-slate-900">100% Certified Captains</h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Every group is led by experienced, high-altitude first-responder captains who know the hidden cafes and scenic viewpoints.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
+                <CreditCard size={24} />
+              </div>
+              <h3 className="text-base font-black text-slate-900">Transparent Pricing</h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                No hidden permits, toll fees, or unexpected driver allowances. What you see is what you pay, with easy 10% advance deposits.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/20">
+                <Compass size={24} />
+              </div>
+              <h3 className="text-base font-black text-slate-900">Curated Boutique Stays</h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Handpicked riverside camps, boutique apple orchard cottages, and scenic valley hotels vetted for hygiene and warmth.
+              </p>
+            </div>
+
+            <div className="p-6 rounded-3xl bg-slate-50 border border-slate-200/80 space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-md">
+                <PhoneCall size={24} />
+              </div>
+              <h3 className="text-base font-black text-slate-900">24/7 On-Trip Assistance</h3>
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                A dedicated concierge and operations control room actively monitors mountain weather, vehicle fleets, and passenger comfort.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 10. REAL COMMUNITY STORIES / VERIFIED REVIEWS */}
+      {/* ========================================================================= */}
+      <section className="travel-section bg-slate-100/70 border-y border-slate-200/80">
+        <div className="travel-container">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+              Traveler Stories
+            </span>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+              Loved by Solo Explorers, Duos & Groups
+            </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {TESTIMONIALS.map((test) => (
-              <div key={test.id} className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4">
+              <div key={test.id} className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between space-y-4">
                 <div className="flex items-center gap-1 text-amber-500">
-                  {[...Array(test.rating)].map((_, i) => (
-                    <Star key={i} size={16} fill="currentColor" />
+                  {[...Array(test.rating || 5)].map((_, i) => (
+                    <Star key={i} size={15} fill="currentColor" />
                   ))}
                 </div>
-                <p className="text-xs md:text-sm text-slate-700 font-medium leading-relaxed italic">
+                <p className="text-xs sm:text-sm text-slate-700 font-medium leading-relaxed italic">
                   "{test.content}"
                 </p>
-                <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-                  <img src={test.avatar} alt={test.name} className="w-10 h-10 rounded-full object-cover border border-emerald-500" />
+                <div className="flex items-center gap-3 pt-3 border-t border-slate-100">
+                  <img 
+                    src={test.avatar} 
+                    alt={test.name} 
+                    className="w-10 h-10 rounded-full object-cover border border-emerald-500" 
+                  />
                   <div>
                     <h4 className="text-xs font-black text-slate-900">{test.name}</h4>
                     <span className="text-[10px] font-bold text-slate-400">{test.role}</span>
@@ -508,6 +704,54 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      {/* ========================================================================= */}
+      {/* 11. MOMENTS IN FRAMES / JOURNEY GALLERY */}
+      {/* ========================================================================= */}
+      <section className="travel-section bg-white">
+        <div className="travel-container">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+                Visual Memories
+              </span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+                Moments in Frames
+              </h2>
+            </div>
+            <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+              <ImageIcon size={14} className="text-emerald-500" /> Captured by Travelers & Captains
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
+            {GALLERY_MOMENTS.map((moment, idx) => (
+              <div key={idx} className="relative rounded-2xl overflow-hidden aspect-square group shadow-sm bg-slate-900">
+                <img 
+                  src={moment.image} 
+                  alt={moment.title} 
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+                  <div className="text-[11px] font-black text-white leading-tight">{moment.title}</div>
+                  <div className="text-[9px] text-emerald-400 font-bold">{moment.location}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 12. NEED HELP CHOOSING? / REQUEST A CALLBACK */}
+      {/* ========================================================================= */}
+      <section className="travel-section bg-[#f8fafc]">
+        <div className="travel-container">
+          <CallbackForm />
+        </div>
+      </section>
+
     </div>
   );
 };

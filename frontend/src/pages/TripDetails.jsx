@@ -250,7 +250,7 @@ const TripDetails = () => {
         )}
       </AnimatePresence>
 
-      <div className="container mx-auto px-4 md:px-8">
+      <div className="travel-container">
         {/* Navigation Breadcrumbs */}
         <Breadcrumbs
           items={[
@@ -294,14 +294,14 @@ const TripDetails = () => {
           <div className="flex items-center gap-3 self-start lg:self-end">
             <button
               onClick={() => setIsPlannerOpen(true)}
-              className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl text-xs font-black transition-all border border-emerald-200 flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-2xl text-xs font-black transition-all border border-emerald-200 flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <Sparkles size={15} /> Customize with AI
             </button>
 
             <button
               onClick={handleToggleWishlist}
-              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-1.5 text-xs font-black ${
+              className={`p-2.5 rounded-2xl border transition-all flex items-center gap-1.5 text-xs font-black cursor-pointer ${
                 isLiked
                   ? 'bg-rose-50 border-rose-200 text-rose-600 shadow-sm'
                   : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -314,7 +314,7 @@ const TripDetails = () => {
         </div>
 
         {/* Gallery Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-10 h-[380px] md:h-[480px]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-8 h-[380px] md:h-[480px]">
           <div
             onClick={() => setLightboxIndex(0)}
             className="md:col-span-2 md:row-span-2 rounded-3xl overflow-hidden cursor-pointer relative group bg-slate-200"
@@ -346,8 +346,27 @@ const TripDetails = () => {
           ))}
         </div>
 
+        {/* Sticky Section Navigation Header */}
+        <div className="sticky top-16 z-30 mb-8 bg-white/95 backdrop-blur-md p-2 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2 overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'itinerary', label: 'Day-by-Day Itinerary' },
+            { id: 'packing', label: 'Packing Assistant' },
+            { id: 'inclusions', label: 'Inclusions & Exclusions' },
+            { id: 'faqs', label: 'Trip FAQs' }
+          ].map((sec) => (
+            <a
+              key={sec.id}
+              href={`#${sec.id}`}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-black text-slate-700 hover:text-emerald-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
+            >
+              {sec.label}
+            </a>
+          ))}
+        </div>
+
         {/* "Why Visit Now?" Contextual Banner */}
-        <div className="mb-10 bg-gradient-to-r from-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div id="overview" className="mb-10 bg-gradient-to-r from-slate-900 to-emerald-950 rounded-3xl p-6 md:p-8 text-white shadow-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1.5 max-w-2xl">
             <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black uppercase px-3 py-1 rounded-full border border-emerald-400/30 inline-flex items-center gap-1">
               <Sparkles size={12} /> Seasonal & Climate Intelligence
@@ -415,7 +434,7 @@ const TripDetails = () => {
             </div>
 
             {/* Day-by-Day Itinerary Accordion */}
-            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+            <div id="itinerary" className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-black text-slate-900">Day-by-Day Itinerary</h3>
@@ -423,7 +442,7 @@ const TripDetails = () => {
                 </div>
                 <button
                   onClick={() => setIsPlannerOpen(true)}
-                  className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                  className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
                 >
                   <Sparkles size={14} /> Customize Days with AI
                 </button>
@@ -443,7 +462,7 @@ const TripDetails = () => {
                     >
                       <button
                         onClick={() => setOpenDay(isOpen ? null : dayItem.day)}
-                        className="w-full p-4 flex items-center justify-between text-left bg-slate-50 hover:bg-slate-100 transition-colors"
+                        className="w-full p-4 flex items-center justify-between text-left bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
                       >
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 rounded-xl bg-slate-900 text-white text-xs font-black flex items-center justify-center shrink-0">
@@ -466,7 +485,7 @@ const TripDetails = () => {
             </div>
 
             {/* Interactive Dynamic Packing Checklist */}
-            <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+            <div id="packing" className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                 <div>
                   <div className="flex items-center gap-2">
@@ -527,7 +546,7 @@ const TripDetails = () => {
             </div>
 
             {/* Inclusions & Exclusions */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div id="inclusions" className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
                 <h4 className="text-base font-black text-emerald-700 flex items-center gap-2">
                   <CheckCircle2 size={18} /> Inclusions
