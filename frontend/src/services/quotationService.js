@@ -115,6 +115,17 @@ export async function rejectQuotationApi(id, payload = {}) {
   return data;
 }
 
+export async function archiveQuotationApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/quotations/${id}/archive`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to archive quotation');
+  return data;
+}
+
 export async function convertQuotationToTripApi(id) {
   const response = await fetch(`${API_BASE_URL}/quotations/${id}/convert-to-trip`, {
     method: 'POST',
@@ -642,6 +653,7 @@ export default {
   createQuotationRevisionApi,
   approveQuotationApi,
   rejectQuotationApi,
+  archiveQuotationApi,
   convertQuotationToTripApi,
   createBookingFromQuotationApi,
   getPublicQuotationByTokenApi,

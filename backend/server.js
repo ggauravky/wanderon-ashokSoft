@@ -1,5 +1,5 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
@@ -15,9 +15,6 @@ import seoRoutes from './routes/seoRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import aiItineraryRoutes from './routes/aiItineraryRoutes.js';
 import quotationRoutes from './routes/quotationRoutes.js';
-
-// Load environment variables
-dotenv.config();
 
 // Connect to MongoDB Atlas
 connectDB();

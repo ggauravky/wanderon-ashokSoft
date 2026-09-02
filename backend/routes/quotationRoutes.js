@@ -10,6 +10,7 @@ import {
   createQuotationRevision,
   approveQuotation,
   rejectQuotation,
+  archiveQuotation,
   convertToTrip,
   createBookingFromQuotation,
   getPublicQuotationByToken,
@@ -48,6 +49,7 @@ router.post('/:id/send', requireRoles('super_admin', 'admin', 'sales'), sendQuot
 router.post('/:id/create-revision', requireRoles('super_admin', 'admin', 'sales'), createQuotationRevision);
 router.post('/:id/approve', requireRoles('super_admin', 'admin', 'sales'), approveQuotation);
 router.post('/:id/reject', requireRoles('super_admin', 'admin', 'sales'), rejectQuotation);
+router.post('/:id/archive', requireRoles('super_admin', 'admin', 'sales'), archiveQuotation);
 router.post('/:id/convert-to-trip', operationsOrAdmin, convertToTrip);
 router.post('/:id/create-booking', requireRoles('super_admin', 'admin', 'operations', 'sales'), createBookingFromQuotation);
 

@@ -358,6 +358,12 @@ const quotationSchema = new mongoose.Schema(
       default: null
     },
 
+    // Immutable Snapshot of Agreed Proposal at Time of Customer Approval
+    approvedSnapshot: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+
     // Revision Audit History (Version increments on re-pricing sent quotes)
     revisions: [
       {
@@ -372,7 +378,7 @@ const quotationSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'CONVERTED'],
+      enum: ['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'CONVERTED', 'ARCHIVED'],
       default: 'DRAFT',
       index: true
     },
@@ -421,8 +427,10 @@ const quotationSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for pipeline querying
+// Compound and fast-lookup indexes for pipeline querying
 quotationSchema.index({ status: 1, createdAt: -1 });
+quotationSchema.index({ bookingCode: 1 });
+quotationSchema.index({ updatedAt: -1 });
 
 const Quotation = mongoose.model('Quotation', quotationSchema);
 export default Quotation;

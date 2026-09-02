@@ -28,6 +28,7 @@ import CreatorStorefront from './pages/CreatorStorefront';
 import SharedItinerary from './pages/SharedItinerary';
 import DynamicPage from './pages/DynamicPage';
 import PublicQuotationView from './pages/PublicQuotationView';
+import QuotationDetail from './pages/QuotationDetail';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 import ScrollToTop from './components/ScrollToTop';
@@ -67,9 +68,19 @@ function App() {
                 <AdminDashboard defaultTab="quotations" />
               </AdminRoute>
             } />
+            <Route path="admin/quotations/:id" element={
+              <AdminRoute>
+                <QuotationDetail />
+              </AdminRoute>
+            } />
             <Route path="admin/quotations/:quoteId/edit" element={
               <AdminRoute>
                 <AdminDashboard defaultTab="quotations" />
+              </AdminRoute>
+            } />
+            <Route path="admin/bookings/:id" element={
+              <AdminRoute>
+                <AdminDashboard defaultTab="bookings_crm" />
               </AdminRoute>
             } />
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams, Link } from 'react-router-dom';
 import { 
   BarChart3, TrendingUp, Users, Ticket, Tag, Plus, Trash2, 
   Edit3, ShieldCheck, CheckCircle2, XCircle, Search, RefreshCw, 
@@ -44,6 +44,7 @@ const getDestinations = () => (travelKnowledgeService.getDestinations || travelK
 import QuotationBuilderWizard from '../components/QuotationBuilderWizard';
 import QuotationPreviewModal from '../components/QuotationPreviewModal';
 import ShareQuotationModal from '../components/ShareQuotationModal';
+import BookingDetailsModal from '../components/BookingDetailsModal';
 
 const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const { 
@@ -218,6 +219,9 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const [copiedQuoteToken, setCopiedQuoteToken] = useState(null);
   const [previewQuotation, setPreviewQuotation] = useState(null);
   const [shareModalQuotation, setShareModalQuotation] = useState(null);
+  const [bookingModalCode, setBookingModalCode] = useState(null);
+  const [bookingModalQuotation, setBookingModalQuotation] = useState(null);
+  const [showBookingModal, setShowBookingModal] = useState(false);
 
   // Load All Real Admin Data
   const fetchAllAdminData = async () => {
@@ -324,6 +328,15 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
       fetchQuotationsList();
     }
   }, [activeTab, quotationStatusFilter, quotationDestinationFilter, quotationSalesFilter, quotationSort]);
+
+  // Debounced search for quotations (300ms)
+  useEffect(() => {
+    if (activeTab !== 'quotations') return;
+    const timer = setTimeout(() => {
+      fetchQuotationsList();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [quotationSearch]);
 
   useEffect(() => {
     if (quoteId) {
@@ -1167,7 +1180,13 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                             <td className="p-4">
                               <div className="space-y-1">
                                 <div className="font-mono font-black text-slate-900 text-xs flex items-center gap-1.5">
-                                  <span>{q.quotationNumber || 'WL-Q-2026-DRAFT'}</span>
+                                  <Link
+                                    to={`/admin/quotations/${q._id || q.id}`}
+                                    className="text-slate-900 hover:text-indigo-600 hover:underline flex items-center gap-1 font-mono"
+                                    title="View authoritative Quotation Detail page"
+                                  >
+                                    <span>{q.quotationNumber || 'WL-Q-2026-DRAFT'}</span>
+                                  </Link>
                                 </div>
                                 {q.leadId && (
                                   <span className="text-[9px] font-black uppercase bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200 inline-block">
@@ -1266,11 +1285,20 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                             {/* Action Buttons */}
                             <td className="p-4 text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                {/* View Quotation Details Page */}
+                                <Link
+                                  to={`/admin/quotations/${q._id || q.id}`}
+                                  className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl transition-colors inline-flex items-center"
+                                  title="View Full Authoritative Quotation Details"
+                                >
+                                  <FileText size={13} />
+                                </Link>
+
                                 {/* Edit / Open Builder */}
                                 <button
                                   onClick={() => handleEditQuotation(q._id || q.id)}
                                   className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
-                                  title="Edit / Open Builder"
+                                  title="Edit in Builder"
                                 >
                                   <Edit3 size={13} />
                                 </button>
@@ -1340,19 +1368,20 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                                   </>
                                 )}
 
-                                {/* Converted Traceability Badges */}
+                                {/* Converted Traceability Badges (Clicking WLX opens confirmed booking order) */}
                                 {isConverted && (
                                   <div className="flex items-center gap-1">
                                     {q.bookingCode && (
                                       <button
                                         onClick={() => {
-                                          setActiveTab('bookings');
-                                          setBookingSearch?.(q.bookingCode);
+                                          setBookingModalCode(q.bookingCode);
+                                          setBookingModalQuotation(q);
+                                          setShowBookingModal(true);
                                         }}
-                                        className="px-2 py-0.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-lg text-[9px] font-black flex items-center gap-1 transition-colors cursor-pointer"
-                                        title="View Converted Booking Order"
+                                        className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 rounded-lg text-[10px] font-black flex items-center gap-1.5 transition-all shadow-2xs hover:scale-105 cursor-pointer"
+                                        title={`Click to view Confirmed Booking Order (${q.bookingCode})`}
                                       >
-                                        <CreditCard size={10} /> {q.bookingCode}
+                                        <CreditCard size={11} className="text-emerald-700" /> {q.bookingCode}
                                       </button>
                                     )}
                                     {q.convertedTripId && (
@@ -1360,10 +1389,10 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                                         onClick={() => {
                                           setActiveTab('trips');
                                         }}
-                                        className="px-2 py-0.5 bg-indigo-100 text-indigo-800 hover:bg-indigo-200 rounded-lg text-[9px] font-black flex items-center gap-1 transition-colors cursor-pointer"
+                                        className="px-2.5 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-300 rounded-lg text-[10px] font-black flex items-center gap-1 transition-all shadow-2xs hover:scale-105 cursor-pointer"
                                         title="View Converted Draft Trip in CMS"
                                       >
-                                        <Compass size={10} /> Draft Trip
+                                        <Compass size={11} className="text-indigo-700" /> Draft Trip
                                       </button>
                                     )}
                                   </div>
@@ -1625,12 +1654,25 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                       <th className="p-4">Amount</th>
                       <th className="p-4">Payment</th>
                       <th className="p-4">Booking Status</th>
+                      <th className="p-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {bookings.map((b) => (
                       <tr key={b._id || b.bookingId} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-mono font-bold text-emerald-700">{b.bookingId || b._id}</td>
+                        <td className="p-4 font-mono font-bold text-emerald-700">
+                          <button
+                            onClick={() => {
+                              setBookingModalCode(b.bookingId || b._id);
+                              setBookingModalQuotation(null);
+                              setShowBookingModal(true);
+                            }}
+                            className="hover:underline hover:text-emerald-900 cursor-pointer flex items-center gap-1 font-bold"
+                            title="Click to view full Booking Order details"
+                          >
+                            <CreditCard size={11} /> {b.bookingId || b._id}
+                          </button>
+                        </td>
                         <td className="p-4">
                           <div className="font-bold text-slate-900">{b.customer?.name || 'Traveler'}</div>
                           <div className="text-[11px] text-slate-400 font-mono">{b.customer?.email}</div>
@@ -1650,6 +1692,18 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                           }`}>
                             {b.bookingStatus || 'CONFIRMED'}
                           </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <button
+                            onClick={() => {
+                              setBookingModalCode(b.bookingId || b._id);
+                              setBookingModalQuotation(null);
+                              setShowBookingModal(true);
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Eye size={12} /> View
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -2912,6 +2966,20 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
             setPreviewQuotation(shareModalQuotation);
             setShareModalQuotation(null);
           }}
+        />
+      )}
+
+      {/* Booking Order Details Modal */}
+      {showBookingModal && (
+        <BookingDetailsModal
+          isOpen={showBookingModal}
+          onClose={() => {
+            setShowBookingModal(false);
+            setBookingModalCode(null);
+            setBookingModalQuotation(null);
+          }}
+          bookingCode={bookingModalCode}
+          quotationData={bookingModalQuotation}
         />
       )}
 

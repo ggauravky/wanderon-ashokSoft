@@ -92,7 +92,10 @@ export const createLead = async (req, res) => {
 
     const formattedPhone = cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`;
     const determinedLeadType = leadType || (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
-    const determinedSource = source || (tripId ? 'trip_page' : 'contact_page');
+    const allowedSources = ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry'];
+    const determinedSource = (source && allowedSources.includes(source)) 
+      ? source 
+      : (tripId ? 'trip_page' : 'custom_inquiry');
     const validCallWindows = ['Morning', 'Afternoon', 'Evening', 'Anytime', ''];
     const safeCallWindow = validCallWindows.includes(preferredCallWindow) ? preferredCallWindow : 'Anytime';
     

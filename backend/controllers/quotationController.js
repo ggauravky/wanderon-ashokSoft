@@ -15,13 +15,14 @@ export let memoryQuotations = [];
 
 // Helper: State Transition State Machine
 const ALLOWED_STATE_TRANSITIONS = {
-  DRAFT: ['SENT', 'REJECTED', 'EXPIRED'],
-  SENT: ['VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'DRAFT'],
-  VIEWED: ['APPROVED', 'REJECTED', 'EXPIRED', 'DRAFT'],
-  APPROVED: ['CONVERTED', 'REJECTED'],
-  REJECTED: ['DRAFT'],
-  EXPIRED: ['DRAFT'],
-  CONVERTED: [] // Terminal state
+  DRAFT: ['SENT', 'APPROVED', 'REJECTED', 'EXPIRED', 'ARCHIVED'],
+  SENT: ['VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'ARCHIVED'],
+  VIEWED: ['APPROVED', 'REJECTED', 'EXPIRED', 'ARCHIVED'],
+  APPROVED: ['CONVERTED', 'REJECTED', 'ARCHIVED'],
+  REJECTED: ['DRAFT', 'ARCHIVED'],
+  EXPIRED: ['DRAFT', 'ARCHIVED'],
+  CONVERTED: ['ARCHIVED'],
+  ARCHIVED: ['DRAFT']
 };
 
 export const isValidStateTransition = (currentStatus, targetStatus) => {
@@ -106,8 +107,13 @@ export const sanitizeForCustomer = (quotation) => {
     });
   }
 
-  // 5. Remove internal audit logs & administrative notes
+  // 5. Remove internal audit logs, revisions & administrative notes
   delete doc.auditTrail;
+  delete doc.revisions;
+  delete doc.pricingRules;
+  delete doc.priceSnapshot;
+  if (doc.customerSnapshot) delete doc.customerSnapshot.notes;
+  if (doc.assignedToSnapshot) delete doc.assignedToSnapshot.phone;
   return doc;
 };
 
@@ -336,25 +342,25 @@ export const createQuotation = async (req, res) => {
 };
 
 // ============================================================================
-// 3. GET ALL QUOTATIONS (Filtered Pipeline)
+// 3. GET QUOTATIONS (Pipeline list with filtering, search & pagination)
 // ============================================================================
-// @desc    Get all quotations with search, status, and assignment filters
+// @desc    Get all quotations with comprehensive status/sales filters
 // @route   GET /api/quotations
-// @access  Private (Sales/Admin)
+// @access  Private (Sales/Admin/Operations/Marketing)
 export const getQuotations = async (req, res) => {
   try {
     const { status, leadId, assignedTo, destination, search, sortBy = 'updated', page = 1, limit = 50 } = req.query;
 
     const andConditions = [];
 
-    if (status && status !== 'all') {
-      andConditions.push({ status });
+    if (status && typeof status === 'string' && status !== 'all') {
+      andConditions.push({ status: String(status).trim() });
     }
-    if (leadId) {
-      andConditions.push({ leadId });
+    if (leadId && typeof leadId === 'string') {
+      andConditions.push({ leadId: String(leadId).trim() });
     }
-    if (destination && destination !== 'all') {
-      andConditions.push({ 'tripRequirements.destination': { $regex: destination.trim(), $options: 'i' } });
+    if (destination && typeof destination === 'string' && destination !== 'all') {
+      andConditions.push({ 'tripRequirements.destination': { $regex: String(destination).trim(), $options: 'i' } });
     }
 
     // Role-based filtering: Sales users only see quotations assigned to them, created by them, or unassigned
@@ -371,15 +377,16 @@ export const getQuotations = async (req, res) => {
           { assignedTo: null }
         ]
       });
-    } else if (assignedTo && assignedTo !== 'all') {
-      andConditions.push({ assignedTo });
+    } else if (assignedTo && typeof assignedTo === 'string' && assignedTo !== 'all') {
+      andConditions.push({ assignedTo: String(assignedTo).trim() });
     }
 
-    if (search) {
-      const q = search.trim();
+    if (search && typeof search === 'string') {
+      const q = String(search).trim();
       andConditions.push({
         $or: [
           { quotationNumber: { $regex: q, $options: 'i' } },
+          { bookingCode: { $regex: q, $options: 'i' } },
           { 'customerSnapshot.name': { $regex: q, $options: 'i' } },
           { 'customerSnapshot.email': { $regex: q, $options: 'i' } },
           { 'customerSnapshot.phone': { $regex: q, $options: 'i' } },
@@ -401,14 +408,18 @@ export const getQuotations = async (req, res) => {
     }
 
     let quotations = [];
+    let totalCount = 0;
     if (isDbConnected()) {
       try {
+        totalCount = await Quotation.countDocuments(filter);
         quotations = await Quotation.find(filter)
+          .select('-itinerary -hotelOptions -transportOptions -activities -addOns -auditTrail -revisions -termsAndConditions -cancellationPolicy')
           .sort(sortObj)
           .limit(Number(limit))
           .skip((Number(page) - 1) * Number(limit))
           .populate('leadId', 'name email phone status')
-          .populate('assignedTo', 'name email');
+          .populate('assignedTo', 'name email')
+          .lean();
       } catch (dbErr) {
         console.warn('Quotation find warning:', dbErr.message);
       }
@@ -426,8 +437,9 @@ export const getQuotations = async (req, res) => {
           if (!((q.tripRequirements?.destination || '').toLowerCase().includes(destination.toLowerCase()))) return false;
         }
         if (search) {
-          const s = search.toLowerCase();
+          const s = String(search).toLowerCase();
           const matches = (q.quotationNumber || '').toLowerCase().includes(s) ||
+                          (q.bookingCode || '').toLowerCase().includes(s) ||
                           (q.customerSnapshot?.name || '').toLowerCase().includes(s) ||
                           (q.customerSnapshot?.email || '').toLowerCase().includes(s) ||
                           (q.tripRequirements?.destination || '').toLowerCase().includes(s);
@@ -445,20 +457,45 @@ export const getQuotations = async (req, res) => {
       }
     }
 
-    // Marketing role: Field-level security strips internal costs and profit margins
-    if (userRole === 'marketing') {
-      quotations = quotations.map(q => sanitizeForCustomer(q));
-    }
-
     res.json({
       success: true,
       count: quotations.length,
+      total: totalCount || quotations.length,
+      page: Number(page),
+      pages: Math.ceil((totalCount || quotations.length) / Number(limit)),
       quotations
     });
   } catch (error) {
     console.error('Get Quotations Error:', error);
     res.status(500).json({ message: error.message || 'Server Error fetching quotations' });
   }
+};
+
+// Helper: Check if user is authorized to view/manage a quotation (Sales isolation / RBAC)
+export const isUserAuthorizedForQuotation = (user, quotation) => {
+  if (!user) return false;
+  const userRole = (user.role || 'admin').toLowerCase();
+  const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
+                         user.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+  if (isSuperOrAdmin) return true;
+
+  if (userRole === 'sales') {
+    const userId = String(user._id || user.id);
+    const assigned = quotation.assignedTo ? String(quotation.assignedTo._id || quotation.assignedTo) : null;
+    const created = quotation.createdBy ? String(quotation.createdBy._id || quotation.createdBy) : null;
+    // Authorized if assigned to this agent, created by this agent, or unassigned (open pool)
+    if (!assigned || assigned === userId || created === userId) {
+      return true;
+    }
+    return false;
+  }
+
+  // Marketing has read-only view permission
+  if (userRole === 'marketing') {
+    return true;
+  }
+
+  return false;
 };
 
 // ============================================================================
@@ -497,6 +534,11 @@ export const getQuotationById = async (req, res) => {
       return res.status(404).json({ message: 'Quotation record not found.' });
     }
 
+    // Role-based Access Isolation: Sales agent cannot view another sales agent's restricted quotation
+    if (!isUserAuthorizedForQuotation(req.user, quotation)) {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to view this quotation.' });
+    }
+
     let responseQuotation = quotation;
     if (userRole === 'marketing') {
       responseQuotation = sanitizeForCustomer(quotation);
@@ -533,8 +575,28 @@ export const updateQuotation = async (req, res) => {
       return res.status(404).json({ message: 'Quotation record not found.' });
     }
 
-    if (['CONVERTED'].includes(quotation.status)) {
-      return res.status(400).json({ message: 'Cannot edit a quotation that has already been converted to a Booking or Catalog Trip.' });
+    // Role-based Access Isolation: Sales agent cannot edit another sales agent's quotation
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to modify this quotation.' });
+    }
+
+    // IMMUTABILITY GUARDS (Sections 11, 12, 109, 110)
+    if (quotation.status === 'APPROVED') {
+      return res.status(409).json({
+        message: 'Approved quotations cannot be modified directly as they represent an agreed commercial contract. Please create a revision.'
+      });
+    }
+
+    if (['SENT', 'VIEWED'].includes(quotation.status)) {
+      return res.status(409).json({
+        message: 'Sent quotations cannot be modified directly while under customer review. Please create a revision to modify commercial proposal details.'
+      });
+    }
+
+    if (['CONVERTED', 'ARCHIVED'].includes(quotation.status)) {
+      return res.status(409).json({
+        message: `Quotations in "${quotation.status}" status cannot be modified directly.`
+      });
     }
 
     // 0. RBAC Commercial Concession Validation
@@ -545,6 +607,8 @@ export const updateQuotation = async (req, res) => {
 
     const userId = req.user ? (req.user._id || req.user.id) : null;
     const userName = req.user?.name || 'Sales Specialist';
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes((req.user?.role || 'admin').toLowerCase()) ||
+                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
 
     // Merge & recalculate pricing
     const mergedData = {
@@ -569,7 +633,7 @@ export const updateQuotation = async (req, res) => {
     if (req.body.exclusions) quotation.exclusions = req.body.exclusions;
     if (req.body.termsAndConditions) quotation.termsAndConditions = req.body.termsAndConditions;
     if (req.body.cancellationPolicy) quotation.cancellationPolicy = req.body.cancellationPolicy;
-    if (req.body.assignedTo) quotation.assignedTo = req.body.assignedTo;
+    if (req.body.assignedTo && isSuperOrAdmin) quotation.assignedTo = req.body.assignedTo;
 
     quotation.tripRequirements = computed.tripRequirements;
     quotation.pricingRules = computed.pricingRules;
@@ -616,21 +680,101 @@ export const deleteQuotation = async (req, res) => {
   try {
     const { id } = req.params;
 
+    let quotation = null;
     if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      const deleted = await Quotation.findByIdAndDelete(id);
-      if (!deleted) return res.status(404).json({ message: 'Quotation not found.' });
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to delete this quotation.' });
+    }
+
+    // Section 32: DRAFT, REJECTED, or ARCHIVED can be deleted. SENT, APPROVED, CONVERTED cannot be deleted.
+    if (['SENT', 'VIEWED', 'APPROVED', 'CONVERTED'].includes(quotation.status)) {
+      return res.status(400).json({
+        message: `Quotations in "${quotation.status}" status cannot be permanently deleted as they contain active commercial/financial history. Please archive this quotation instead.`
+      });
+    }
+
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      await Quotation.findByIdAndDelete(id);
       return res.json({ success: true, message: 'Quotation deleted successfully.' });
     }
 
     const index = memoryQuotations.findIndex(q => String(q._id) === String(id) || q.quotationNumber === id);
-    if (index === -1) {
-      return res.status(404).json({ message: 'Quotation not found.' });
-    }
-    memoryQuotations.splice(index, 1);
+    if (index !== -1) memoryQuotations.splice(index, 1);
 
     res.json({ success: true, message: 'Quotation deleted successfully.' });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error deleting quotation' });
+  }
+};
+
+// ============================================================================
+// 6B. ARCHIVE QUOTATION
+// ============================================================================
+// @desc    Archive a quotation (Status -> ARCHIVED)
+// @route   POST /api/quotations/:id/archive
+// @access  Private (Sales/Admin)
+export const archiveQuotation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Archived by sales/admin' } = req.body;
+
+    let quotation = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      quotation = await Quotation.findById(id);
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to archive this quotation.' });
+    }
+
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userName = req.user?.name || 'Sales Concierge';
+
+    quotation.status = 'ARCHIVED';
+    quotation.statusHistory.push({
+      status: 'ARCHIVED',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason
+    });
+
+    if (Array.isArray(quotation.auditTrail)) {
+      quotation.auditTrail.push({
+        action: 'QUOTATION_ARCHIVED',
+        performedBy: userId,
+        performedByName: userName,
+        details: { reason },
+        timestamp: new Date()
+      });
+    }
+
+    if (isDbConnected() && typeof quotation.save === 'function') {
+      await quotation.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Quotation ${quotation.quotationNumber} archived successfully.`,
+      quotation
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message || 'Server Error archiving quotation' });
   }
 };
 
@@ -653,6 +797,11 @@ export const sendQuotation = async (req, res) => {
     }
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to send this quotation.' });
+    }
 
     if (!isValidStateTransition(quotation.status, 'SENT')) {
       return res.status(400).json({ message: `Cannot send quotation from status "${quotation.status}".` });
@@ -750,6 +899,11 @@ export const createQuotationRevision = async (req, res) => {
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to revise this quotation.' });
+    }
+
     if (quotation.status === 'CONVERTED') {
       return res.status(400).json({ message: 'Cannot revise a quotation that has already been converted to a Booking.' });
     }
@@ -828,6 +982,20 @@ export const approveQuotation = async (req, res) => {
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to approve this quotation.' });
+    }
+
+    // Idempotent approval check (Section 108)
+    if (quotation.status === 'APPROVED') {
+      return res.status(200).json({
+        success: true,
+        message: `Quotation ${quotation.quotationNumber} is already APPROVED. Ready for booking conversion.`,
+        quotation
+      });
+    }
+
     if (!isValidStateTransition(quotation.status, 'APPROVED')) {
       return res.status(400).json({ message: `Cannot approve quotation from current status "${quotation.status}".` });
     }
@@ -836,6 +1004,26 @@ export const approveQuotation = async (req, res) => {
     const userName = req.user?.name || 'Sales Concierge';
 
     quotation.status = 'APPROVED';
+    quotation.approvedAt = new Date();
+
+    // Store immutable snapshot of agreed commercial contract (Section 26)
+    quotation.approvedSnapshot = {
+      approvedAt: new Date(),
+      approvedBy: userId,
+      approvedByName: userName,
+      version: quotation.version || 1,
+      customerSnapshot: quotation.customerSnapshot,
+      tripRequirements: quotation.tripRequirements,
+      hotelOptions: quotation.hotelOptions,
+      transportOptions: quotation.transportOptions,
+      activities: quotation.activities,
+      addOns: quotation.addOns,
+      pricing: quotation.pricing,
+      paymentTerms: quotation.paymentTerms,
+      inclusions: quotation.inclusions,
+      exclusions: quotation.exclusions
+    };
+
     quotation.statusHistory.push({
       status: 'APPROVED',
       changedBy: userId,
@@ -848,7 +1036,7 @@ export const approveQuotation = async (req, res) => {
       action: 'QUOTATION_APPROVED',
       performedBy: userId,
       performedByName: userName,
-      details: { reason },
+      details: { reason, totalAmount: quotation.pricing?.finalTotal },
       timestamp: new Date()
     });
 
@@ -944,6 +1132,14 @@ export const convertToTrip = async (req, res) => {
     }
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Role check: Only Admin and Operations can convert quotations into catalog trips
+    const userRole = (req.user?.role || '').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
+                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+    if (!isSuperOrAdmin) {
+      return res.status(403).json({ message: 'Only Admins and Operations can convert quotations into catalog trips.' });
+    }
 
     // Idempotency Check: Prevent duplicate conversions
     if (quotation.status === 'CONVERTED' && quotation.convertedTripId) {
@@ -1079,6 +1275,11 @@ export const createBookingFromQuotation = async (req, res) => {
     }
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
+
+    // Sales Isolation & Role Check
+    if (!isUserAuthorizedForQuotation(req.user, quotation) || req.user?.role?.toLowerCase() === 'marketing') {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to convert this quotation to a booking.' });
+    }
 
     // Idempotency Check: Prevent duplicate bookings
     if (quotation.status === 'CONVERTED' && (quotation.bookingId || quotation.bookingCode)) {
@@ -1386,6 +1587,16 @@ export const customerQuotationDecision = async (req, res) => {
 
     const targetStatus = decision.toUpperCase() === 'APPROVE' ? 'APPROVED' : 'REJECTED';
 
+    // Idempotent approval check for customer
+    if (quotation.status === 'APPROVED' && targetStatus === 'APPROVED') {
+      const sanitized = sanitizeForCustomer(quotation);
+      return res.status(200).json({
+        success: true,
+        message: 'Thank you! Your quotation has already been approved. Our concierge team is preparing your confirmed booking order.',
+        quotation: sanitized
+      });
+    }
+
     // PART 15: Expiry Guard Check
     const isExpired = quotation.validUntil && new Date(quotation.validUntil).getTime() < Date.now();
     if (isExpired && targetStatus === 'APPROVED') {
@@ -1402,6 +1613,24 @@ export const customerQuotationDecision = async (req, res) => {
     quotation.publicShare.customerDecisionAt = new Date();
     if (targetStatus === 'APPROVED') {
       quotation.approvedAt = new Date();
+
+      // Store immutable snapshot of agreed commercial terms
+      quotation.approvedSnapshot = {
+        approvedAt: new Date(),
+        approvedBy: 'CUSTOMER',
+        approvedByName: quotation.customerSnapshot?.name || 'Customer',
+        version: quotation.version || 1,
+        customerSnapshot: quotation.customerSnapshot,
+        tripRequirements: quotation.tripRequirements,
+        hotelOptions: quotation.hotelOptions,
+        transportOptions: quotation.transportOptions,
+        activities: quotation.activities,
+        addOns: quotation.addOns,
+        pricing: quotation.pricing,
+        paymentTerms: quotation.paymentTerms,
+        inclusions: quotation.inclusions,
+        exclusions: quotation.exclusions
+      };
     }
     if (customerNotes) quotation.publicShare.customerNotes = customerNotes;
 

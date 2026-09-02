@@ -88,7 +88,7 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry'],
+      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry'],
       default: 'trip_page'
     },
     whatsappNotification: {

@@ -1,5 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+export * from './quotationService.js';
+
 export function getHeaders() {
   const token = localStorage.getItem('wanderluxe_token');
   return {

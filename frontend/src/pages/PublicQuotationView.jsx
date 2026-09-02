@@ -74,10 +74,11 @@ export default function PublicQuotationView() {
   };
 
   const isExpired = quotation?.validUntil && new Date(quotation.validUntil).getTime() < Date.now();
+  const isLocked = quotation?.status === 'APPROVED' || quotation?.status === 'CONVERTED';
 
   // Customer selects hotel option in a segment
   const handleSelectHotelOption = async (optionId) => {
-    if (!quotation || updatingOptions || isExpired) return;
+    if (!quotation || updatingOptions || isExpired || isLocked) return;
     try {
       setUpdatingOptions(true);
       const res = await updatePublicSelectedOptionsApi(token, {
@@ -95,7 +96,7 @@ export default function PublicQuotationView() {
 
   // Customer toggles add-on
   const handleToggleAddOn = async (addonId) => {
-    if (!quotation || updatingOptions || isExpired) return;
+    if (!quotation || updatingOptions || isExpired || isLocked) return;
     const currentSelected = (quotation.addOns || []).filter(a => a.selected).map(a => a.addonId);
     const updatedSelected = currentSelected.includes(addonId)
       ? currentSelected.filter(id => id !== addonId)
@@ -342,11 +343,11 @@ export default function PublicQuotationView() {
                           <div
                             key={hotel.optionId}
                             onClick={() => handleSelectHotelOption(hotel.optionId)}
-                            className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2 relative ${
+                            className={`p-4 rounded-xl border transition-all space-y-2 relative ${
                               hotel.selected
                                 ? 'bg-emerald-50/80 border-emerald-500 shadow-md ring-2 ring-emerald-500/30'
                                 : 'bg-white border-slate-200 hover:border-slate-300'
-                            } ${isExpired ? 'cursor-not-allowed opacity-90' : ''}`}
+                            } ${isExpired || isLocked ? 'cursor-default' : 'cursor-pointer'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
