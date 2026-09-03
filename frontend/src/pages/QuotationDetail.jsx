@@ -4,7 +4,8 @@ import {
   ArrowLeft, FileText, Send, CheckCircle2, XCircle, AlertTriangle,
   Compass, CreditCard, ExternalLink, Copy, Check, Calendar, MapPin,
   Users, Hotel, Car, Tag, ShieldCheck, Clock, Download, RefreshCw,
-  Edit3, Trash2, Archive, Phone, Mail, ChevronRight, Eye, Shield
+  Edit3, Trash2, Archive, Phone, Mail, ChevronRight, Eye, Shield,
+  Plane, Train, Bus, Lock, Camera
 } from 'lucide-react';
 import {
   getQuotationByIdApi,
@@ -20,6 +21,7 @@ import {
 import QuotationPreviewModal from '../components/QuotationPreviewModal';
 import ShareQuotationModal from '../components/ShareQuotationModal';
 import BookingDetailsModal from '../components/BookingDetailsModal';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 
 export default function QuotationDetail() {
   const { id } = useParams();
@@ -36,6 +38,7 @@ export default function QuotationDetail() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const fetchQuotation = async () => {
     try {
@@ -720,35 +723,130 @@ export default function QuotationDetail() {
 
             {/* Transport Card */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                <Car size={16} className="text-indigo-600" /> Transport & Transfers
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Car size={16} className="text-indigo-600" /> Transport Segments & Fleet Inventory
+                </h3>
+                <span className="text-xs font-bold text-slate-400">
+                  {(quotation.transportOptions || []).length} segment(s) configured
+                </span>
+              </div>
+
+              <div className="space-y-4">
                 {(quotation.transportOptions || []).map((t, idx) => (
                   <div
-                    key={idx}
-                    className={`p-4 rounded-2xl border transition-all ${
+                    key={t.optionId || idx}
+                    className={`p-4 rounded-2xl border transition-all space-y-3 ${
                       t.selected
-                        ? 'border-indigo-500 bg-indigo-50/20 ring-1 ring-indigo-500/20'
-                        : 'border-slate-200/80 bg-white'
+                        ? 'border-indigo-500 bg-indigo-50/15 ring-1 ring-indigo-500/20'
+                        : 'border-slate-200/80 bg-white opacity-85'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.type}</div>
-                        <div className="text-xs font-black text-slate-900 mt-0.5">{t.vehicle}</div>
-                        <div className="text-[11px] text-slate-500">Pick: {t.pickup} ➔ Drop: {t.drop}</div>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                            {t.mode === 'FLIGHT' ? <Plane size={11} /> : t.mode === 'TRAIN' ? <Train size={11} /> : t.mode === 'BUS' ? <Bus size={11} /> : <Car size={11} />}
+                            {t.mode || t.type}
+                          </span>
+                          <span className="text-xs font-black text-slate-900">
+                            {t.route?.from || t.pickup || 'Origin'} ➔ {t.route?.to || t.drop || 'Destination'}
+                          </span>
+                          {t.selected ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                              Active in Price
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-black uppercase">
+                              Alternative
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-xs font-bold text-slate-800">
+                          {t.vehicle || t.title || 'Reserved Transit'}
+                        </div>
                       </div>
-                      {t.selected && (
-                        <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-black uppercase">
-                          Selected
-                        </span>
-                      )}
+
+                      <div className="text-right">
+                        <div className="text-xs font-black text-slate-900">
+                          ₹{Number(t.totalPrice || 0).toLocaleString()}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-bold">
+                          {t.pricingType === 'PER_PERSON' ? 'Per Person' : 'Per Vehicle'}
+                        </div>
+                      </div>
                     </div>
-                    <div className="border-t border-slate-100 mt-3 pt-2 flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Customer Price</span>
-                      <span className="font-black text-slate-900">₹{Number(t.totalPrice || 0).toLocaleString()}</span>
+
+                    {(t.schedule?.departureDate || t.schedule?.departureTime) && (
+                      <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-4 bg-slate-50 p-2.5 rounded-xl">
+                        <span>Depart: {t.schedule.departureDate} {t.schedule.departureTime}</span>
+                        {t.schedule.arrivalDate && <span>Arrive: {t.schedule.arrivalDate} {t.schedule.arrivalTime}</span>}
+                      </div>
+                    )}
+
+                    <div className="text-[11px] text-slate-500 flex flex-wrap gap-x-3">
+                      {t.reference?.flightNumber && <span>Flight #: <strong className="text-slate-700">{t.reference.flightNumber}</strong></span>}
+                      {t.reference?.trainNumber && <span>Train #: <strong className="text-slate-700">{t.reference.trainNumber}</strong></span>}
+                      {t.reference?.pnr && <span>PNR: <strong className="text-slate-700 font-mono">{t.reference.pnr}</strong></span>}
+                      {t.cabinClass && <span>Class: <strong className="text-slate-700">{t.cabinClass}</strong></span>}
+                      {t.seatDetails && <span>Seats: <strong className="text-slate-700">{t.seatDetails}</strong></span>}
+                      {t.capacity > 0 && <span>Capacity: {t.capacity} Pax</span>}
+                      {t.provider && <span className="flex items-center gap-1"><Lock size={10} className="text-amber-600" /> Supplier: {t.provider}</span>}
                     </div>
+
+                    {/* Fleet Photos */}
+                    {(t.vehicleMedia || []).length > 0 && (
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Fleet Media:</span>
+                        <div className="flex flex-wrap gap-2">
+                          {t.vehicleMedia.map((m, mIdx) => (
+                            <img
+                              key={m.id || mIdx}
+                              src={m.url}
+                              alt={m.caption || 'Fleet'}
+                              className="w-16 h-11 object-cover rounded-lg border border-slate-200"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Attached Travel Documents */}
+                    {(t.documents || []).length > 0 && (
+                      <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Tickets & Travel Documents:</span>
+                        <div className="space-y-1">
+                          {t.documents.map((doc, dIdx) => (
+                            <div key={doc.id || dIdx} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 text-xs border border-slate-200">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={14} className="text-slate-500 shrink-0" />
+                                <span className="font-bold text-slate-800 truncate">{doc.title || doc.fileName}</span>
+                                <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase shrink-0 ${
+                                  doc.visibility === 'INTERNAL_ONLY' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                  {doc.visibility === 'INTERNAL_ONLY' ? 'Internal Only' : 'Customer Visible'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewDoc(doc)}
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer"
+                                >
+                                  Preview
+                                </button>
+                                {doc.secureUrl && (
+                                  <a href={doc.secureUrl} download={doc.fileName} className="text-slate-400 hover:text-slate-700">
+                                    <Download size={13} />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -898,6 +996,14 @@ export default function QuotationDetail() {
           onClose={() => setShowBookingModal(false)}
           bookingCode={quotation.bookingCode}
           quotationData={quotation}
+        />
+      )}
+
+      {previewDoc && (
+        <DocumentPreviewModal
+          isOpen={Boolean(previewDoc)}
+          document={previewDoc}
+          onClose={() => setPreviewDoc(null)}
         />
       )}
     </div>

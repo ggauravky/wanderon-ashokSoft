@@ -85,10 +85,21 @@ export const sanitizeForCustomer = (quotation) => {
     });
   }
 
-  // 3. Strip internal costs from transport options
+  // 3. Strip internal costs, driver details, and non-customer documents from transport options
   if (Array.isArray(doc.transportOptions)) {
     doc.transportOptions = doc.transportOptions.map(t => {
-      const { unitCost, totalCost, provider, ...safeTransport } = t;
+      const { unitCost, totalCost, provider, driverDetails, ...safeTransport } = t;
+
+      if (Array.isArray(safeTransport.documents)) {
+        // ONLY allow documents with visibility === 'CUSTOMER_VISIBLE'
+        safeTransport.documents = safeTransport.documents
+          .filter(d => d && d.visibility === 'CUSTOMER_VISIBLE')
+          .map(d => {
+            const { uploadedBy, uploadedByName, ...safeDoc } = d;
+            return safeDoc;
+          });
+      }
+
       return safeTransport;
     });
   }
@@ -1656,5 +1667,160 @@ export const customerQuotationDecision = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message || 'Server Error processing customer decision' });
+  }
+};
+
+// ============================================================================
+// TRANSPORT DOCUMENT ATTACH & REMOVE HELPERS
+// ============================================================================
+export const attachTransportDocument = async (req, res) => {
+  try {
+    const { id, optionId } = req.params;
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          quotation = await Quotation.findById(id);
+        }
+        if (!quotation) {
+          quotation = await Quotation.findOne({ quotationNumber: id });
+        }
+      } catch (e) {}
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+    if (!isUserAuthorizedForQuotation(req.user, quotation)) {
+      return res.status(403).json({ message: 'Access forbidden: You do not have permission to modify this quotation.' });
+    }
+
+    if (['APPROVED', 'CONVERTED', 'ARCHIVED'].includes(quotation.status)) {
+      return res.status(409).json({ 
+        message: `Quotation is in "${quotation.status}" state and cannot be directly modified. Create a revision to update travel documents.` 
+      });
+    }
+
+    const transport = (quotation.transportOptions || []).find(t => t.optionId === optionId);
+    if (!transport) {
+      return res.status(404).json({ message: `Transport option "${optionId}" not found in quotation.` });
+    }
+
+    if (!transport.documents) transport.documents = [];
+
+    const newDoc = {
+      id: `tdoc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type: req.body.type || 'TRANSPORT_VOUCHER',
+      title: req.body.title || req.body.fileName || 'Travel Document',
+      fileName: req.body.fileName || 'document.pdf',
+      mimeType: req.body.mimeType || 'application/pdf',
+      size: Number(req.body.size || 0),
+      storageProvider: req.body.storageProvider || 'cloudinary',
+      publicId: req.body.publicId || '',
+      secureUrl: req.body.secureUrl,
+      visibility: req.body.visibility || 'CUSTOMER_VISIBLE',
+      passengerName: req.body.passengerName || '',
+      bookingReference: req.body.bookingReference || '',
+      uploadedBy: req.user?._id,
+      uploadedByName: req.user?.name || req.user?.email || 'Staff',
+      uploadedAt: new Date()
+    };
+
+    if (!newDoc.secureUrl) {
+      return res.status(400).json({ message: 'secureUrl is required for document attachment.' });
+    }
+
+    transport.documents.push(newDoc);
+
+    if (!quotation.auditTrail) quotation.auditTrail = [];
+    quotation.auditTrail.push({
+      action: 'DOCUMENT_UPLOADED',
+      performedBy: req.user?._id,
+      performedByName: req.user?.name || req.user?.email,
+      details: `Attached ${newDoc.type} (${newDoc.fileName}) to transport ${optionId}`
+    });
+
+    if (typeof quotation.save === 'function') {
+      await quotation.save();
+    } else {
+      quotation.updatedAt = new Date();
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Transport document attached successfully',
+      data: newDoc,
+      quotation
+    });
+  } catch (error) {
+    console.error('Attach Transport Document Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to attach transport document' });
+  }
+};
+
+export const deleteTransportDocument = async (req, res) => {
+  try {
+    const { id, optionId, docId } = req.params;
+    let quotation = null;
+    if (isDbConnected()) {
+      try {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          quotation = await Quotation.findById(id);
+        }
+        if (!quotation) {
+          quotation = await Quotation.findOne({ quotationNumber: id });
+        }
+      } catch (e) {}
+    }
+    if (!quotation) {
+      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
+    }
+    if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
+
+    if (!isUserAuthorizedForQuotation(req.user, quotation)) {
+      return res.status(403).json({ message: 'Access forbidden: You do not have permission to modify this quotation.' });
+    }
+
+    if (['APPROVED', 'CONVERTED', 'ARCHIVED'].includes(quotation.status)) {
+      return res.status(409).json({ 
+        message: `Quotation is in "${quotation.status}" state and cannot be directly modified. Create a revision to update travel documents.` 
+      });
+    }
+
+    const transport = (quotation.transportOptions || []).find(t => t.optionId === optionId);
+    if (!transport) {
+      return res.status(404).json({ message: `Transport option "${optionId}" not found in quotation.` });
+    }
+
+    const initialLength = (transport.documents || []).length;
+    transport.documents = (transport.documents || []).filter(d => d.id !== docId);
+
+    if (transport.documents.length === initialLength) {
+      return res.status(404).json({ message: `Document "${docId}" not found in transport option.` });
+    }
+
+    if (!quotation.auditTrail) quotation.auditTrail = [];
+    quotation.auditTrail.push({
+      action: 'DOCUMENT_REMOVED',
+      performedBy: req.user?._id,
+      performedByName: req.user?.name || req.user?.email,
+      details: `Removed document ${docId} from transport ${optionId}`
+    });
+
+    if (typeof quotation.save === 'function') {
+      await quotation.save();
+    } else {
+      quotation.updatedAt = new Date();
+    }
+
+    res.json({
+      success: true,
+      message: 'Transport document removed successfully',
+      quotation
+    });
+  } catch (error) {
+    console.error('Delete Transport Document Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to remove transport document' });
   }
 };

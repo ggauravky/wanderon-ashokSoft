@@ -27,8 +27,8 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   );
 
   // 1. Base Package Price & Internal Supplier Cost
-  const customerBasePrice = Math.max(0, Number(quotationData.pricing?.customerBasePrice || 0));
-  const internalBaseCost = Math.max(0, Number(quotationData.pricing?.internalBaseCost || 0));
+  const customerBasePrice = Math.max(0, Number(quotationData.pricing?.customerBasePrice) || 0);
+  const internalBaseCost = Math.max(0, Number(quotationData.pricing?.internalBaseCost) || 0);
 
   // 2. Hotel Options (Groupable by Stay Segment, sum only selected === true)
   let internalHotelCost = 0;
@@ -36,8 +36,8 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   const processedHotels = (quotationData.hotelOptions || []).map((hotel, idx) => {
     const rooms = Math.max(1, parseInt(hotel.rooms, 10) || 1);
     const nights = Math.max(1, parseInt(hotel.nights, 10) || tripNights);
-    const costPerNight = Math.max(0, Number(hotel.costPerNight || 0));
-    const pricePerNight = Math.max(0, Number(hotel.pricePerNight || 0));
+    const costPerNight = Math.max(0, Number(hotel.costPerNight) || 0);
+    const pricePerNight = Math.max(0, Number(hotel.pricePerNight) || 0);
 
     const totalCost = Math.round(costPerNight * nights * rooms);
     const totalPrice = Math.round(pricePerNight * nights * rooms);
@@ -69,11 +69,19 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   let customerTransportPrice = 0;
   const processedTransports = (quotationData.transportOptions || []).map((trans, idx) => {
     const quantity = Math.max(1, parseInt(trans.quantity, 10) || 1);
-    const unitCost = Math.max(0, Number(trans.unitCost || 0));
-    const unitPrice = Math.max(0, Number(trans.unitPrice || 0));
+    const unitCost = Math.max(0, Number(trans.unitCost) || 0);
+    const unitPrice = Math.max(0, Number(trans.unitPrice) || 0);
+    const pricingType = trans.pricingType || 'PER_VEHICLE';
 
-    const totalCost = Math.round(unitCost * quantity);
-    const totalPrice = Math.round(unitPrice * quantity);
+    let multiplier = quantity;
+    if (pricingType === 'PER_PERSON') {
+      multiplier = (effectiveTravelers || Math.max(1, totalTravelers)) * quantity;
+    } else {
+      multiplier = quantity;
+    }
+
+    const totalCost = Math.round(unitCost * multiplier);
+    const totalPrice = Math.round(unitPrice * multiplier);
 
     const isSelected = Boolean(trans.selected);
     if (isSelected) {
@@ -84,6 +92,7 @@ export const calculateQuotationPrice = (quotationData = {}) => {
     return {
       ...trans,
       optionId: trans.optionId || `trans_opt_${idx + 1}`,
+      pricingType,
       quantity,
       unitCost,
       unitPrice,
@@ -98,8 +107,8 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   let customerActivityPrice = 0;
   const processedActivities = (quotationData.activities || []).map((act, idx) => {
     const quantity = Math.max(1, parseInt(act.quantity, 10) || 1);
-    const unitCost = Math.max(0, Number(act.unitCost || 0));
-    const unitPrice = Math.max(0, Number(act.unitPrice || 0));
+    const unitCost = Math.max(0, Number(act.unitCost) || 0);
+    const unitPrice = Math.max(0, Number(act.unitPrice) || 0);
     const pricingType = act.pricingType || 'PER_PERSON';
 
     let multiplier = 1;

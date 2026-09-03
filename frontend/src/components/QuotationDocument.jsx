@@ -297,16 +297,69 @@ const QuotationDocument = React.forwardRef(({ quotation, isCustomerView = true }
       {/* ========================================================================= */}
       <div className="grid grid-cols-2 gap-4 mb-6 page-break-inside-avoid">
         {/* Dedicated Transport */}
-        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-2">
-          <div className="text-xs font-black uppercase text-indigo-900 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
-            <Car size={14} className="text-indigo-600" /> Dedicated Transportation
+        <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-3">
+          <div className="text-xs font-black uppercase text-indigo-900 flex items-center justify-between border-b border-slate-200 pb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Car size={14} className="text-indigo-600" /> Transportation & Transit
+            </div>
+            <span className="text-[10px] text-slate-400 font-bold">
+              {((transport.filter(t => t.selected).length > 0 ? transport.filter(t => t.selected) : (transport[0] ? [transport[0]] : [])).length)} Segment(s)
+            </span>
           </div>
-          <div className="font-black text-slate-900 text-xs">{selectedTransport?.vehicle || 'Dedicated 4x4 SUV'}</div>
-          <div className="text-[11px] text-slate-600 font-medium">
-            Pickup/Drop: {selectedTransport?.pickup || 'Designated Point'} → {selectedTransport?.drop || 'Designated Point'}
-          </div>
-          <div className="text-[10px] text-slate-500">
-            Capacity: {selectedTransport?.capacity || 6} Seater • Inclusions: {selectedTransport?.inclusions?.join(', ') || 'Fuel, Tolls, Driver Allowance'}
+
+          <div className="space-y-2.5">
+            {(transport.filter(t => t.selected).length > 0 ? transport.filter(t => t.selected) : (transport[0] ? [transport[0]] : [])).map((t, tIdx) => {
+              const fromCity = t.route?.from || t.pickup || 'Origin';
+              const toCity = t.route?.to || t.drop || 'Destination';
+              const primaryImg = (t.vehicleMedia || []).find(m => m.isPrimary)?.url || t.vehicleMedia?.[0]?.url;
+              const customerDocs = (t.documents || []).filter(d => d.visibility === 'CUSTOMER_VISIBLE');
+
+              return (
+                <div key={t.optionId || tIdx} className="bg-white p-2.5 rounded-lg border border-slate-200/70 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-wider text-indigo-700">
+                        {t.mode || t.type} • {fromCity} ➔ {toCity}
+                      </div>
+                      <div className="font-black text-slate-900 text-[11px]">{t.vehicle || t.title || 'Transit Service'}</div>
+                    </div>
+                    {primaryImg && (
+                      <img
+                        src={primaryImg}
+                        alt="Transit vehicle"
+                        className="w-12 h-9 object-cover rounded-md border border-slate-200 shrink-0"
+                      />
+                    )}
+                  </div>
+
+                  {(t.schedule?.departureDate || t.schedule?.departureTime) && (
+                    <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-3">
+                      <span>Depart: {t.schedule.departureDate} {t.schedule.departureTime}</span>
+                      {t.schedule.arrivalDate && <span>Arrive: {t.schedule.arrivalDate} {t.schedule.arrivalTime}</span>}
+                    </div>
+                  )}
+
+                  <div className="text-[9px] text-slate-500 flex flex-wrap gap-x-2">
+                    {t.reference?.flightNumber && <span>Flight: {t.reference.flightNumber}</span>}
+                    {t.reference?.trainNumber && <span>Train: {t.reference.trainNumber}</span>}
+                    {t.cabinClass && <span>Class: {t.cabinClass}</span>}
+                    {t.seatDetails && <span>Seats: {t.seatDetails}</span>}
+                    {t.capacity > 0 && <span>Capacity: {t.capacity} Pax</span>}
+                  </div>
+
+                  {customerDocs.length > 0 && (
+                    <div className="pt-1 border-t border-slate-100 flex flex-wrap gap-1 text-[9px]">
+                      <span className="text-slate-400 font-bold">Vouchers / Passes:</span>
+                      {customerDocs.map((cd, cIdx) => (
+                        <span key={cd.id || cIdx} className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded font-medium border border-emerald-200">
+                          ✓ {cd.title || cd.fileName}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

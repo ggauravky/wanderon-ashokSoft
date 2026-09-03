@@ -177,6 +177,71 @@ export async function customerQuotationDecisionApi(token, payload) {
   return data;
 }
 
+export async function uploadQuotationDocumentApi(file) {
+  const formData = new FormData();
+  formData.append('document', file);
+  formData.append('folder', 'wanderluxe/quotation_documents');
+
+  const token = localStorage.getItem('token') || '';
+  const response = await fetch(`${API_BASE_URL}/upload/document`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: formData
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to upload document');
+  return data.data;
+}
+
+export async function uploadVehicleImageApi(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('folder', 'wanderluxe/fleet_media');
+
+  const token = localStorage.getItem('token') || '';
+  const response = await fetch(`${API_BASE_URL}/upload/image`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: formData
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to upload vehicle image');
+  return data.data;
+}
+
+export const TRANSPORT_MODES = [
+  { value: 'FLIGHT', label: 'Commercial Flight', icon: 'Plane', defaultType: 'Flight' },
+  { value: 'TRAIN', label: 'Express / Shatabdi Train', icon: 'Train', defaultType: 'Train' },
+  { value: 'BUS', label: 'Volvo / Luxury Bus', icon: 'Bus', defaultType: 'Luxury Coach / Bus' },
+  { value: 'CAB', label: 'Private Cab', icon: 'Car', defaultType: 'Private Cab' },
+  { value: 'SUV', label: 'Dedicated SUV (Innova / 4x4)', icon: 'Car', defaultType: 'SUV (Innova/Crysta)' },
+  { value: 'TEMPO_TRAVELLER', label: 'Tempo Traveller (12/17 Seater)', icon: 'Truck', defaultType: 'Tempo Traveller (12/17 Seater)' },
+  { value: 'COACH', label: 'Chartered Coach', icon: 'Bus', defaultType: 'Luxury Coach / Bus' },
+  { value: 'PRIVATE_CAR', label: 'Premium Sedan', icon: 'Car', defaultType: 'Sedan (Dzire/Etios)' },
+  { value: 'BIKE', label: 'Expedition Motorcycle / Bike', icon: 'Bike', defaultType: 'Self Drive' },
+  { value: 'FERRY', label: 'Speedboat / Cruise Ferry', icon: 'Ship', defaultType: 'None' },
+  { value: 'TRANSFER', label: 'Airport / Station Transfer', icon: 'Navigation', defaultType: 'Private Cab' },
+  { value: 'OTHER', label: 'Other Bespoke Transit', icon: 'MoveRight', defaultType: 'None' }
+];
+
+export const DOCUMENT_TYPES = [
+  { value: 'FLIGHT_TICKET', label: 'Flight E-Ticket', icon: 'Plane', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'TRAIN_TICKET', label: 'Railway E-Ticket', icon: 'Train', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'BUS_TICKET', label: 'Bus Pass / Ticket', icon: 'Bus', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'TRANSPORT_VOUCHER', label: 'Transport / Transfer Voucher', icon: 'FileText', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'BOOKING_CONFIRMATION', label: 'Booking Confirmation', icon: 'CheckCircle2', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'BOARDING_DOCUMENT', label: 'Boarding Pass / Document', icon: 'Ticket', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'PERMIT', label: 'Transit / Border Permit', icon: 'ShieldCheck', defaultVisibility: 'CUSTOMER_VISIBLE' },
+  { value: 'SUPPLIER_INVOICE', label: 'Supplier Invoice (Internal)', icon: 'Receipt', defaultVisibility: 'INTERNAL_ONLY' },
+  { value: 'OTHER', label: 'Other Travel Document', icon: 'Paperclip', defaultVisibility: 'CUSTOMER_VISIBLE' }
+];
+
 export const TRANSPORT_TYPES = [
   'SUV (Innova/Crysta)',
   'Sedan (Dzire/Etios)',
@@ -564,22 +629,59 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
 export function getEmptyTransportOption(index = 1) {
   return {
     optionId: `trans_opt_${Date.now()}_${index}`,
+    mode: 'SUV',
     type: 'SUV (Innova/Crysta)',
+    title: '',
     vehicle: '',
     provider: '',
     pickup: '',
     drop: '',
+    route: {
+      from: '',
+      to: '',
+      pickupPoint: '',
+      dropPoint: ''
+    },
+    schedule: {
+      departureDate: '',
+      departureTime: '',
+      arrivalDate: '',
+      arrivalTime: ''
+    },
+    reference: {
+      flightNumber: '',
+      trainNumber: '',
+      busNumber: '',
+      vehicleNumber: '',
+      pnr: '',
+      bookingReference: ''
+    },
+    cabinClass: 'Economy',
+    seatDetails: '',
+    baggage: {
+      cabin: '7 Kg',
+      checkIn: '15 Kg'
+    },
+    driverDetails: {
+      name: '',
+      phone: '',
+      licenseNumber: ''
+    },
     startDate: '',
     endDate: '',
     capacity: 6,
     quantity: 1,
+    pricingType: 'PER_VEHICLE',
     unitCost: 0,
     unitPrice: 0,
+    taxRate: 0,
     totalCost: 0,
     totalPrice: 0,
     inclusions: ['Fuel', 'Tolls', 'Driver Allowance', 'State Permits'],
     notes: '',
-    selected: false
+    selected: index === 1,
+    vehicleMedia: [],
+    documents: []
   };
 }
 

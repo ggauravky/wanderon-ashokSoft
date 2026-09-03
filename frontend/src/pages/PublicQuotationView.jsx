@@ -4,7 +4,7 @@ import {
   MapPin, Calendar, Clock, Users, Hotel, Car, Compass, CheckCircle2,
   XCircle, Download, Printer, Share2, ShieldCheck, Check, Sparkles,
   AlertCircle, ArrowRight, Phone, Mail, MessageSquare, ChevronDown, ChevronUp, Tag,
-  CreditCard, Shield, AlertTriangle, X
+  CreditCard, Shield, AlertTriangle, X, Plane, Train, Bus, FileText, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,6 +14,7 @@ import {
 } from '../services/quotationService.js';
 import QuotationDocument from '../components/QuotationDocument';
 import ShareQuotationModal from '../components/ShareQuotationModal';
+import DocumentPreviewModal from '../components/DocumentPreviewModal';
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 
 export default function PublicQuotationView() {
@@ -30,6 +31,8 @@ export default function PublicQuotationView() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [rejectNotes, setRejectNotes] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewImg, setPreviewImg] = useState(null);
 
   const proposalDocRef = useRef(null);
 
@@ -207,7 +210,10 @@ export default function PublicQuotationView() {
 
   const staySegments = getUniqueStaySegments(quotation.hotelOptions);
   const selectedHotels = (quotation.hotelOptions || []).filter(h => h.selected);
-  const selectedTransport = (quotation.transportOptions || []).find(t => t.selected) || quotation.transportOptions?.[0];
+  const selectedTransports = (quotation.transportOptions || []).filter(t => t.selected).length > 0 
+    ? (quotation.transportOptions || []).filter(t => t.selected) 
+    : [(quotation.transportOptions || [])[0]].filter(Boolean);
+  const selectedTransport = selectedTransports[0];
   const isChildrenPresent = (quotation.tripRequirements?.children || 0) > 0 || (quotation.tripRequirements?.infants || 0) > 0;
 
   return (
@@ -438,13 +444,115 @@ export default function PublicQuotationView() {
               </div>
 
               {/* Transportation & Optional Extras */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
-                  <div className="text-[10px] font-black uppercase text-indigo-800 flex items-center gap-1.5">
-                    <Car size={13} /> Dedicated Transportation
+              <div className="space-y-4">
+                <div className="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3">
+                  <div className="text-[11px] font-black uppercase tracking-wider text-indigo-900 flex items-center justify-between border-b border-slate-200/80 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <Car size={15} className="text-indigo-600" /> Transportation & Fleet Logistics
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold">{selectedTransports.length} Segment(s)</span>
                   </div>
-                  <div className="font-black text-slate-900 text-sm">{selectedTransport?.vehicle}</div>
-                  <div className="text-slate-500 text-[11px]">{selectedTransport?.inclusions?.join(' • ')}</div>
+
+                  <div className="space-y-3">
+                    {selectedTransports.map((t, idx) => {
+                      const fromLoc = t.route?.from || t.pickup || 'Departure Point';
+                      const toLoc = t.route?.to || t.drop || 'Arrival Destination';
+                      const primaryImg = (t.vehicleMedia || []).find(m => m.isPrimary)?.url || t.vehicleMedia?.[0]?.url;
+                      const customerDocs = (t.documents || []).filter(d => d.visibility === 'CUSTOMER_VISIBLE');
+
+                      return (
+                        <div key={t.optionId || idx} className="bg-white p-3.5 rounded-xl border border-slate-200/80 space-y-2.5 shadow-2xs">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                                  {t.mode === 'FLIGHT' ? <Plane size={11} /> : t.mode === 'TRAIN' ? <Train size={11} /> : t.mode === 'BUS' ? <Bus size={11} /> : <Car size={11} />}
+                                  {t.mode || t.type}
+                                </span>
+                                <span className="font-black text-slate-900 text-xs">{fromLoc} ➔ {toLoc}</span>
+                              </div>
+                              <div className="font-bold text-slate-800 text-xs">
+                                {t.vehicle || t.title || 'Reserved Transit'}
+                              </div>
+                            </div>
+
+                            {primaryImg && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewImg(primaryImg)}
+                                className="relative rounded-lg overflow-hidden border border-slate-200 group cursor-pointer"
+                                title="Click to view full photo"
+                              >
+                                <img
+                                  src={primaryImg}
+                                  alt="Transit vehicle"
+                                  className="w-16 h-11 object-cover group-hover:scale-105 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                                  <Eye size={12} />
+                                </div>
+                              </button>
+                            )}
+                          </div>
+
+                          {(t.schedule?.departureDate || t.schedule?.departureTime) && (
+                            <div className="text-[11px] text-slate-600 flex flex-wrap gap-x-4 bg-slate-50 p-2 rounded-lg">
+                              <span><strong>Depart:</strong> {t.schedule.departureDate} {t.schedule.departureTime}</span>
+                              {t.schedule.arrivalDate && <span><strong>Arrive:</strong> {t.schedule.arrivalDate} {t.schedule.arrivalTime}</span>}
+                            </div>
+                          )}
+
+                          <div className="text-[10px] text-slate-500 flex flex-wrap gap-x-3">
+                            {t.reference?.flightNumber && <span>Flight: <strong className="text-slate-700">{t.reference.flightNumber}</strong></span>}
+                            {t.reference?.trainNumber && <span>Train: <strong className="text-slate-700">{t.reference.trainNumber}</strong></span>}
+                            {t.cabinClass && <span>Class: <strong className="text-slate-700">{t.cabinClass}</strong></span>}
+                            {t.seatDetails && <span>Seat: <strong className="text-slate-700">{t.seatDetails}</strong></span>}
+                            {t.capacity > 0 && <span>Capacity: {t.capacity} Pax</span>}
+                            {t.inclusions?.length > 0 && <span>Inclusions: {t.inclusions.join(', ')}</span>}
+                          </div>
+
+                          {/* Customer-Visible Documents & Passes */}
+                          {customerDocs.length > 0 && (
+                            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                              <div className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                <FileText size={11} /> Travel Documents & Tickets
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {customerDocs.map((doc, dIdx) => (
+                                  <div
+                                    key={doc.id || dIdx}
+                                    className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2 text-[11px]"
+                                  >
+                                    <span className="font-bold text-slate-800 truncate max-w-[140px]">{doc.title || doc.fileName}</span>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewDoc(doc)}
+                                        className="p-1 hover:bg-slate-200 rounded text-slate-600 hover:text-slate-900 cursor-pointer"
+                                        title="Preview Document"
+                                      >
+                                        <Eye size={12} />
+                                      </button>
+                                      {doc.secureUrl && (
+                                        <a
+                                          href={doc.secureUrl}
+                                          download={doc.fileName || 'ticket.pdf'}
+                                          className="p-1 hover:bg-emerald-100 rounded text-slate-600 hover:text-emerald-700"
+                                          title="Download Document"
+                                        >
+                                          <Download size={12} />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Optional Extras Toggle */}
@@ -815,6 +923,37 @@ export default function PublicQuotationView() {
           onExportPdf={handleExportPdf}
           onPrint={handlePrint}
         />
+
+        {/* Document & Ticket Preview Modal */}
+        {previewDoc && (
+          <DocumentPreviewModal
+            isOpen={Boolean(previewDoc)}
+            document={previewDoc}
+            onClose={() => setPreviewDoc(null)}
+          />
+        )}
+
+        {/* Vehicle Photo Preview Modal */}
+        {previewImg && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setPreviewImg(null)}
+          >
+            <div className="relative max-w-3xl max-h-[90vh]">
+              <button
+                onClick={() => setPreviewImg(null)}
+                className="absolute -top-10 right-0 p-1.5 text-white/80 hover:text-white bg-slate-800/80 rounded-full cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+              <img
+                src={previewImg}
+                alt="Vehicle photo enlarged"
+                className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl border border-slate-700"
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

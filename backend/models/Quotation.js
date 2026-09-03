@@ -44,32 +44,127 @@ const hotelOptionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const vehicleMediaSchema = new mongoose.Schema(
+  {
+    id: { type: String, default: () => `vm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` },
+    url: { type: String, required: true },
+    publicId: { type: String, default: '' },
+    caption: { type: String, default: '' },
+    isPrimary: { type: Boolean, default: false },
+    uploadedAt: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+
+const transportDocumentSchema = new mongoose.Schema(
+  {
+    id: { type: String, default: () => `tdoc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` },
+    type: {
+      type: String,
+      enum: [
+        'FLIGHT_TICKET',
+        'TRAIN_TICKET',
+        'BUS_TICKET',
+        'TRANSPORT_VOUCHER',
+        'BOOKING_CONFIRMATION',
+        'BOARDING_DOCUMENT',
+        'PERMIT',
+        'SUPPLIER_INVOICE',
+        'OTHER'
+      ],
+      default: 'TRANSPORT_VOUCHER'
+    },
+    title: { type: String, default: '' },
+    fileName: { type: String, default: '' },
+    mimeType: { type: String, default: 'application/pdf' },
+    size: { type: Number, default: 0 },
+    storageProvider: { type: String, default: 'cloudinary' },
+    publicId: { type: String, default: '' },
+    secureUrl: { type: String, required: true },
+    visibility: {
+      type: String,
+      enum: ['CUSTOMER_VISIBLE', 'INTERNAL_ONLY', 'CUSTOMER_VISIBLE_AFTER_BOOKING'],
+      default: 'CUSTOMER_VISIBLE'
+    },
+    passengerName: { type: String, default: '' },
+    bookingReference: { type: String, default: '' },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    uploadedByName: { type: String, default: '' },
+    uploadedAt: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+
 const transportOptionSchema = new mongoose.Schema(
   {
     optionId: { type: String, required: true },
+    mode: {
+      type: String,
+      enum: [
+        'FLIGHT',
+        'TRAIN',
+        'BUS',
+        'CAB',
+        'PRIVATE_CAR',
+        'SUV',
+        'TEMPO_TRAVELLER',
+        'COACH',
+        'BIKE',
+        'FERRY',
+        'TRANSFER',
+        'OTHER'
+      ],
+      default: 'SUV'
+    },
     type: { 
       type: String, 
-      enum: [
-        'Sedan (Dzire/Etios)', 
-        'SUV (Innova/Crysta)', 
-        'Tempo Traveller (12/17 Seater)', 
-        'Luxury Coach / Bus', 
-        'Private Cab', 
-        'Flight', 
-        'Train', 
-        'Self Drive', 
-        'None'
-      ], 
       default: 'SUV (Innova/Crysta)' 
     },
+    title: { type: String, default: '' },
     vehicle: { type: String, default: '' },
     provider: { type: String, default: '' }, // Internal supplier name
     pickup: { type: String, default: '' },
     drop: { type: String, default: '' },
+    route: {
+      from: { type: String, default: '' },
+      to: { type: String, default: '' },
+      pickupPoint: { type: String, default: '' },
+      dropPoint: { type: String, default: '' }
+    },
+    schedule: {
+      departureDate: { type: String, default: '' },
+      departureTime: { type: String, default: '' },
+      arrivalDate: { type: String, default: '' },
+      arrivalTime: { type: String, default: '' }
+    },
+    reference: {
+      flightNumber: { type: String, default: '' },
+      trainNumber: { type: String, default: '' },
+      busNumber: { type: String, default: '' },
+      vehicleNumber: { type: String, default: '' },
+      pnr: { type: String, default: '' },
+      bookingReference: { type: String, default: '' }
+    },
+    cabinClass: { type: String, default: '' },
+    seatDetails: { type: String, default: '' },
+    baggage: {
+      cabin: { type: String, default: '' },
+      checkIn: { type: String, default: '' }
+    },
+    driverDetails: {
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      licenseNumber: { type: String, default: '' }
+    },
     startDate: { type: Date },
     endDate: { type: Date },
     capacity: { type: Number, default: 6 },
     quantity: { type: Number, default: 1, min: 1 },
+    pricingType: {
+      type: String,
+      enum: ['PER_VEHICLE', 'PER_PERSON', 'PER_SEGMENT', 'FIXED'],
+      default: 'PER_VEHICLE'
+    },
     unitCost: { type: Number, default: 0, min: 0 }, // Supplier Cost
     unitPrice: { type: Number, default: 0, min: 0 }, // Customer Price
     taxRate: { type: Number, default: 0, min: 0 },
@@ -77,7 +172,10 @@ const transportOptionSchema = new mongoose.Schema(
     totalPrice: { type: Number, default: 0, min: 0 },
     inclusions: { type: [String], default: ['Fuel', 'Tolls', 'Driver Allowance', 'State Permits'] },
     notes: { type: String, default: '' },
-    selected: { type: Boolean, default: false }
+    selected: { type: Boolean, default: false },
+
+    vehicleMedia: { type: [vehicleMediaSchema], default: [] },
+    documents: { type: [transportDocumentSchema], default: [] }
   },
   { _id: false }
 );

@@ -180,6 +180,43 @@ export const deleteMedia = async (publicId, resourceType = 'image') => {
   });
 };
 
+// ─── Upload Document / PDF ──────────────────────────────────────────
+export const uploadDocument = async (buffer, originalName = 'document.pdf', folder = 'wanderluxe/documents', mimeType = 'application/pdf') => {
+  if (!isCloudinaryConfigured()) {
+    console.log(`[LOCAL UPLOAD] Saving document: ${originalName}`);
+    return saveLocalFallback(buffer, originalName, 'documents');
+  }
+
+  const isPdf = mimeType === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf');
+  const resourceType = isPdf ? 'auto' : 'image';
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: resourceType,
+        use_filename: true,
+        unique_filename: true,
+        overwrite: false
+      },
+      (error, result) => {
+        if (error) return reject(new Error(`Cloudinary Document Upload Error: ${error.message}`));
+        resolve({
+          source: 'cloudinary',
+          public_id: result.public_id,
+          secure_url: result.secure_url,
+          url: result.url,
+          format: result.format || (isPdf ? 'pdf' : 'raw'),
+          bytes: result.bytes,
+          resource_type: result.resource_type || resourceType,
+          original_filename: originalName
+        });
+      }
+    );
+    uploadStream.end(buffer);
+  });
+};
+
 // ─── Generate Cloudinary Optimized Transformation URLs ──────────────
 export const getOptimizedUrl = (publicId, { width, height, quality = 'auto', format = 'auto' } = {}) => {
   if (!isCloudinaryConfigured()) return publicId;
@@ -190,4 +227,4 @@ export const getOptimizedUrl = (publicId, { width, height, quality = 'auto', for
   });
 };
 
-export default { uploadImage, uploadVideo, uploadBase64Media, deleteMedia, getOptimizedUrl };
+export default { uploadImage, uploadVideo, uploadDocument, uploadBase64Media, deleteMedia, getOptimizedUrl };

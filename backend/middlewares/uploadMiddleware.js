@@ -36,6 +36,26 @@ const mediaFilter = (req, file, cb) => {
   }
 };
 
+// Document / Ticket MIME & extension validator (PDF + standard images)
+const documentFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp'
+  ];
+  
+  const ext = (file.originalname || '').toLowerCase().split('.').pop();
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+
+  if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Invalid document type (${file.mimetype}). Allowed formats: PDF, JPG, PNG, WEBP.`), false);
+  }
+};
+
 // Single image upload (max 10 MB)
 export const uploadSingleImage = multer({
   storage,
@@ -49,6 +69,20 @@ export const uploadMultipleImages = multer({
   fileFilter: imageFilter,
   limits: { fileSize: 10 * 1024 * 1024 }
 }).array('images', 10);
+
+// Single document/ticket upload (PDF or Image, max 20 MB)
+export const uploadSingleDocument = multer({
+  storage,
+  fileFilter: documentFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }
+}).single('document');
+
+// Multiple documents/tickets upload (max 10 files, 20 MB each)
+export const uploadMultipleDocuments = multer({
+  storage,
+  fileFilter: documentFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }
+}).array('documents', 10);
 
 // Single video upload (max 100 MB)
 export const uploadSingleVideo = multer({
@@ -68,7 +102,7 @@ export const uploadSingleMedia = multer({
 export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'File too large. Images max 10MB, Videos max 100MB.' });
+      return res.status(400).json({ message: 'File too large. Images max 10MB, Documents max 20MB, Videos max 100MB.' });
     }
     return res.status(400).json({ message: `Upload error: ${err.message}` });
   }

@@ -35,6 +35,7 @@ const getDestinations = () => (travelKnowledgeService.getDestinations || travelK
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 import QuotationDocument from './QuotationDocument';
 import ShareQuotationModal from './ShareQuotationModal';
+import TransportSegmentCard from './TransportSegmentCard';
 
 const WIZARD_STEPS = [
   { id: 1, key: 'customer', title: '1. Customer & Scope', icon: User },
@@ -1342,155 +1343,41 @@ export default function QuotationBuilderWizard({
             {/* ------------------------------------------------------------- */}
             {currentStep === 4 && (
               <div className="space-y-4">
-                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                      <Car size={18} className="text-emerald-600" /> Transport & Fleet Alternatives
+                      <Car size={18} className="text-emerald-600" /> Transport & Fleet Operations
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Configure vehicle models, passenger capacities, routes, and quantity.
+                      Configure multi-modal journeys (Flight, Train, Bus, Cab), vehicle photos, and travel tickets & vouchers.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleAddTransportOption}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-emerald-600 transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-emerald-600 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
-                    <Plus size={14} /> Add Transport Option
+                    <Plus size={14} /> Add Transport Segment
                   </button>
                 </div>
 
                 <div className="space-y-4">
                   {(quotation.transportOptions || []).map((trans, idx) => (
-                    <div
+                    <TransportSegmentCard
                       key={trans.optionId || idx}
-                      className={`p-5 rounded-3xl border transition-all space-y-4 ${
-                        trans.selected
-                          ? 'bg-emerald-50/40 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
-                          : 'bg-white border-slate-200 shadow-xs'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(trans.selected)}
-                            onChange={(e) => handleTransportFieldChange(idx, 'selected', e.target.checked)}
-                            className="w-4 h-4 text-emerald-600 cursor-pointer rounded"
-                          />
-                          <select
-                            value={trans.type || 'SUV (Innova/Crysta)'}
-                            onChange={(e) => handleTransportFieldChange(idx, 'type', e.target.value)}
-                            className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-bold outline-none cursor-pointer"
-                          >
-                            {TRANSPORT_TYPES.map(t => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            value={trans.vehicle || ''}
-                            onChange={(e) => handleTransportFieldChange(idx, 'vehicle', e.target.value)}
-                            placeholder="Vehicle Description (e.g. Toyota Innova Crysta 4x4)"
-                            className="text-xs font-black text-slate-900 bg-transparent outline-none w-64 sm:w-80 border-b border-dashed border-slate-300"
-                          />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-emerald-700">
-                            Total: ₹{(trans.totalPrice || 0).toLocaleString()}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDuplicateTransport(idx)}
-                            className="p-1 text-slate-400 hover:text-indigo-600 cursor-pointer"
-                            title="Duplicate"
-                          >
-                            <Copy size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTransport(idx)}
-                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Pickup Location</label>
-                          <input
-                            type="text"
-                            value={trans.pickup || ''}
-                            onChange={(e) => handleTransportFieldChange(idx, 'pickup', e.target.value)}
-                            placeholder="e.g. Chandigarh / Delhi Airport"
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Drop Location</label>
-                          <input
-                            type="text"
-                            value={trans.drop || ''}
-                            onChange={(e) => handleTransportFieldChange(idx, 'drop', e.target.value)}
-                            placeholder="e.g. Chandigarh / Delhi Airport"
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Quantity (Vehicles)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={trans.quantity || 1}
-                            onChange={(e) => handleTransportFieldChange(idx, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Seating Capacity</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={trans.capacity || 6}
-                            onChange={(e) => handleTransportFieldChange(idx, 'capacity', Math.max(1, parseInt(e.target.value, 10) || 6))}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <label className="block text-[10px] font-black uppercase text-slate-600 mb-1">Customer Unit Price *</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={trans.unitPrice || ''}
-                            onChange={(e) => handleTransportFieldChange(idx, 'unitPrice', Number(e.target.value) || 0)}
-                            placeholder="e.g. 18000"
-                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-emerald-700 outline-none"
-                          />
-                        </div>
-                        {isSuperOrAdmin && (
-                          <div>
-                            <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 flex items-center gap-1">
-                              <Lock size={10} /> Supplier Unit Cost (Internal)
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={trans.unitCost || ''}
-                              onChange={(e) => handleTransportFieldChange(idx, 'unitCost', Number(e.target.value) || 0)}
-                              placeholder="e.g. 12000"
-                              className="w-full bg-amber-50/50 border border-amber-200 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 outline-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      segment={trans}
+                      index={idx}
+                      totalSegments={quotation.transportOptions?.length || 1}
+                      effectiveTravelers={Number(quotation.tripRequirements?.totalTravelers || 2)}
+                      isSuperOrAdmin={isSuperOrAdmin}
+                      onChange={(updatedSegment) => {
+                        const list = [...(quotation.transportOptions || [])];
+                        list[idx] = updatedSegment;
+                        updateAndRecalculate({ transportOptions: list });
+                      }}
+                      onDuplicate={() => handleDuplicateTransport(idx)}
+                      onDelete={() => handleDeleteTransport(idx)}
+                    />
                   ))}
                 </div>
               </div>

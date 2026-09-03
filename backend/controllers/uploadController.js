@@ -1,4 +1,41 @@
-import { uploadImage, uploadVideo, uploadBase64Media, deleteMedia } from '../utils/cloudinaryService.js';
+import { uploadImage, uploadVideo, uploadDocument, uploadBase64Media, deleteMedia } from '../utils/cloudinaryService.js';
+
+// @desc    Upload single or multiple documents / tickets (PDF or Image)
+// @route   POST /api/upload/document
+// @access  Private
+export const uploadDocumentController = async (req, res) => {
+  try {
+    const files = req.files || (req.file ? [req.file] : []);
+
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: 'No document file(s) provided.' });
+    }
+
+    const folder = req.body.folder || 'wanderluxe/documents';
+    const results = [];
+
+    for (const file of files) {
+      const result = await uploadDocument(file.buffer, file.originalname, folder, file.mimetype);
+      results.push({
+        ...result,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size || result.bytes
+      });
+    }
+
+    const response = results.length === 1 ? results[0] : results;
+
+    res.status(201).json({
+      success: true,
+      message: `${results.length} document(s) uploaded successfully.`,
+      data: response
+    });
+  } catch (error) {
+    console.error('Document Upload Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to upload document(s)' });
+  }
+};
 
 // @desc    Upload single or multiple images to Cloudinary
 // @route   POST /api/upload/image

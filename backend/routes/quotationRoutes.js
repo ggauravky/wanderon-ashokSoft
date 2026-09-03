@@ -13,6 +13,8 @@ import {
   archiveQuotation,
   convertToTrip,
   createBookingFromQuotation,
+  attachTransportDocument,
+  deleteTransportDocument,
   getPublicQuotationByToken,
   updatePublicSelectedOptions,
   customerQuotationDecision
@@ -43,6 +45,10 @@ router.route('/:id')
   .get(requireRoles('super_admin', 'admin', 'operations', 'sales', 'marketing'), getQuotationById)
   .patch(requireRoles('super_admin', 'admin', 'sales'), updateQuotation)
   .delete(adminOnly, deleteQuotation);
+
+// Transport Document Management (RBAC & Immutability Protected)
+router.post('/:id/transports/:optionId/documents', requireRoles('super_admin', 'admin', 'sales'), attachTransportDocument);
+router.delete('/:id/transports/:optionId/documents/:docId', requireRoles('super_admin', 'admin', 'sales'), deleteTransportDocument);
 
 // Workflow Actions & Revisions
 router.post('/:id/send', requireRoles('super_admin', 'admin', 'sales'), sendQuotation);
