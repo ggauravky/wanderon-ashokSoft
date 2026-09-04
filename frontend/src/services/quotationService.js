@@ -182,7 +182,7 @@ export async function uploadQuotationDocumentApi(file) {
   formData.append('document', file);
   formData.append('folder', 'wanderluxe/quotation_documents');
 
-  const token = localStorage.getItem('token') || '';
+  const token = localStorage.getItem('wanderluxe_token') || localStorage.getItem('token') || '';
   const response = await fetch(`${API_BASE_URL}/upload/document`, {
     method: 'POST',
     headers: {
@@ -201,7 +201,7 @@ export async function uploadVehicleImageApi(file) {
   formData.append('image', file);
   formData.append('folder', 'wanderluxe/fleet_media');
 
-  const token = localStorage.getItem('token') || '';
+  const token = localStorage.getItem('wanderluxe_token') || localStorage.getItem('token') || '';
   const response = await fetch(`${API_BASE_URL}/upload/image`, {
     method: 'POST',
     headers: {
