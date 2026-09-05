@@ -130,7 +130,9 @@ const tripSchema = new mongoose.Schema(
           tripleSharing: { type: Number },
           doubleSharing: { type: Number },
           singleSharing: { type: Number }
-        }
+        },
+        bookingAmount: { type: Number },
+        totalAmount: { type: Number }
       }
     ],
     sharingPricing: {

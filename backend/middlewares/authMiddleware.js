@@ -177,6 +177,57 @@ export const influencerOnly = (req, res, next) => {
   }
 };
 
+// @desc Action-Based Permissions Matrix
+export const ACTION_PERMISSIONS = {
+  'trips:view': ['super_admin', 'admin', 'operations', 'sales', 'marketing', 'influencer', 'user'],
+  'trips:create': ['super_admin', 'admin', 'operations'],
+  'trips:edit': ['super_admin', 'admin', 'operations'],
+  'trips:delete': ['super_admin', 'admin'],
+  'trips:publish': ['super_admin', 'admin', 'operations'],
+  'departures:manage': ['super_admin', 'admin', 'operations'],
+  'leads:view': ['super_admin', 'admin', 'operations', 'sales', 'marketing'],
+  'leads:assign': ['super_admin', 'admin'],
+  'leads:update_status': ['super_admin', 'admin', 'sales'],
+  'quotations:view': ['super_admin', 'admin', 'operations', 'sales', 'marketing'],
+  'quotations:create': ['super_admin', 'admin', 'sales'],
+  'quotations:edit': ['super_admin', 'admin', 'sales'],
+  'quotations:approve': ['super_admin', 'admin', 'sales'],
+  'quotations:convert_trip': ['super_admin', 'admin', 'operations'],
+  'quotations:convert_booking': ['super_admin', 'admin', 'operations', 'sales'],
+  'pricing:view': ['super_admin', 'admin', 'operations', 'sales'],
+  'pricing:manage_rules': ['super_admin', 'admin'],
+  'followups:manage': ['super_admin', 'admin', 'sales'],
+  'marketing:manage_campaigns': ['super_admin', 'admin', 'marketing'],
+  'marketing:manage_banners': ['super_admin', 'admin', 'marketing'],
+  'marketing:view_dashboard': ['super_admin', 'admin', 'marketing'],
+  'sales:view_dashboard': ['super_admin', 'admin', 'sales'],
+  'reports:view': ['super_admin', 'admin'],
+  'users:manage_roles': ['super_admin', 'admin']
+};
+
+// @desc Middleware to check action-level permissions
+export const checkPermission = (action) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
+  const userRole = (req.user.role || 'user').toLowerCase();
+  const isSuperEmail = req.user.email?.toLowerCase() === ADMIN_EMAIL;
+
+  if (isSuperEmail || userRole === 'super_admin') {
+    return next();
+  }
+
+  const allowedRoles = ACTION_PERMISSIONS[action] || [];
+  if (allowedRoles.map(r => r.toLowerCase()).includes(userRole)) {
+    return next();
+  }
+
+  return res.status(403).json({
+    message: `Access denied: Action "${action}" requires one of the following roles: [${allowedRoles.join(', ')}]. Current role: "${userRole}".`
+  });
+};
+
 // @desc Optional authentication middleware: Populates req.user if Bearer token present, but does not reject guests
 export const optionalAuth = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
@@ -219,4 +270,6 @@ export const optionalAuth = async (req, res, next) => {
   }
   next();
 };
+
+
 

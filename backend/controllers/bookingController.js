@@ -693,6 +693,43 @@ export const verifyBookingPayment = async (req, res) => {
       console.warn('WhatsApp Notification Dispatch Warning:', waErr.message);
     }
 
+    // Automatically update Trip Departure Batch Seat Capacity
+    try {
+      if (booking.tripId && isDbConnected()) {
+        const tripDoc = await Trip.findOne({
+          $or: [
+            { _id: mongoose.Types.ObjectId.isValid(booking.tripId) ? booking.tripId : null },
+            { slug: String(booking.tripId).toLowerCase() }
+          ]
+        });
+
+        if (tripDoc && Array.isArray(tripDoc.batches)) {
+          const batchIndex = tripDoc.batches.findIndex(b =>
+            (booking.tripSnapshot?.batchDate && b.dates === booking.tripSnapshot.batchDate) ||
+            (booking.batchId && (b.batchId === booking.batchId || String(b._id) === String(booking.batchId)))
+          );
+
+          if (batchIndex !== -1) {
+            const addedPax = Number(booking.numberOfTravelers) || 1;
+            tripDoc.batches[batchIndex].bookedSeats = (tripDoc.batches[batchIndex].bookedSeats || 0) + addedPax;
+            const cap = Number(tripDoc.batches[batchIndex].capacity) || 20;
+            const booked = tripDoc.batches[batchIndex].bookedSeats;
+
+            if (booked >= cap) {
+              tripDoc.batches[batchIndex].status = 'sold_out';
+            } else if (booked >= cap * 0.75) {
+              tripDoc.batches[batchIndex].status = 'filling_fast';
+            } else {
+              tripDoc.batches[batchIndex].status = 'available';
+            }
+            await tripDoc.save();
+          }
+        }
+      }
+    } catch (seatErr) {
+      console.warn('Trip batch seat update warning:', seatErr.message);
+    }
+
     if (isDbConnected() && typeof booking.save === 'function') {
       await booking.save();
     }
@@ -707,6 +744,98 @@ export const verifyBookingPayment = async (req, res) => {
   } catch (error) {
     console.error('Verify Payment Error:', error);
     res.status(500).json({ message: error.message || 'Server Error verifying payment' });
+  }
+};
+
+// @desc    Cancel booking and restore departure batch seats
+// @route   PUT /api/bookings/:bookingId/cancel
+// @access  Private
+export const cancelBooking = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const userRole = (req.user?.role || 'user').toLowerCase();
+    const { bookingId } = req.params;
+    const { reason = 'Cancelled by traveler / admin' } = req.body;
+
+    let booking = null;
+    if (isDbConnected()) {
+      try {
+        booking = await Booking.findOne({ bookingId });
+      } catch (e) {}
+    }
+    if (!booking) {
+      booking = memoryBookings.find(b => b.bookingId === bookingId);
+    }
+    if (!booking) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    // Permission check
+    const isOwner = String(booking.userId) === String(userId);
+    const isStaff = ['super_admin', 'admin', 'operations', 'sales'].includes(userRole);
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ message: 'Not authorized to cancel this booking.' });
+    }
+
+    if (booking.bookingStatus === 'CANCELLED') {
+      return res.status(400).json({ message: 'Booking is already cancelled.' });
+    }
+
+    const wasConfirmed = ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'].includes(booking.bookingStatus);
+    booking.bookingStatus = 'CANCELLED';
+    booking.cancellationReason = reason;
+    booking.cancelledAt = new Date();
+    booking.cancelledBy = userId;
+
+    // Restore seats on Trip batch if booking was confirmed
+    if (wasConfirmed && booking.tripId && isDbConnected()) {
+      try {
+        const tripDoc = await Trip.findOne({
+          $or: [
+            { _id: mongoose.Types.ObjectId.isValid(booking.tripId) ? booking.tripId : null },
+            { slug: String(booking.tripId).toLowerCase() }
+          ]
+        });
+
+        if (tripDoc && Array.isArray(tripDoc.batches)) {
+          const batchIndex = tripDoc.batches.findIndex(b =>
+            (booking.tripSnapshot?.batchDate && b.dates === booking.tripSnapshot.batchDate) ||
+            (booking.batchId && (b.batchId === booking.batchId || String(b._id) === String(booking.batchId)))
+          );
+
+          if (batchIndex !== -1) {
+            const removedPax = Number(booking.numberOfTravelers) || 1;
+            tripDoc.batches[batchIndex].bookedSeats = Math.max(0, (tripDoc.batches[batchIndex].bookedSeats || 0) - removedPax);
+            const cap = Number(tripDoc.batches[batchIndex].capacity) || 20;
+            const booked = tripDoc.batches[batchIndex].bookedSeats;
+
+            if (booked >= cap) {
+              tripDoc.batches[batchIndex].status = 'sold_out';
+            } else if (booked >= cap * 0.75) {
+              tripDoc.batches[batchIndex].status = 'filling_fast';
+            } else {
+              tripDoc.batches[batchIndex].status = 'available';
+            }
+            await tripDoc.save();
+          }
+        }
+      } catch (restoreErr) {
+        console.warn('Trip batch seat restoration warning:', restoreErr.message);
+      }
+    }
+
+    if (isDbConnected() && typeof booking.save === 'function') {
+      await booking.save();
+    }
+
+    res.json({
+      success: true,
+      message: `Booking ${booking.bookingId} cancelled successfully. Seats restored to batch availability.`,
+      booking
+    });
+  } catch (error) {
+    console.error('Cancel Booking Error:', error);
+    res.status(500).json({ message: error.message || 'Server Error cancelling booking' });
   }
 };
 
