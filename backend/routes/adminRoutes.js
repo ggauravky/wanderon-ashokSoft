@@ -2,9 +2,10 @@ import express from 'express';
 import { 
   getAdminStats, getCoupons, createCoupon, 
   toggleCoupon, deleteCoupon, getAdminUsers, updateUserRole, getAdminBookings,
-  getInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication, updateTripSeo
+  getInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication, updateTripSeo,
+  getRevenueReport, getDepartureOccupancyReport, getLeadFunnelReport
 } from '../controllers/adminController.js';
-import { protect, adminOnly } from '../middlewares/authMiddleware.js';
+import { protect, adminOnly, checkPermission } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -29,4 +30,10 @@ router.put('/influencer-applications/:id/reject', rejectInfluencerApplication);
 // Trip-Level SEO Route
 router.put('/trips/:id/seo', updateTripSeo);
 
+// Reports & Analytics Routes
+router.get('/reports/revenue', getRevenueReport);
+router.get('/reports/departures', getDepartureOccupancyReport);
+router.get('/reports/lead-funnel', getLeadFunnelReport);
+
 export default router;
+

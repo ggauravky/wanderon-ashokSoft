@@ -4,6 +4,7 @@ import {
   verifyBookingPayment, 
   payRemainingBalance,
   verifyRemainingBalance,
+  cancelBooking,
   getMyBookings, 
   getBookingById, 
   getBoardingPassData,
@@ -22,6 +23,7 @@ router.post('/calculate-pricing', calculatePricingEndpoint);
 // Protected Booking & Payment Endpoints
 router.post('/create-order', protect, createBookingOrder);
 router.post('/verify-payment', protect, verifyBookingPayment);
+router.put('/:bookingId/cancel', protect, cancelBooking);
 router.post('/:bookingId/pay-balance', protect, payRemainingBalance);
 router.post('/:bookingId/verify-balance', protect, verifyRemainingBalance);
 router.post('/:bookingId/send-whatsapp', protect, resendWhatsAppTicket);
