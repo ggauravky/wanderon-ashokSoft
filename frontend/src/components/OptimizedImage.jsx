@@ -17,6 +17,7 @@ export default function OptimizedImage({
   ...rest
 }) {
   const [hasError, setHasError] = useState(false);
+  const [hasFallbackFailed, setHasFallbackFailed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Derive initial image source
@@ -27,6 +28,8 @@ export default function OptimizedImage({
     if (!hasError) {
       setHasError(true);
       setIsLoaded(true);
+    } else {
+      setHasFallbackFailed(true);
     }
   };
 
@@ -37,20 +40,26 @@ export default function OptimizedImage({
   return (
     <div className={`relative overflow-hidden ${className}`}>
       {/* Background shimmer placeholder while loading */}
-      {!isLoaded && (
+      {!isLoaded && !hasFallbackFailed && (
         <div className="absolute inset-0 bg-slate-200 animate-pulse" />
       )}
-      <img
-        src={currentSrc}
-        alt={alt}
-        loading={loading}
-        onLoad={handleLoad}
-        onError={handleError}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
-        }`}
-        {...rest}
-      />
+      {hasFallbackFailed ? (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-2 text-center select-none">
+          <span className="text-[10px] font-bold">Image Unavailable</span>
+        </div>
+      ) : (
+        <img
+          src={currentSrc}
+          alt={alt}
+          loading={loading}
+          onLoad={handleLoad}
+          onError={handleError}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          {...rest}
+        />
+      )}
     </div>
   );
 }

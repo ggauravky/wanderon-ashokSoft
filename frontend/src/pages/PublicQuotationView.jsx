@@ -401,15 +401,41 @@ export default function PublicQuotationView() {
                   <Calendar size={16} className="text-indigo-600" /> Day-by-Day Experience Breakdown
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {(quotation.itinerary || []).map((day, idx) => (
-                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
-                      <div className="font-black text-slate-900 text-sm flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[10px] flex items-center justify-center">
-                          D{day.day}
-                        </span>
-                        <span>{day.title}</span>
+                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-black text-slate-900 text-sm flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[10px] flex items-center justify-center shrink-0">
+                            D{day.day}
+                          </span>
+                          <span>{day.title}</span>
+                        </div>
+                        {day.locationName && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                            📍 {day.locationName}
+                          </span>
+                        )}
                       </div>
+
+                      {/* Day Cover Image (Real Database Asset) */}
+                      {day.coverMedia?.url && (
+                        <div className="relative rounded-xl overflow-hidden aspect-16/8 bg-slate-900 shadow-2xs group">
+                          <img
+                            src={day.coverMedia.url}
+                            alt={day.coverMedia.altText || day.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          {(day.coverMedia.caption || day.locationName) && (
+                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 text-white">
+                              <p className="text-[11px] font-bold truncate">
+                                {day.coverMedia.caption || day.locationName}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {day.description && <p className="text-slate-600 leading-relaxed text-[11px]">{day.description}</p>}
 

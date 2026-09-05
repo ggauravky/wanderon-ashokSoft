@@ -724,6 +724,9 @@ export function getEmptyItineraryDay(dayNumber = 1) {
   return {
     day: dayNumber,
     title: `Day ${dayNumber}: Exploration & Local Experience`,
+    locationName: '',
+    locationId: '',
+    destination: '',
     description: '',
     morning: '',
     afternoon: '',
@@ -731,7 +734,18 @@ export function getEmptyItineraryDay(dayNumber = 1) {
     stay: '',
     mealsIncluded: ['Breakfast'],
     transferDetails: '',
-    activityHighlights: []
+    activityHighlights: [],
+    coverMedia: {
+      id: '',
+      url: '',
+      altText: '',
+      caption: '',
+      width: 1600,
+      height: 900
+    },
+    coverMediaAssetId: null,
+    galleryMedia: [],
+    mediaSelectionMode: 'AUTO'
   };
 }
 

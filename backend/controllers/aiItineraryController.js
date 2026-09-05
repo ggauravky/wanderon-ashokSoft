@@ -10,6 +10,7 @@ import {
   buildAITravelContext,
   normalizeDestinationSlug
 } from '../services/travelKnowledgeService.js';
+import { resolveItineraryMedia } from '../services/mediaResolverService.js';
 
 /**
  * Normalizes raw output into safe, complete structured JSON using Central Knowledge
@@ -255,6 +256,41 @@ JSON SCHEMA:
       budgetLevel,
       pace
     }, destinationMeta);
+
+    // Enrich days with real database-driven location media
+    const usedAssetIds = [];
+    if (Array.isArray(normalized.days)) {
+      for (const day of normalized.days) {
+        const locationCandidate = day.morning?.[0]?.location || day.locationName || destination;
+        const activityNames = [
+          ...(day.morning || []).map(a => a.activity || a.name || ''),
+          ...(day.afternoon || []).map(a => a.activity || a.name || ''),
+          ...(day.evening || []).map(a => a.activity || a.name || '')
+        ].filter(Boolean);
+
+        try {
+          const mediaResult = await resolveItineraryMedia({
+            locationName: locationCandidate,
+            destination,
+            dayTitle: day.title,
+            dayActivities: activityNames,
+            dayNumber: day.day,
+            excludeAssetIds: usedAssetIds,
+            tripType: mood
+          });
+
+          day.locationName = locationCandidate;
+          day.coverMedia = mediaResult.coverMedia;
+          day.coverMediaAssetId = mediaResult.mediaAssetId;
+          day.mediaSelectionMode = 'auto';
+          if (mediaResult.mediaAssetId) {
+            usedAssetIds.push(mediaResult.mediaAssetId);
+          }
+        } catch (mediaErr) {
+          console.warn(`Media resolution error for day ${day.day}:`, mediaErr.message);
+        }
+      }
+    }
 
     const responsePayload = {
       id: 'ai-plan-' + Date.now(),
@@ -616,9 +652,39 @@ export const regenerateDayController = async (req, res) => {
     const att1 = attractions[offset] || { name: `${destMeta.name} Scenic Point`, location: destMeta.name };
     const att2 = attractions[(offset + 1) % attractions.length] || { name: `${destMeta.name} Cultural Exploration`, location: destMeta.name };
 
+    const locationCandidate = att1.location || att1.name || destMeta.name;
+    let coverMedia = null;
+    let coverMediaAssetId = null;
+
+    try {
+      const mediaResult = await resolveItineraryMedia({
+        locationName: locationCandidate,
+        destination: destMeta.name,
+        dayTitle: `Day ${dayNumber}: ${att1.name} & ${att2.name}`,
+        dayActivities: [att1.name, att2.name],
+        dayNumber: Number(dayNumber),
+        tripType: mood
+      });
+      coverMedia = mediaResult.coverMedia;
+      coverMediaAssetId = mediaResult.mediaAssetId;
+    } catch (mediaErr) {
+      console.warn('Regenerate day media resolution error:', mediaErr.message);
+    }
+
     const regeneratedDay = {
       day: Number(dayNumber),
       title: `Day ${dayNumber}: ${att1.name} & ${att2.name}`,
+      locationName: locationCandidate,
+      coverMedia: coverMedia || {
+        url: '',
+        altText: `${locationCandidate}, ${destMeta.name}`,
+        caption: `Day ${dayNumber} Experience`,
+        width: 1200,
+        height: 800,
+        resolutionSource: 'fallback'
+      },
+      coverMediaAssetId,
+      mediaSelectionMode: 'auto',
       morning: [{ time: '09:00 AM', activity: `${att1.name} Excursion`, location: att1.location || destMeta.name, description: `Enjoy morning discovery at ${att1.name}.`, estimatedCost: '₹300 - ₹500', travelTime: '1 hr' }],
       afternoon: [{ time: '01:30 PM', activity: `${att2.name} Exploration`, location: att2.location || destMeta.name, description: `Explore ${att2.name} followed by regional lunch.`, estimatedCost: '₹400 - ₹600', travelTime: '1 hr' }],
       evening: [{ time: '06:00 PM', activity: 'Sunset View & Local Cafe', location: destMeta.name, description: 'Evening leisure, photography, and local dining.', estimatedCost: '₹400 - ₹700', travelTime: 'Walking' }],

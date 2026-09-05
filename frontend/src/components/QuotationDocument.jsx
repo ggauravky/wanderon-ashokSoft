@@ -182,6 +182,25 @@ const QuotationDocument = React.forwardRef(({ quotation, isCustomerView = true }
                 )}
               </div>
 
+              {/* Day Location Media Thumbnail */}
+              {day.coverMedia?.url && (
+                <div className="flex items-center gap-2.5 bg-white p-2 rounded-lg border border-slate-200/60">
+                  <img
+                    src={day.coverMedia.url}
+                    alt={day.coverMedia.altText || day.title}
+                    className="w-24 h-14 rounded-md object-cover shrink-0"
+                  />
+                  <div className="text-[10px] space-y-0.5 overflow-hidden">
+                    <span className="font-bold text-slate-800 block truncate">
+                      📍 {day.locationName || day.coverMedia.caption || day.title}
+                    </span>
+                    <span className="text-slate-400 block text-[9px] truncate">
+                      Verified WanderLuxe Destination Experience
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {day.description && (
                 <p className="text-[11px] text-slate-600 leading-relaxed">{day.description}</p>
               )}

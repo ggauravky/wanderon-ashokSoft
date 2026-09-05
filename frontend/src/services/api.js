@@ -1018,6 +1018,97 @@ export async function customerQuotationDecisionApi(token, payload) {
   return data;
 }
 
+// ================================================================
+// LOCATION MEDIA ASSETS API HELPERS
+// ================================================================
+
+export async function listMediaAssetsApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_BASE_URL}/media${query ? `?${query}` : ''}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to list media assets');
+  return data;
+}
+
+export async function getMediaAssetByIdApi(id) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media asset');
+  return data.data;
+}
+
+export async function resolveItineraryMediaApi(payload) {
+  const response = await fetch(`${API_BASE_URL}/media/resolve-itinerary`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to resolve itinerary media');
+  return data.data;
+}
+
+export async function getMediaCoverageReportApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_BASE_URL}/media/coverage-report${query ? `?${query}` : ''}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media coverage report');
+  return data.data;
+}
+
+export async function createMediaAssetApi(assetData) {
+  const response = await fetch(`${API_BASE_URL}/media`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(assetData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create media asset');
+  return data.data;
+}
+
+export async function updateMediaAssetApi(id, assetData) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(assetData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update media asset');
+  return data.data;
+}
+
+export async function deleteMediaAssetApi(id) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to delete media asset');
+  return data;
+}
+
+export async function getMediaHealthApi() {
+  const response = await fetch(`${API_BASE_URL}/media/health`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media health status');
+  return data.data;
+}
+
 export default {
   getHeaders,
   registerApi,
@@ -1096,5 +1187,13 @@ export default {
   createBookingFromQuotationApi,
   getPublicQuotationByTokenApi,
   updatePublicSelectedOptionsApi,
-  customerQuotationDecisionApi
+  customerQuotationDecisionApi,
+  listMediaAssetsApi,
+  getMediaAssetByIdApi,
+  resolveItineraryMediaApi,
+  getMediaCoverageReportApi,
+  createMediaAssetApi,
+  updateMediaAssetApi,
+  deleteMediaAssetApi,
+  getMediaHealthApi
 };

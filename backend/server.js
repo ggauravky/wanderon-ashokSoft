@@ -19,6 +19,7 @@ import pricingRuleRoutes from './routes/pricingRuleRoutes.js';
 import followUpRoutes from './routes/followUpRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
+import mediaRoutes from './routes/mediaRoutes.js';
 
 // Connect to MongoDB Atlas
 connectDB();
@@ -89,6 +90,7 @@ app.use('/api/pricing-rules', pricingRuleRoutes);
 app.use('/api/follow-ups', followUpRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/media', mediaRoutes);
 
 
 // Public Sitemap & Robots.txt Direct Access

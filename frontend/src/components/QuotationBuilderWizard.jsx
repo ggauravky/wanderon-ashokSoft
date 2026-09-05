@@ -5,7 +5,8 @@ import {
   Download, Printer, Share2, Plus, Trash2, ArrowRight, ArrowLeft,
   Copy, ChevronRight, X, Clock, Tag, ShieldCheck, HelpCircle,
   Eye, Check, ArrowUp, ArrowDown, ExternalLink, RefreshCw, Lock,
-  AlertTriangle, Layers, CreditCard, History, ChevronDown
+  AlertTriangle, Layers, CreditCard, History, ChevronDown, Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -36,6 +37,9 @@ import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator'
 import QuotationDocument from './QuotationDocument';
 import ShareQuotationModal from './ShareQuotationModal';
 import TransportSegmentCard from './TransportSegmentCard';
+import MediaLibraryModal from './MediaLibraryModal';
+import UploadLocationImageModal from './UploadLocationImageModal';
+import { resolveItineraryMediaApi } from '../services/api.js';
 
 const WIZARD_STEPS = [
   { id: 1, key: 'customer', title: '1. Customer & Scope', icon: User },
@@ -90,6 +94,13 @@ export default function QuotationBuilderWizard({
   const [revisionReason, setRevisionReason] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // Day Media Selection State
+  const [activeMediaPickerDayIdx, setActiveMediaPickerDayIdx] = useState(null);
+  const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
+  const [isUploadMediaModalOpen, setIsUploadMediaModalOpen] = useState(false);
+  const [resolvingDayIdx, setResolvingDayIdx] = useState(null);
+  const [isResolvingAllDays, setIsResolvingAllDays] = useState(false);
 
   // Proposal PDF Ref
   const proposalPrintRef = useRef(null);
@@ -262,6 +273,138 @@ export default function QuotationBuilderWizard({
     list[idx] = { ...list[idx], [field]: val };
     setIsDirty(true);
     setQuotation(prev => ({ ...prev, itinerary: list }));
+  };
+
+  // Day Media Auto-Resolver for Single Day
+  const handleAutoResolveDayMedia = async (idx) => {
+    const day = quotation.itinerary?.[idx];
+    if (!day) return;
+
+    try {
+      setResolvingDayIdx(idx);
+      const destination = quotation.tripRequirements?.destination || 'Destination';
+      const locationName = day.locationName || day.title;
+      const activities = [day.morning, day.afternoon, day.evening].filter(Boolean);
+
+      const excludeAssetIds = (quotation.itinerary || [])
+        .map(d => d.coverMediaAssetId)
+        .filter(Boolean);
+
+      const resolved = await resolveItineraryMediaApi({
+        locationName,
+        destination,
+        dayTitle: day.title,
+        dayActivities: activities,
+        dayNumber: day.day || idx + 1,
+        excludeAssetIds,
+        tripType: quotation.tripRequirements?.travelStyle || 'Adventure'
+      });
+
+      if (resolved?.coverMedia) {
+        const updated = [...quotation.itinerary];
+        updated[idx] = {
+          ...updated[idx],
+          locationName: day.locationName || locationName,
+          coverMedia: resolved.coverMedia,
+          coverMediaAssetId: resolved.mediaAssetId,
+          mediaSelectionMode: 'AUTO'
+        };
+        setIsDirty(true);
+        setQuotation(prev => ({ ...prev, itinerary: updated }));
+      }
+    } catch (err) {
+      console.warn('Auto resolve day media failed:', err.message);
+    } finally {
+      setResolvingDayIdx(null);
+    }
+  };
+
+  // Auto-Resolve All Days
+  const handleAutoResolveAllDays = async () => {
+    if (!quotation.itinerary?.length || isResolvingAllDays) return;
+    try {
+      setIsResolvingAllDays(true);
+      const destination = quotation.tripRequirements?.destination || 'Destination';
+      const updated = [...quotation.itinerary];
+      const usedAssetIds = [];
+
+      for (let i = 0; i < updated.length; i++) {
+        const day = updated[i];
+        if (day.mediaSelectionMode === 'MANUAL' && day.coverMedia?.url) {
+          if (day.coverMediaAssetId) usedAssetIds.push(day.coverMediaAssetId);
+          continue;
+        }
+
+        const locationName = day.locationName || day.title;
+        const activities = [day.morning, day.afternoon, day.evening].filter(Boolean);
+
+        try {
+          const resolved = await resolveItineraryMediaApi({
+            locationName,
+            destination,
+            dayTitle: day.title,
+            dayActivities: activities,
+            dayNumber: day.day || i + 1,
+            excludeAssetIds: usedAssetIds,
+            tripType: quotation.tripRequirements?.travelStyle || 'Adventure'
+          });
+
+          if (resolved?.coverMedia) {
+            updated[i] = {
+              ...updated[i],
+              locationName: day.locationName || locationName,
+              coverMedia: resolved.coverMedia,
+              coverMediaAssetId: resolved.mediaAssetId,
+              mediaSelectionMode: 'AUTO'
+            };
+            if (resolved.mediaAssetId) usedAssetIds.push(resolved.mediaAssetId);
+          }
+        } catch (e) {}
+      }
+
+      setIsDirty(true);
+      setQuotation(prev => ({ ...prev, itinerary: updated }));
+    } catch (err) {
+      console.warn('Auto resolve all days failed:', err.message);
+    } finally {
+      setIsResolvingAllDays(false);
+    }
+  };
+
+  // Select Media from Modal
+  const handleSelectDayMedia = (selectedMedia) => {
+    if (activeMediaPickerDayIdx === null) return;
+    const updated = [...quotation.itinerary];
+    updated[activeMediaPickerDayIdx] = {
+      ...updated[activeMediaPickerDayIdx],
+      coverMedia: {
+        id: selectedMedia.assetId,
+        url: selectedMedia.url,
+        altText: selectedMedia.altText,
+        caption: selectedMedia.caption,
+        width: selectedMedia.width || 1600,
+        height: selectedMedia.height || 900
+      },
+      coverMediaAssetId: selectedMedia.assetId,
+      mediaSelectionMode: 'MANUAL',
+      locationName: updated[activeMediaPickerDayIdx].locationName || selectedMedia.locationName || ''
+    };
+    setIsDirty(true);
+    setQuotation(prev => ({ ...prev, itinerary: updated }));
+    setActiveMediaPickerDayIdx(null);
+  };
+
+  // Clear Media for a Day
+  const handleClearDayMedia = (idx) => {
+    const updated = [...quotation.itinerary];
+    updated[idx] = {
+      ...updated[idx],
+      coverMedia: { id: '', url: '', altText: '', caption: '', width: 1600, height: 900 },
+      coverMediaAssetId: null,
+      mediaSelectionMode: 'AUTO'
+    };
+    setIsDirty(true);
+    setQuotation(prev => ({ ...prev, itinerary: updated }));
   };
 
   // Step 3 Stay Segments & Hotel Alternatives Actions
@@ -977,22 +1120,34 @@ export default function QuotationBuilderWizard({
             {/* ------------------------------------------------------------- */}
             {currentStep === 2 && (
               <div className="space-y-4">
-                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex items-center justify-between">
+                <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                       <Calendar size={18} className="text-emerald-600" /> Day-by-Day Itinerary ({quotation.itinerary?.length || 0} Days)
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">
-                      Configure day titles, detailed activities, stay recommendations, and meal inclusions.
+                      Configure day titles, real location photography, detailed activities, stay recommendations, and meal inclusions.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAddDay}
-                    className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-emerald-600 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus size={14} /> Add Day
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAutoResolveAllDays}
+                      disabled={isResolvingAllDays || !quotation.itinerary?.length}
+                      className="px-3.5 py-2 bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="Automatically match and resolve real verified location images for all days from the canonical media database"
+                    >
+                      <Sparkles size={13} className={isResolvingAllDays ? 'animate-spin' : ''} />
+                      {isResolvingAllDays ? 'Resolving Media...' : 'Auto-Resolve All Images'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddDay}
+                      className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-emerald-600 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={14} /> Add Day
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -1049,6 +1204,153 @@ export default function QuotationBuilderWizard({
                           </button>
                         </div>
                       </div>
+
+                      {/* Location & POI Specification */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase text-slate-700 mb-0.5 flex items-center gap-1">
+                            <MapPin size={11} className="text-emerald-600" /> Day Location / POI / Halt
+                          </label>
+                          <input
+                            type="text"
+                            value={day.locationName || ''}
+                            onChange={(e) => handleDayFieldChange(idx, 'locationName', e.target.value)}
+                            placeholder="e.g. Solang Valley, Manali or Double Decker Root Bridge"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-emerald-500"
+                          />
+                        </div>
+
+                        {/* Location Alignment Indicator */}
+                        <div className="flex items-end pb-1 text-[11px] text-slate-500">
+                          {day.locationName && quotation.tripRequirements?.destination && 
+                           !day.locationName.toLowerCase().includes(quotation.tripRequirements.destination.toLowerCase().split(' ')[0]) && 
+                           !quotation.tripRequirements.destination.toLowerCase().includes(day.locationName.toLowerCase().split(' ')[0]) ? (
+                            <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1">
+                              <AlertCircle size={12} /> Local attraction or transit hub in itinerary
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              ✓ Geographic alignment with {quotation.tripRequirements?.destination || 'trip'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Day Cover Image & Media Resolution Card */}
+                      <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          {day.coverMedia?.url ? (
+                            <div className="relative w-24 h-16 rounded-xl overflow-hidden border border-slate-200 shrink-0 group bg-slate-900 shadow-xs">
+                              <img
+                                src={day.coverMedia.url}
+                                alt={day.coverMedia.altText || day.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-24 h-16 rounded-xl bg-slate-200/70 border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 shrink-0">
+                              <Camera size={18} />
+                              <span className="text-[9px] font-bold mt-0.5">No Photo</span>
+                            </div>
+                          )}
+
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-slate-800 text-xs">
+                                {day.coverMedia?.url ? (day.coverMedia.caption || day.locationName || 'Location Cover Image') : 'No Day Image Selected'}
+                              </span>
+                              {day.coverMedia?.url && (
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                  day.mediaSelectionMode === 'MANUAL'
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                }`}>
+                                  {day.mediaSelectionMode === 'MANUAL' ? 'Manually Selected' : 'Auto Selected'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-medium">
+                              {day.coverMedia?.url
+                                ? `Real database asset • ${day.coverMedia.altText || day.locationName || 'Verified POI'}`
+                                : 'Select from verified media archive or let Smart Resolver auto-match.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMediaPickerDayIdx(idx);
+                              setIsMediaPickerOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <ImageIcon size={12} className="text-indigo-600" /> Choose Library
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAutoResolveDayMedia(idx)}
+                            disabled={resolvingDayIdx === idx}
+                            className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            title="Auto-match best real photo from database based on POI and activities"
+                          >
+                            <Sparkles size={12} className={resolvingDayIdx === idx ? 'animate-spin' : 'text-emerald-600'} />
+                            {resolvingDayIdx === idx ? 'Resolving...' : 'Auto Match'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMediaPickerDayIdx(idx);
+                              setIsUploadMediaModalOpen(true);
+                            }}
+                            className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            title="Upload and index a new photo for this location"
+                          >
+                            <Upload size={12} className="text-slate-600" /> Upload
+                          </button>
+
+                          {day.coverMedia?.url && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearDayMedia(idx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 cursor-pointer"
+                              title="Remove Image"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const dayLoc = (day.locationName || day.title || '').toLowerCase().trim();
+                        const mediaLabel = (day.coverMedia?.caption || day.coverMedia?.altText || '').toLowerCase().trim();
+                        const isMismatched = day.coverMedia?.url && dayLoc && mediaLabel && 
+                          !mediaLabel.includes(dayLoc) && !dayLoc.includes(mediaLabel) &&
+                          !dayLoc.split(/[\s,/-]+/).some(w => w.length > 3 && mediaLabel.includes(w)) &&
+                          !mediaLabel.split(/[\s,/-]+/).some(w => w.length > 3 && dayLoc.includes(w));
+                        if (!isMismatched) return null;
+                        return (
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 gap-2">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                              <span>
+                                <strong>Location Mismatch:</strong> Photo is for <em>"{day.coverMedia.caption || day.coverMedia.altText}"</em>, but day location is <em>"{day.locationName || day.title}"</em>.
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAutoResolveDayMedia(idx)}
+                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[10px] shrink-0 cursor-pointer"
+                            >
+                              Auto-align Photo
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                         <div>
@@ -2133,6 +2435,44 @@ export default function QuotationBuilderWizard({
             </div>
           )}
         </AnimatePresence>
+
+        {/* Day Location Media Picker Modal */}
+        <MediaLibraryModal
+          isOpen={isMediaPickerOpen}
+          onClose={() => {
+            setIsMediaPickerOpen(false);
+            setActiveMediaPickerDayIdx(null);
+          }}
+          onSelectMedia={handleSelectDayMedia}
+          initialDestination={quotation.tripRequirements?.destination || ''}
+          initialLocation={activeMediaPickerDayIdx !== null ? quotation.itinerary?.[activeMediaPickerDayIdx]?.locationName : ''}
+          currentSelectedAssetId={activeMediaPickerDayIdx !== null ? quotation.itinerary?.[activeMediaPickerDayIdx]?.coverMediaAssetId : null}
+          onOpenUpload={() => setIsUploadMediaModalOpen(true)}
+        />
+
+        {/* Upload & Index Location Image Modal */}
+        <UploadLocationImageModal
+          isOpen={isUploadMediaModalOpen}
+          onClose={() => {
+            setIsUploadMediaModalOpen(false);
+            setActiveMediaPickerDayIdx(null);
+          }}
+          initialDestination={quotation.tripRequirements?.destination || ''}
+          initialLocationName={activeMediaPickerDayIdx !== null ? quotation.itinerary?.[activeMediaPickerDayIdx]?.locationName : ''}
+          onAssetCreated={(newAsset) => {
+            if (activeMediaPickerDayIdx !== null && newAsset) {
+              handleSelectDayMedia({
+                assetId: newAsset._id,
+                url: newAsset.storage?.secureUrl || newAsset.url,
+                altText: newAsset.altText,
+                caption: newAsset.caption,
+                width: newAsset.storage?.width,
+                height: newAsset.storage?.height,
+                locationName: newAsset.location?.poi || newAsset.location?.locality || newAsset.title
+              });
+            }
+          }}
+        />
 
       </motion.div>
     </div>

@@ -7,7 +7,7 @@ import {
   Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, 
   Globe, Save, Upload, FileText, ArrowUpRight, MessageSquare, 
   Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
-  Share2, Copy, Send, CreditCard, ExternalLink, Compass, Hotel, Car
+  Share2, Copy, Send, CreditCard, ExternalLink, Compass, Hotel, Car, Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +38,10 @@ const deleteQuotationApi = async (...args) => (apiService.deleteQuotationApi || 
 const sendQuotationApi = async (...args) => (apiService.sendQuotationApi || apiService.default?.sendQuotationApi)?.(...args);
 const createBookingFromQuotationApi = async (...args) => (apiService.createBookingFromQuotationApi || apiService.default?.createBookingFromQuotationApi)?.(...args);
 const convertQuotationToTripApi = async (...args) => (apiService.convertQuotationToTripApi || apiService.default?.convertQuotationToTripApi)?.(...args);
+const listMediaAssetsApi = async (...args) => (apiService.listMediaAssetsApi || apiService.default?.listMediaAssetsApi)?.(...args);
+const getMediaCoverageReportApi = async (...args) => (apiService.getMediaCoverageReportApi || apiService.default?.getMediaCoverageReportApi)?.(...args);
+const deleteMediaAssetApi = async (...args) => (apiService.deleteMediaAssetApi || apiService.default?.deleteMediaAssetApi)?.(...args);
+const resolveItineraryMediaApi = async (...args) => (apiService.resolveItineraryMediaApi || apiService.default?.resolveItineraryMediaApi)?.(...args);
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 
 const getDestinations = () => (travelKnowledgeService.getDestinations || travelKnowledgeService.default?.getDestinations)?.() || [];
@@ -45,6 +49,8 @@ import QuotationBuilderWizard from '../components/QuotationBuilderWizard';
 import QuotationPreviewModal from '../components/QuotationPreviewModal';
 import ShareQuotationModal from '../components/ShareQuotationModal';
 import BookingDetailsModal from '../components/BookingDetailsModal';
+import MediaLibraryModal from '../components/MediaLibraryModal';
+import UploadLocationImageModal from '../components/UploadLocationImageModal';
 
 const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const { 
@@ -337,6 +343,77 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
     }, 300);
     return () => clearTimeout(timer);
   }, [quotationSearch]);
+
+  // ==========================================
+  // LOCATION MEDIA LIBRARY STATE & CONTROLS
+  // ==========================================
+  const [mediaAssets, setMediaAssets] = useState([]);
+  const [mediaAssetsLoading, setMediaAssetsLoading] = useState(false);
+  const [mediaSearch, setMediaSearch] = useState('');
+  const [mediaDestFilter, setMediaDestFilter] = useState('');
+  const [mediaCoverageReport, setMediaCoverageReport] = useState(null);
+  const [mediaReportLoading, setMediaReportLoading] = useState(false);
+  const [showMediaLibraryModal, setShowMediaLibraryModal] = useState(false);
+  const [showUploadLocationModal, setShowUploadLocationModal] = useState(false);
+  const [uploadInitialDestination, setUploadInitialDestination] = useState('');
+  const [uploadInitialLocation, setUploadInitialLocation] = useState('');
+  const [adminMediaPreview, setAdminMediaPreview] = useState(null);
+  const [tripItineraryMediaDayIdx, setTripItineraryMediaDayIdx] = useState(null);
+
+  const fetchMediaAssetsList = async () => {
+    try {
+      setMediaAssetsLoading(true);
+      const params = { limit: 100 };
+      if (mediaSearch.trim()) params.search = mediaSearch.trim();
+      if (mediaDestFilter) params.destination = mediaDestFilter;
+      const res = await listMediaAssetsApi(params);
+      setMediaAssets(Array.isArray(res?.data) ? res.data : []);
+    } catch (err) {
+      console.warn('Load media assets error:', err.message);
+    } finally {
+      setMediaAssetsLoading(false);
+    }
+  };
+
+  const fetchCoverageReport = async () => {
+    try {
+      setMediaReportLoading(true);
+      const res = await getMediaCoverageReportApi();
+      if (res) {
+        setMediaCoverageReport(res);
+      }
+    } catch (err) {
+      console.warn('Load media coverage report error:', err.message);
+    } finally {
+      setMediaReportLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'media_library') {
+      fetchMediaAssetsList();
+      fetchCoverageReport();
+    }
+  }, [activeTab, mediaDestFilter]);
+
+  useEffect(() => {
+    if (activeTab !== 'media_library') return;
+    const timer = setTimeout(() => {
+      fetchMediaAssetsList();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mediaSearch]);
+
+  const handleDeleteMediaAssetAction = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to remove media asset "${title}"?`)) return;
+    try {
+      await deleteMediaAssetApi(id);
+      setMediaAssets(mediaAssets.filter(a => String(a._id) !== String(id)));
+      fetchCoverageReport();
+    } catch (err) {
+      alert('Failed to delete media asset: ' + err.message);
+    }
+  };
 
   useEffect(() => {
     if (quoteId) {
@@ -633,6 +710,130 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
     setTripForm({ ...tripForm, itinerary: updated });
   };
 
+  const handleAutoSelectTripDayMedia = async (idx) => {
+    const dayItem = tripForm.itinerary[idx];
+    try {
+      const dest = tripForm.destination || tripForm.location || '';
+      const locName = dayItem.locationName || dayItem.title || '';
+      const resolved = await resolveItineraryMediaApi({
+        destination: dest,
+        locationName: locName,
+        dayNumber: dayItem.day || idx + 1,
+        tripTitle: tripForm.title,
+        dayTitle: dayItem.title,
+        description: dayItem.description
+      });
+      if (resolved?.data) {
+        const asset = resolved.data;
+        const updated = [...tripForm.itinerary];
+        updated[idx] = {
+          ...updated[idx],
+          coverMedia: {
+            id: asset._id,
+            url: asset.storage?.secureUrl || asset.url,
+            altText: asset.title || locName,
+            caption: asset.caption || locName,
+            width: asset.storage?.dimensions?.width,
+            height: asset.storage?.dimensions?.height
+          },
+          coverMediaAssetId: asset._id,
+          image: asset.storage?.secureUrl || asset.url
+        };
+        setTripForm({ ...tripForm, itinerary: updated });
+      } else {
+        alert('No matching media asset found in database for this location.');
+      }
+    } catch (err) {
+      alert('Auto-resolve failed: ' + err.message);
+    }
+  };
+
+  const handleAutoResolveAllTripDaysMedia = async () => {
+    try {
+      const dest = tripForm.destination || tripForm.location || '';
+      const usedIds = [];
+      const updated = [...tripForm.itinerary];
+      for (let i = 0; i < updated.length; i++) {
+        const dayItem = updated[i];
+        const res = await resolveItineraryMediaApi({
+          destination: dest,
+          locationName: dayItem.locationName || dayItem.title || '',
+          dayNumber: dayItem.day || i + 1,
+          tripTitle: tripForm.title,
+          dayTitle: dayItem.title,
+          description: dayItem.description,
+          excludeAssetIds: usedIds
+        });
+        if (res?.data) {
+          const asset = res.data;
+          usedIds.push(String(asset._id));
+          updated[i] = {
+            ...dayItem,
+            coverMedia: {
+              id: asset._id,
+              url: asset.storage?.secureUrl || asset.url,
+              altText: asset.title,
+              caption: asset.caption,
+              width: asset.storage?.dimensions?.width,
+              height: asset.storage?.dimensions?.height
+            },
+            coverMediaAssetId: asset._id,
+            image: asset.storage?.secureUrl || asset.url
+          };
+        }
+      }
+      setTripForm({ ...tripForm, itinerary: updated });
+    } catch (err) {
+      alert('Batch auto-resolve failed: ' + err.message);
+    }
+  };
+
+  const handleSelectMediaForTripDay = (asset) => {
+    if (tripItineraryMediaDayIdx !== null) {
+      const updated = [...tripForm.itinerary];
+      updated[tripItineraryMediaDayIdx] = {
+        ...updated[tripItineraryMediaDayIdx],
+        coverMedia: {
+          id: asset._id,
+          url: asset.storage?.secureUrl || asset.url,
+          altText: asset.title,
+          caption: asset.caption,
+          width: asset.storage?.dimensions?.width,
+          height: asset.storage?.dimensions?.height
+        },
+        coverMediaAssetId: asset._id,
+        image: asset.storage?.secureUrl || asset.url
+      };
+      setTripForm({ ...tripForm, itinerary: updated });
+      setTripItineraryMediaDayIdx(null);
+    }
+    setShowMediaLibraryModal(false);
+  };
+
+  const handleMediaUploaded = (newAsset) => {
+    fetchMediaAssetsList();
+    fetchCoverageReport();
+    if (tripItineraryMediaDayIdx !== null) {
+      const updated = [...tripForm.itinerary];
+      updated[tripItineraryMediaDayIdx] = {
+        ...updated[tripItineraryMediaDayIdx],
+        coverMedia: {
+          id: newAsset._id,
+          url: newAsset.storage?.secureUrl || newAsset.url,
+          altText: newAsset.title,
+          caption: newAsset.caption,
+          width: newAsset.storage?.dimensions?.width,
+          height: newAsset.storage?.dimensions?.height
+        },
+        coverMediaAssetId: newAsset._id,
+        image: newAsset.storage?.secureUrl || newAsset.url
+      };
+      setTripForm({ ...tripForm, itinerary: updated });
+      setTripItineraryMediaDayIdx(null);
+    }
+    setShowUploadLocationModal(false);
+  };
+
   // ==========================================
   // PAGE CMS ACTIONS
   // ==========================================
@@ -834,6 +1035,7 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
             { id: 'quotations', label: 'Quotations', icon: <FileText size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
             { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
+            { id: 'media_library', label: 'Media Library', icon: <Camera size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
             { id: 'pages', label: 'Pages CMS', icon: <Globe size={15} />, roles: ['super_admin', 'admin', 'marketing'] },
             { id: 'bookings_crm', label: 'Bookings & CRM', icon: <Ticket size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales'] },
             { id: 'influencer_verification', label: 'Creator Approvals', icon: <UserCheck size={15} />, roles: ['super_admin', 'admin'] },
@@ -1534,6 +1736,256 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB: CANONICAL LOCATION MEDIA LIBRARY & COVERAGE CENTER */}
+        {/* ========================================================================= */}
+        {activeTab === 'media_library' && (
+          <div className="space-y-6">
+            {/* Header Toolbar */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200 shadow-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    Location Media Library
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-500">
+                    {mediaAssets.length} Indexed Assets
+                  </span>
+                </div>
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <Camera size={22} className="text-emerald-600" /> Canonical Location Photography Repository
+                </h2>
+                <p className="text-xs text-slate-500 font-medium max-w-2xl">
+                  Real database-driven photography mapped to exact destinations, localities, and POIs. Used by Smart Image Resolver across Quotations, Trips, AI Itineraries, and PDF exports.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadInitialDestination('');
+                    setUploadInitialLocation('');
+                    setShowUploadLocationModal(true);
+                  }}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Plus size={14} /> Index New Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchMediaAssetsList();
+                    fetchCoverageReport();
+                  }}
+                  className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  title="Refresh Media and Coverage Report"
+                >
+                  <RefreshCw size={14} className={mediaAssetsLoading || mediaReportLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* Media Coverage Intelligence Widget */}
+            {mediaCoverageReport && (
+              <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white p-6 rounded-3xl border border-slate-800 shadow-xl space-y-5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
+                      Coverage Intelligence
+                    </span>
+                    <h3 className="text-lg font-black text-white mt-1">
+                      Itinerary Media Coverage & Gap Analysis
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Overall Coverage Rate</span>
+                      <span className="text-2xl font-black text-emerald-400">
+                        {mediaCoverageReport.stats?.coverageRate || '100%'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Active Assets</span>
+                    <span className="text-xl font-black text-white">{mediaCoverageReport.stats?.totalActiveAssets || mediaAssets.length}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Covered Destinations</span>
+                    <span className="text-xl font-black text-emerald-400">{mediaCoverageReport.stats?.coveredDestinationsCount || 0}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Unique POIs Indexed</span>
+                    <span className="text-xl font-black text-blue-400">{mediaCoverageReport.stats?.uniquePoisCount || 0}</span>
+                  </div>
+                  <div className="bg-white/5 border border-white/10 p-3.5 rounded-2xl">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Missing Locations Queue</span>
+                    <span className="text-xl font-black text-amber-400">{mediaCoverageReport.missingQueue?.length || 0}</span>
+                  </div>
+                </div>
+
+                {/* Missing Location Action Queue */}
+                {mediaCoverageReport.missingQueue?.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <AlertCircle size={14} /> Attention Needed: Unindexed Itinerary Locations ({mediaCoverageReport.missingQueue.length})
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {mediaCoverageReport.missingQueue.map((item, qIdx) => (
+                        <div key={qIdx} className="bg-white/5 border border-white/10 p-3 rounded-xl flex items-center justify-between gap-2">
+                          <div className="overflow-hidden">
+                            <span className="font-bold text-xs text-white block truncate">{item.location}</span>
+                            <span className="text-[10px] text-slate-400 block truncate">📍 {item.destination}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadInitialDestination(item.destination || '');
+                              setUploadInitialLocation(item.location || '');
+                              setShowUploadLocationModal(true);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[10px] rounded-lg shrink-0 transition-colors cursor-pointer"
+                          >
+                            Upload Photo
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Filter Toolbar */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                <div className="relative flex-1">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={mediaSearch}
+                    onChange={(e) => setMediaSearch(e.target.value)}
+                    placeholder="Search by POI, destination, city or tags..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={mediaDestFilter}
+                  onChange={(e) => setMediaDestFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="">All Destinations</option>
+                  {popularDestinationsList.map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Media Asset Cards Grid */}
+            {mediaAssetsLoading ? (
+              <div className="py-20 text-center text-slate-400 space-y-2">
+                <RefreshCw size={24} className="animate-spin text-emerald-600 mx-auto" />
+                <p className="text-xs font-bold">Scanning canonical media assets...</p>
+              </div>
+            ) : mediaAssets.length === 0 ? (
+              <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                  <Camera size={24} />
+                </div>
+                <h4 className="font-black text-slate-900 text-base">No Media Assets Found</h4>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  No location photos match your current filters. Click "Index New Photo" to add images to the database.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadInitialDestination('');
+                    setUploadInitialLocation('');
+                    setShowUploadLocationModal(true);
+                  }}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-colors cursor-pointer"
+                >
+                  Upload First Photo
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {mediaAssets.map((asset) => {
+                  const imgUrl = asset.storage?.secureUrl || asset.url;
+                  const poi = asset.location?.poi || asset.title;
+                  const destination = asset.location?.destination;
+
+                  return (
+                    <div
+                      key={asset._id}
+                      className="bg-white rounded-2xl overflow-hidden border border-slate-200 hover:shadow-md transition-all group flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-16/10 bg-slate-900 overflow-hidden">
+                        <img
+                          src={imgUrl}
+                          alt={asset.altText || poi}
+                          loading="lazy"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute top-2 inset-x-2 flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase text-slate-900 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-md shadow-xs">
+                            {destination}
+                          </span>
+                          {asset.featured && (
+                            <span className="bg-amber-400 text-slate-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md shadow-xs flex items-center gap-0.5">
+                              <Sparkles size={10} /> Featured
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setAdminMediaPreview(asset)}
+                          className="absolute bottom-2 right-2 p-1.5 bg-black/60 hover:bg-black/90 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title="Preview Full Image"
+                        >
+                          <Eye size={13} />
+                        </button>
+                      </div>
+
+                      <div className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-black text-slate-900 text-xs truncate" title={asset.title}>
+                            {asset.title}
+                          </h4>
+                          <span className="text-[11px] text-slate-500 font-medium block truncate">
+                            📍 {poi || asset.location?.locality || destination}
+                          </span>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                          <span>{asset.storage?.width}x{asset.storage?.height}px</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMediaAssetAction(asset._id, asset.title)}
+                            className="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 cursor-pointer"
+                            title="Delete Asset"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -2547,53 +2999,207 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                 {/* 4. ITINERARY BUILDER */}
                 {tripModalTab === 'itinerary' && (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="uppercase">Day-by-Day Route Schedule ({tripForm.itinerary.length} Days)</span>
-                      <button
-                        type="button"
-                        onClick={handleAddItineraryDay}
-                        className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-black flex items-center gap-1"
-                      >
-                        <Plus size={13} /> Add Day
-                      </button>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-100 p-3 rounded-2xl border border-slate-200">
+                      <div>
+                        <span className="text-xs font-black uppercase text-slate-900 tracking-wider">
+                          Day-by-Day Route Schedule ({tripForm.itinerary.length} Days)
+                        </span>
+                        <p className="text-[11px] text-slate-500">
+                          Assign location names and attach real location photography from database.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleAutoResolveAllTripDaysMedia}
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <Sparkles size={13} className="text-emerald-600" /> Auto-Resolve All Photos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddItineraryDay}
+                          className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black flex items-center gap-1 transition-colors"
+                        >
+                          <Plus size={13} /> Add Day
+                        </button>
+                      </div>
                     </div>
 
-                    {tripForm.itinerary.map((dayItem, idx) => (
-                      <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-black text-slate-900">Day {dayItem.day || idx + 1}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItineraryDay(idx)}
-                            className="text-rose-600 hover:text-rose-700 text-xs font-bold"
-                          >
-                            Remove
-                          </button>
+                    {tripForm.itinerary.map((dayItem, idx) => {
+                      const coverImg = dayItem.coverMedia?.url || dayItem.image;
+                      return (
+                        <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-slate-900">Day {dayItem.day || idx + 1}</span>
+                              {coverImg ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                                  <Camera size={10} /> Photo Attached
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                                  No Image
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItineraryDay(idx)}
+                              className="text-rose-600 hover:text-rose-700 text-xs font-bold"
+                            >
+                              Remove
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              value={dayItem.title || ''}
+                              onChange={(e) => {
+                                const updated = [...tripForm.itinerary];
+                                updated[idx].title = e.target.value;
+                                setTripForm({ ...tripForm, itinerary: updated });
+                              }}
+                              placeholder="Day Title (e.g. Double Decker Living Root Bridge Trek)"
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none focus:border-slate-400"
+                            />
+                            <div className="relative">
+                              <input
+                                type="text"
+                                value={dayItem.locationName || ''}
+                                onChange={(e) => {
+                                  const updated = [...tripForm.itinerary];
+                                  updated[idx].locationName = e.target.value;
+                                  setTripForm({ ...tripForm, itinerary: updated });
+                                }}
+                                placeholder="Location / POI (e.g. Cherrapunji, Nohkalikai Falls)"
+                                className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-semibold text-slate-900 outline-none focus:border-slate-400"
+                              />
+                              <MapPin size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                            </div>
+                          </div>
+
+                          <textarea
+                            rows={2}
+                            value={dayItem.description || ''}
+                            onChange={(e) => {
+                              const updated = [...tripForm.itinerary];
+                              updated[idx].description = e.target.value;
+                              setTripForm({ ...tripForm, itinerary: updated });
+                            }}
+                            placeholder="Day activities overview..."
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none focus:border-slate-400"
+                          />
+
+                          {/* Day Cover Media Control Bar */}
+                          <div className="pt-1 border-t border-slate-200">
+                            {coverImg ? (
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
+                                <div className="flex items-center gap-3">
+                                  <img
+                                    src={coverImg}
+                                    alt={dayItem.title || `Day ${idx + 1}`}
+                                    className="w-16 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                  />
+                                  <div className="space-y-0.5">
+                                    <p className="text-xs font-bold text-slate-900 truncate max-w-xs">
+                                      {dayItem.coverMedia?.altText || dayItem.locationName || 'Attached Photo'}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 truncate max-w-xs font-mono">
+                                      {coverImg}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTripItineraryMediaDayIdx(idx);
+                                      setShowMediaLibraryModal(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                                  >
+                                    Change
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAutoSelectTripDayMedia(idx)}
+                                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                    title="Auto-match using destination & location name"
+                                  >
+                                    <Sparkles size={11} /> Auto
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTripItineraryMediaDayIdx(idx);
+                                      setUploadInitialDestination(tripForm.destination || tripForm.location || '');
+                                      setUploadInitialLocation(dayItem.locationName || '');
+                                      setShowUploadLocationModal(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                  >
+                                    <Upload size={11} /> Upload
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = [...tripForm.itinerary];
+                                      delete updated[idx].coverMedia;
+                                      delete updated[idx].coverMediaAssetId;
+                                      delete updated[idx].image;
+                                      setTripForm({ ...tripForm, itinerary: updated });
+                                    }}
+                                    className="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold transition-colors"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 p-2.5 bg-slate-100/70 border border-dashed border-slate-300 rounded-xl">
+                                <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                                  <Camera size={13} className="text-slate-400" /> No location photo attached for this day
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTripItineraryMediaDayIdx(idx);
+                                      setShowMediaLibraryModal(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-colors"
+                                  >
+                                    Choose Library
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAutoSelectTripDayMedia(idx)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-colors"
+                                  >
+                                    <Sparkles size={11} /> Auto Match
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTripItineraryMediaDayIdx(idx);
+                                      setUploadInitialDestination(tripForm.destination || tripForm.location || '');
+                                      setUploadInitialLocation(dayItem.locationName || '');
+                                      setShowUploadLocationModal(true);
+                                    }}
+                                    className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                  >
+                                    <Upload size={11} /> Upload
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <input
-                          type="text"
-                          value={dayItem.title}
-                          onChange={(e) => {
-                            const updated = [...tripForm.itinerary];
-                            updated[idx].title = e.target.value;
-                            setTripForm({ ...tripForm, itinerary: updated });
-                          }}
-                          placeholder="Day Title (e.g. Double Decker Living Root Bridge Trek)"
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 outline-none"
-                        />
-                        <textarea
-                          rows={2}
-                          value={dayItem.description}
-                          onChange={(e) => {
-                            const updated = [...tripForm.itinerary];
-                            updated[idx].description = e.target.value;
-                            setTripForm({ ...tripForm, itinerary: updated });
-                          }}
-                          placeholder="Day activities overview..."
-                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 outline-none"
-                        />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -2981,6 +3587,91 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
           bookingCode={bookingModalCode}
           quotationData={bookingModalQuotation}
         />
+      )}
+
+      {/* Media Library Modal for Day Image Selection */}
+      <MediaLibraryModal
+        isOpen={showMediaLibraryModal}
+        onClose={() => {
+          setShowMediaLibraryModal(false);
+          setTripItineraryMediaDayIdx(null);
+        }}
+        destinationFilter={tripForm.destination || tripForm.location || ''}
+        onSelectAsset={handleSelectMediaForTripDay}
+      />
+
+      {/* Upload Location Image Modal */}
+      <UploadLocationImageModal
+        isOpen={showUploadLocationModal}
+        onClose={() => {
+          setShowUploadLocationModal(false);
+          setTripItineraryMediaDayIdx(null);
+        }}
+        initialDestination={uploadInitialDestination || tripForm.destination || tripForm.location || ''}
+        initialLocation={uploadInitialLocation || ''}
+        onAssetUploaded={handleMediaUploaded}
+      />
+
+      {/* Admin Media Full Inspection Modal */}
+      {adminMediaPreview && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="relative bg-slate-900 aspect-video flex items-center justify-center">
+              <img
+                src={adminMediaPreview.storage?.secureUrl || adminMediaPreview.url}
+                alt={adminMediaPreview.title}
+                className="w-full h-full object-contain"
+              />
+              <button
+                type="button"
+                onClick={() => setAdminMediaPreview(null)}
+                className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/75 text-white rounded-full transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">{adminMediaPreview.title}</h3>
+                  <p className="text-xs text-slate-500">{adminMediaPreview.caption || 'No caption'}</p>
+                </div>
+                <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold shrink-0">
+                  {adminMediaPreview.orientation || 'Landscape'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">Destination</span>
+                  <span className="font-bold text-slate-800">{adminMediaPreview.destination || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">Locality / POI</span>
+                  <span className="font-bold text-slate-800">{adminMediaPreview.poi || adminMediaPreview.locality || '—'}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">Resolution</span>
+                  <span className="font-bold text-slate-800 font-mono">
+                    {adminMediaPreview.storage?.dimensions?.width || '—'} × {adminMediaPreview.storage?.dimensions?.height || '—'}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                  <span className="text-[10px] uppercase text-slate-400 font-bold block">Usage Count</span>
+                  <span className="font-bold text-slate-800 font-mono">{adminMediaPreview.usage?.count || 0} times</span>
+                </div>
+              </div>
+              {adminMediaPreview.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {adminMediaPreview.tags.map((tag, tIdx) => (
+                    <span key={tIdx} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px] font-medium">
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

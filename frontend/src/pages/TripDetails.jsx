@@ -455,6 +455,9 @@ const TripDetails = () => {
                   { day: 3, title: 'High Mountain Pass & Night Camping', desc: 'Drive over high-altitude passes, visit ancient monastery, stargazing around cozy bonfire.' }
                 ]).map((dayItem) => {
                   const isOpen = openDay === dayItem.day;
+                  const dayImageUrl = dayItem.coverMedia?.url || dayItem.image || dayItem.imageUrl;
+                  const locationLabel = dayItem.locationName || dayItem.location || dayItem.coverMedia?.caption;
+
                   return (
                     <div
                       key={dayItem.day}
@@ -468,14 +471,41 @@ const TripDetails = () => {
                           <span className="w-8 h-8 rounded-xl bg-slate-900 text-white text-xs font-black flex items-center justify-center shrink-0">
                             D{dayItem.day}
                           </span>
-                          <span className="text-xs md:text-sm font-black text-slate-900">{dayItem.title}</span>
+                          <div>
+                            <span className="text-xs md:text-sm font-black text-slate-900 block">{dayItem.title}</span>
+                            {locationLabel && (
+                              <span className="text-[10px] text-emerald-700 font-bold">📍 {locationLabel}</span>
+                            )}
+                          </div>
                         </div>
                         {isOpen ? <ChevronUp size={18} className="text-slate-500" /> : <ChevronDown size={18} className="text-slate-500" />}
                       </button>
 
                       {isOpen && (
-                        <div className="p-4 bg-white text-xs md:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100">
-                          {dayItem.desc}
+                        <div className="p-4 bg-white text-xs md:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100 space-y-3">
+                          {dayImageUrl && (
+                            <div className="relative rounded-2xl overflow-hidden aspect-16/8 bg-slate-900 group shadow-xs">
+                              <img
+                                src={dayImageUrl}
+                                alt={dayItem.coverMedia?.altText || dayItem.title}
+                                loading="lazy"
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              />
+                              {locationLabel && (
+                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 text-white">
+                                  <span className="text-[11px] font-bold">
+                                    📍 {locationLabel}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <p>{dayItem.desc || dayItem.description}</p>
+                          {dayItem.stay && (
+                            <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                              🏨 Stay: <strong className="text-slate-800">{dayItem.stay}</strong>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
