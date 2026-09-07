@@ -13,6 +13,8 @@ import DestinationCard from '../components/DestinationCard.jsx';
 import CallbackForm from '../components/CallbackForm.jsx';
 import SEOHead from '../components/SEOHead.jsx';
 import AIPlannerModal from '../components/AIPlannerModal.jsx';
+import HomeTripSection from '../components/HomeTripSection.jsx';
+import { HOME_SECTION_LIMITS, HOME_SECTIONS_META } from '../config/homeConfig.js';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas.js';
 import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
@@ -71,6 +73,8 @@ const Home = () => {
     timeContext = { greeting: 'Welcome Explorer', period: 'Day', heroTitle: 'Explore India & The World In Community.', heroSubtitle: 'Curated social group trips, high-altitude backpacking circuits & boutique mountain stays with certified captains.' }, 
     season = { name: 'Autumn Expeditions', heroTag: 'Ideal Mountain Weather' }, 
     recommendedTrips = UPCOMING_TRIPS || [], 
+    tripsPool = UPCOMING_TRIPS || [],
+    allTrips = UPCOMING_TRIPS || [],
     getWeatherFor = () => null
   } = useTravelContext() || {};
 
@@ -81,10 +85,16 @@ const Home = () => {
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
 
-  // Dynamic Departure Months derived from real batches
+  // Dynamic active catalog (excludes inactive/draft trips, merges live with knowledge base)
+  const activeCatalog = useMemo(() => {
+    const pool = (tripsPool && tripsPool.length > 0) ? tripsPool : (allTrips && allTrips.length > 0 ? allTrips : UPCOMING_TRIPS);
+    return (pool || []).filter(t => t && t.isActive !== false && t.status !== 'inactive');
+  }, [tripsPool, allTrips]);
+
+  // Dynamic Departure Months derived from real batches in active catalog
   const availableMonths = useMemo(() => {
     const monthSet = new Set();
-    (UPCOMING_TRIPS || []).forEach(t => {
+    activeCatalog.forEach(t => {
       if (Array.isArray(t.availableBatches)) {
         t.availableBatches.forEach(b => {
           if (b.monthLabel) monthSet.add(b.monthLabel);
@@ -97,45 +107,83 @@ const Home = () => {
     });
     const months = Array.from(monthSet);
     return months.length > 0 ? months.slice(0, 5) : ["SEP '26", "OCT '26", "NOV '26", "DEC '26"];
-  }, []);
+  }, [activeCatalog]);
 
-  // Trips Filtered for Upcoming Community Trips Section by Month
+  // Trips Filtered for Upcoming Community Trips Section by Month (Enforcing Limit <= 6)
   const upcomingCommunityTrips = useMemo(() => {
-    const cleanMonth = selectedMonth.split(' ')[0].replace(/[^A-Za-z]/g, '').toLowerCase();
-    const filtered = (UPCOMING_TRIPS || []).filter(t => {
+    const cleanMonth = (selectedMonth || '').split(' ')[0].replace(/[^A-Za-z]/g, '').toLowerCase();
+    const filtered = activeCatalog.filter(t => {
       const bText = Array.isArray(t.availableBatches) ? t.availableBatches.map(b => b.dates || '').join(' ').toLowerCase() : '';
       const nextB = (t.nextBatch || '').toLowerCase();
       return bText.includes(cleanMonth) || nextB.includes(cleanMonth);
     });
-    return filtered.length > 0 ? filtered : (UPCOMING_TRIPS || []).slice(0, 8);
-  }, [selectedMonth]);
+    const pool = filtered.length > 0 ? filtered : activeCatalog;
+    // Deterministic ranking: featured first, then rating
+    const sorted = [...pool].sort((a, b) => {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return (Number(b.rating) || 4.8) - (Number(a.rating) || 4.8);
+    });
+    return sorted.slice(0, HOME_SECTION_LIMITS.community);
+  }, [activeCatalog, selectedMonth]);
 
-  // Featured India Trips
-  const indiaTrips = useMemo(() => {
-    return (UPCOMING_TRIPS || []).filter(t => {
+  // Featured India Trips (Domestic Inventory, Enforcing Limit <= 8)
+  const allIndiaTrips = useMemo(() => {
+    const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
+    return activeCatalog.filter(t => {
       const dest = (t.destination || t.location || '').toLowerCase();
-      const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
-      return !intlKeywords.some(kw => dest.includes(kw));
-    }).slice(0, 8);
-  }, []);
+      const cat = (t.category || '').toLowerCase();
+      return !intlKeywords.some(kw => dest.includes(kw) || cat.includes(kw));
+    });
+  }, [activeCatalog]);
 
-  // Featured International Trips
+  const indiaTrips = useMemo(() => {
+    const sorted = [...allIndiaTrips].sort((a, b) => {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return (Number(b.rating) || 4.8) - (Number(a.rating) || 4.8);
+    });
+    return sorted.slice(0, HOME_SECTION_LIMITS.india);
+  }, [allIndiaTrips]);
+
+  // Featured International Trips (Enforcing Limit <= 6)
+  const allInternationalTrips = useMemo(() => {
+    const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
+    return activeCatalog.filter(t => {
+      const dest = (t.destination || t.location || '').toLowerCase();
+      const cat = (t.category || '').toLowerCase();
+      const tags = Array.isArray(t.tags) ? t.tags.map(tag => (tag || '').toLowerCase()) : [];
+      return intlKeywords.some(kw => dest.includes(kw) || cat.includes(kw) || tags.includes(kw));
+    });
+  }, [activeCatalog]);
+
   const internationalTrips = useMemo(() => {
-    return (UPCOMING_TRIPS || []).filter(t => {
-      const dest = (t.destination || t.location || t.category || '').toLowerCase();
-      const intlKeywords = ['bali', 'indonesia', 'vietnam', 'thailand', 'dubai', 'bhutan', 'sri lanka', 'international'];
-      return intlKeywords.some(kw => dest.includes(kw));
-    }).slice(0, 4);
-  }, []);
+    const sorted = [...allInternationalTrips].sort((a, b) => {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return (Number(b.rating) || 4.8) - (Number(a.rating) || 4.8);
+    });
+    return sorted.slice(0, HOME_SECTION_LIMITS.international);
+  }, [allInternationalTrips]);
 
-  // Weekend Trips (2-4 Days)
-  const weekendTrips = useMemo(() => {
-    return (UPCOMING_TRIPS || []).filter(t => {
+  // Weekend Trips (2-4 Days, Enforcing Limit <= 4)
+  const allWeekendTrips = useMemo(() => {
+    return activeCatalog.filter(t => {
       const dur = (t.duration || '').toLowerCase();
       const cat = (t.category || '').toLowerCase();
-      return cat.includes('weekend') || dur.includes('2n') || dur.includes('3d') || dur.includes('3n/4d') || dur.includes('4d');
-    }).slice(0, 4);
-  }, []);
+      const tags = Array.isArray(t.tags) ? t.tags.map(tag => (tag || '').toLowerCase()) : [];
+      return cat.includes('weekend') || tags.includes('weekend trips') || dur.includes('2n') || dur.includes('3d') || dur.includes('3n/4d');
+    });
+  }, [activeCatalog]);
+
+  const weekendTrips = useMemo(() => {
+    const sorted = [...allWeekendTrips].sort((a, b) => {
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
+      return (Number(b.rating) || 4.8) - (Number(a.rating) || 4.8);
+    });
+    return sorted.slice(0, HOME_SECTION_LIMITS.weekend);
+  }, [allWeekendTrips]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -285,8 +333,9 @@ const Home = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const pick = UPCOMING_TRIPS[Math.floor(Math.random() * UPCOMING_TRIPS.length)];
-                      navigate(`/trip/${pick.slug || pick.id}`);
+                      const pool = activeCatalog.length > 0 ? activeCatalog : UPCOMING_TRIPS;
+                      const pick = pool[Math.floor(Math.random() * pool.length)];
+                      if (pick) navigate(`/trip/${pick.slug || pick.id}`);
                     }}
                     className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                   >
@@ -380,7 +429,7 @@ const Home = () => {
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
             {DESTINATIONS.slice(0, 8).map(dest => {
-              const activeCount = getDestinationPackageCount(dest.name, UPCOMING_TRIPS);
+              const activeCount = getDestinationPackageCount(dest.name, activeCatalog);
               const destWeather = getWeatherFor(dest.name);
               return (
                 <DestinationCard 
@@ -448,161 +497,90 @@ const Home = () => {
       </section>
 
       {/* ========================================================================= */}
+      {/* ========================================================================= */}
       {/* 5. UPCOMING COMMUNITY TRIPS (WITH DEPARTURE MONTH TABS) */}
       {/* ========================================================================= */}
-      <section className="travel-section">
-        <div className="travel-container">
-          <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-8">
-            <div>
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                Fixed Batch Departures
-              </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
-                Upcoming Community Trips
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                Social group expeditions with like-minded travelers and certified trip leaders.
-              </p>
-            </div>
-
-            {/* Departure Month Selector Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-              {availableMonths.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setSelectedMonth(m)}
-                  className={`px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                    selectedMonth === m
-                      ? 'bg-slate-900 text-white shadow-md'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-            {upcomingCommunityTrips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} showWeather={true} />
+      <HomeTripSection
+        id={HOME_SECTIONS_META.community.id}
+        eyebrow={HOME_SECTIONS_META.community.eyebrow}
+        title={HOME_SECTIONS_META.community.title}
+        description={HOME_SECTIONS_META.community.description}
+        trips={upcomingCommunityTrips}
+        totalAvailable={activeCatalog.length}
+        limit={HOME_SECTIONS_META.community.limit}
+        viewAllBaseLabel={HOME_SECTIONS_META.community.viewAllBaseLabel}
+        viewAllPath={HOME_SECTIONS_META.community.viewAllPath}
+        bgClass={HOME_SECTIONS_META.community.bgClass}
+        headerChildren={
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+            {availableMonths.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSelectedMonth(m)}
+                className={`px-3.5 py-1.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                  selectedMonth === m
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                }`}
+              >
+                {m}
+              </button>
             ))}
           </div>
-
-          <div className="mt-10 text-center">
-            <Link
-              to="/community-trips"
-              className="inline-flex items-center gap-2 px-8 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-md transition-all"
-            >
-              <span>View All 50 Community Departures</span>
-              <ArrowRight size={14} />
-            </Link>
-          </div>
-        </div>
-      </section>
+        }
+      />
 
       {/* ========================================================================= */}
       {/* 6. EXPLORE INDIA CIRCUITS */}
       {/* ========================================================================= */}
-      <section className="travel-section bg-slate-100/70 border-y border-slate-200/80">
-        <div className="travel-container">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
-            <div>
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                Domestic Escapes
-              </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
-                Explore India Circuits
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                From high-altitude Himalayan passes to pristine Northeast valleys and coastal backwaters.
-              </p>
-            </div>
-            <Link 
-              to="/trips/india" 
-              className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
-            >
-              View All 46 India Trips <ArrowRight size={14} />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-            {indiaTrips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} showWeather={true} />
-            ))}
-          </div>
-        </div>
-      </section>
+      <HomeTripSection
+        id={HOME_SECTIONS_META.india.id}
+        eyebrow={HOME_SECTIONS_META.india.eyebrow}
+        title={HOME_SECTIONS_META.india.title}
+        description={HOME_SECTIONS_META.india.description}
+        trips={indiaTrips}
+        totalAvailable={allIndiaTrips.length}
+        limit={HOME_SECTIONS_META.india.limit}
+        viewAllBaseLabel={HOME_SECTIONS_META.india.viewAllBaseLabel}
+        viewAllPath={HOME_SECTIONS_META.india.viewAllPath}
+        bgClass={HOME_SECTIONS_META.india.bgClass}
+      />
 
       {/* ========================================================================= */}
       {/* 7. INTERNATIONAL ESCAPES */}
       {/* ========================================================================= */}
-      {internationalTrips.length > 0 && (
-        <section className="travel-section">
-          <div className="travel-container">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
-              <div>
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                  Global Adventures
-                </span>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
-                  International Escapes
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  Seamless visa guidance, boutique private villas & certified local tour specialists.
-                </p>
-              </div>
-              <Link 
-                to="/trips/international" 
-                className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
-              >
-                All International Trips <ArrowRight size={14} />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-              {internationalTrips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} showWeather={true} />
-              ))}
-            </div>
-          </div>
-        </section>
+      {allInternationalTrips.length > 0 && (
+        <HomeTripSection
+          id={HOME_SECTIONS_META.international.id}
+          eyebrow={HOME_SECTIONS_META.international.eyebrow}
+          title={HOME_SECTIONS_META.international.title}
+          description={HOME_SECTIONS_META.international.description}
+          trips={internationalTrips}
+          totalAvailable={allInternationalTrips.length}
+          limit={HOME_SECTIONS_META.international.limit}
+          viewAllBaseLabel={HOME_SECTIONS_META.international.viewAllBaseLabel}
+          viewAllPath={HOME_SECTIONS_META.international.viewAllPath}
+          bgClass={HOME_SECTIONS_META.international.bgClass}
+        />
       )}
 
       {/* ========================================================================= */}
       {/* 8. WEEKEND GETAWAYS (2–4 DAYS) */}
       {/* ========================================================================= */}
-      {weekendTrips.length > 0 && (
-        <section className="travel-section bg-slate-100/70 border-y border-slate-200/80">
-          <div className="travel-container">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
-              <div>
-                <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                  Quick Breaks
-                </span>
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
-                  Weekend Getaways
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1">
-                  Overnight departures from Delhi & Chandigarh. Zero leave needed.
-                </p>
-              </div>
-              <Link 
-                to="/weekend-trips" 
-                className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
-              >
-                View 19 Weekend Trips <ArrowRight size={14} />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
-              {weekendTrips.map((trip) => (
-                <TripCard key={trip.id} trip={trip} showWeather={true} />
-              ))}
-            </div>
-          </div>
-        </section>
+      {allWeekendTrips.length > 0 && (
+        <HomeTripSection
+          id={HOME_SECTIONS_META.weekend.id}
+          eyebrow={HOME_SECTIONS_META.weekend.eyebrow}
+          title={HOME_SECTIONS_META.weekend.title}
+          description={HOME_SECTIONS_META.weekend.description}
+          trips={weekendTrips}
+          totalAvailable={allWeekendTrips.length}
+          limit={HOME_SECTIONS_META.weekend.limit}
+          viewAllBaseLabel={HOME_SECTIONS_META.weekend.viewAllBaseLabel}
+          viewAllPath={HOME_SECTIONS_META.weekend.viewAllPath}
+          bgClass={HOME_SECTIONS_META.weekend.bgClass}
+        />
       )}
 
       {/* ========================================================================= */}
