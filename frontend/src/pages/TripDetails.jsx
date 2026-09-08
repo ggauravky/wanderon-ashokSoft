@@ -14,6 +14,7 @@ import WeatherBadge from '../components/WeatherBadge.jsx';
 import TripCard from '../components/TripCard.jsx';
 import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
+import ItineraryDayGallery from '../components/ItineraryDayGallery.jsx';
 import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas.js';
 import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
@@ -483,23 +484,12 @@ const TripDetails = () => {
 
                       {isOpen && (
                         <div className="p-4 bg-white text-xs md:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100 space-y-3">
-                          {dayImageUrl && (
-                            <div className="relative rounded-2xl overflow-hidden aspect-16/8 bg-slate-900 group shadow-xs">
-                              <img
-                                src={dayImageUrl}
-                                alt={dayItem.coverMedia?.altText || dayItem.title}
-                                loading="lazy"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                              />
-                              {locationLabel && (
-                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 text-white">
-                                  <span className="text-[11px] font-bold">
-                                    📍 {locationLabel}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                          {/* Curated 3-Image Nature Gallery Block */}
+                          <ItineraryDayGallery
+                            day={dayItem}
+                            destination={trip.location || trip.destination}
+                            className="my-1"
+                          />
                           <p>{dayItem.desc || dayItem.description}</p>
                           {dayItem.stay && (
                             <div className="text-[11px] text-slate-500 pt-1 border-t border-slate-100">

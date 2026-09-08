@@ -24,6 +24,7 @@ const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelK
 import { useAuth } from '../contexts/AuthContext';
 import AIItineraryDocument from './AIItineraryDocument';
 import ShareItineraryModal from './ShareItineraryModal';
+import ItineraryDayGallery from './ItineraryDayGallery';
 
 const AIPlannerModal = ({ 
   isOpen, 
@@ -610,23 +611,12 @@ const AIPlannerModal = ({
 
                         {openDay === item.day && (
                           <div className="p-4 pt-0 border-t border-slate-200/60 space-y-3 mt-1">
-                            {item.coverMedia?.url && (
-                              <div className="relative rounded-xl overflow-hidden aspect-16/8 bg-slate-900 group shadow-xs mt-3">
-                                <img
-                                  src={item.coverMedia.url}
-                                  alt={item.coverMedia.altText || item.title}
-                                  loading="lazy"
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                />
-                                {(item.locationName || item.coverMedia.caption) && (
-                                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 text-white">
-                                    <span className="text-[10px] font-bold">
-                                      📍 {item.locationName || item.coverMedia.caption}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            {/* Curated 3-Image Nature Gallery Block */}
+                            <ItineraryDayGallery
+                              day={item}
+                              destination={destination}
+                              className="mt-3"
+                            />
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                               {/* Morning */}

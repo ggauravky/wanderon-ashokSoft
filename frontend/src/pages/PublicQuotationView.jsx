@@ -15,6 +15,7 @@ import {
 import QuotationDocument from '../components/QuotationDocument';
 import ShareQuotationModal from '../components/ShareQuotationModal';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import ItineraryDayGallery from '../components/ItineraryDayGallery';
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 
 export default function PublicQuotationView() {
@@ -418,24 +419,12 @@ export default function PublicQuotationView() {
                         )}
                       </div>
 
-                      {/* Day Cover Image (Real Database Asset) */}
-                      {day.coverMedia?.url && (
-                        <div className="relative rounded-xl overflow-hidden aspect-16/8 bg-slate-900 shadow-2xs group">
-                          <img
-                            src={day.coverMedia.url}
-                            alt={day.coverMedia.altText || day.title}
-                            loading="lazy"
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                          {(day.coverMedia.caption || day.locationName) && (
-                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2.5 text-white">
-                              <p className="text-[11px] font-bold truncate">
-                                {day.coverMedia.caption || day.locationName}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      {/* Curated 3-Image Nature Gallery Block */}
+                      <ItineraryDayGallery
+                        day={day}
+                        destination={quotation.destination}
+                        className="my-2"
+                      />
 
                       {day.description && <p className="text-slate-600 leading-relaxed text-[11px]">{day.description}</p>}
 

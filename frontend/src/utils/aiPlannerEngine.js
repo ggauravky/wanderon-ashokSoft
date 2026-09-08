@@ -59,15 +59,50 @@ export const generateAIItinerary = async ({
 
   const targetDays = Math.max(3, Math.min(Number(days) || 5, 10));
   const attractions = destMeta.attractions || [];
+  const galleryPool = Array.isArray(destMeta.galleryImages) ? destMeta.galleryImages : [];
   let generatedDays = [];
 
   for (let i = 0; i < targetDays; i++) {
-    const att1 = attractions[(i * 2) % attractions.length] || { name: `${destMeta.name} Scenic Point`, location: destMeta.name };
-    const att2 = attractions[(i * 2 + 1) % attractions.length] || { name: `${destMeta.name} Cultural Exploration`, location: destMeta.name };
+    const att1 = attractions[(i * 2) % (attractions.length || 1)] || { name: `${destMeta.name} Scenic Point`, location: destMeta.name };
+    const att2 = attractions[(i * 2 + 1) % (attractions.length || 1)] || { name: `${destMeta.name} Cultural Exploration`, location: destMeta.name };
+
+    const coverUrl = att1.image || galleryPool[i % (galleryPool.length || 1)] || destMeta.heroImage || '';
+    const supporting1 = att2.image || galleryPool[(i + 1) % (galleryPool.length || 1)] || '';
+    const supporting2 = galleryPool[(i + 2) % (galleryPool.length || 1)] || '';
+
+    const coverMedia = coverUrl ? {
+      url: coverUrl,
+      altText: `${att1.name}, ${destMeta.name}`,
+      caption: att1.name,
+      width: 1600,
+      height: 900
+    } : null;
+
+    const galleryMedia = [
+      supporting1 && supporting1 !== coverUrl ? {
+        url: supporting1,
+        altText: `${att2.name}, ${destMeta.name}`,
+        caption: att2.name,
+        width: 1600,
+        height: 900
+      } : null,
+      supporting2 && supporting2 !== coverUrl && supporting2 !== supporting1 ? {
+        url: supporting2,
+        altText: `${destMeta.name} Scenic View`,
+        caption: `${destMeta.name} Landscape`,
+        width: 1600,
+        height: 900
+      } : null
+    ].filter(Boolean);
 
     generatedDays.push({
       day: i + 1,
       title: `Day ${i + 1}: ${att1.name} & ${att2.name}`,
+      locationName: att1.location || destMeta.name,
+      coverMedia,
+      galleryMedia,
+      gallery: [coverMedia, ...galleryMedia].filter(Boolean),
+      mediaSelectionMode: 'AUTO',
       morning: [{ time: '09:00 AM', activity: `${att1.name} Exploration`, location: att1.location || destMeta.name, description: `Explore ${att1.name} during clear morning hours.`, estimatedCost: '₹300 - ₹500', travelTime: '1 hr' }],
       afternoon: [{ time: '01:30 PM', activity: `${att2.name} Guided Excursion`, location: att2.location || destMeta.name, description: `Scenic tour and local lunch around ${att2.location || destMeta.name}.`, estimatedCost: '₹400 - ₹600', travelTime: '1 hr' }],
       evening: [{ time: '06:00 PM', activity: 'Sunset Stroll & Local Cafe', location: destMeta.name, description: 'Relaxed evening cafe visit and cultural photography.', estimatedCost: '₹400 - ₹800', travelTime: 'Walking' }],

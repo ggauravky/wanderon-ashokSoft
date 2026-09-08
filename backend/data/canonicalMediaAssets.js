@@ -268,7 +268,7 @@ export const RAW_SEED_ASSETS = [
     storage: {
       provider: 'cloudinary',
       publicId: 'wanderluxe/seed/double_decker_root_bridge',
-      secureUrl: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?w=1200&auto=format&fit=crop&q=80',
+      secureUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1200&auto=format&fit=crop&q=80',
       width: 1600,
       height: 900
     },
@@ -286,12 +286,12 @@ export const RAW_SEED_ASSETS = [
   },
   {
     title: 'Nohkalikai Plunge Waterfall in Cherrapunji',
-    altText: 'Tallest plunge waterfall in India dropping 1115 ft into a turquoise lagoon amidst mist',
+    altText: 'Tallest plunge waterfall in India dropping into a turquoise emerald lagoon amidst lush rainforest',
     caption: 'Spectacular Nohkalikai Falls plunge drop in Cherrapunji',
     storage: {
       provider: 'cloudinary',
       publicId: 'wanderluxe/seed/nohkalikai_falls',
-      secureUrl: 'https://images.unsplash.com/photo-1518457607834-6e8d80c183c5?w=1200&auto=format&fit=crop&q=80',
+      secureUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80',
       width: 1600,
       height: 900
     },
@@ -673,7 +673,518 @@ export const RAW_SEED_ASSETS = [
       locality: 'Kelingking',
       poi: 'Kelingking Beach'
     },
-    tags: ['beach', 'cliffs', 'ocean', 'bali', 'adventure'],
+    tags: ['beach', 'cliffs', 'ocean', 'bali', 'adventure', 'nature', 'scenic'],
+    featured: true
+  },
+
+  // =========================================================================
+  // MEGHALAYA NATURE-FIRST ENRICHED ASSETS
+  // =========================================================================
+  {
+    title: 'Laitlum Canyons Misty Gorge & Valley Vistas',
+    altText: 'Vast emerald canyons and deep mountain gorge shrouded in rolling mist in East Khasi Hills',
+    caption: 'Dramatic edge of the world canyon views at Laitlum near Smit',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/laitlum_canyons',
+      secureUrl: 'https://images.unsplash.com/photo-1578592083908-1111531e21b7?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Meghalaya',
+      region: 'Northeast India',
+      destination: 'Meghalaya',
+      city: 'Shillong',
+      locality: 'Laitlum',
+      poi: 'Laitlum Canyons'
+    },
+    tags: ['canyon', 'valleys', 'nature', 'mist', 'meghalaya', 'scenic', 'hiking', 'greenery'],
+    featured: true
+  },
+  {
+    title: 'Wei Sawdong Three-Tier Emerald Waterfalls',
+    altText: 'Step-like three-tier natural plunge pool waterfall surrounded by rainforest in Sohra',
+    caption: 'Stunning three-tier natural waterfall steps of Wei Sawdong in Cherrapunji',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/wei_sawdong_falls',
+      secureUrl: 'https://images.unsplash.com/photo-1546708973-b339540b5162?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Meghalaya',
+      region: 'Northeast India',
+      destination: 'Meghalaya',
+      city: 'Cherrapunji',
+      locality: 'Sohra',
+      poi: 'Wei Sawdong Falls'
+    },
+    tags: ['waterfall', 'emerald pools', 'nature', 'cherrapunji', 'rainforest', 'scenic', 'jungle'],
+    featured: true
+  },
+  {
+    title: 'Mawlynnong Living Root Bridge & Rainforest Canopy',
+    altText: 'Ancient single living root bridge woven across a clear jungle stream in Mawlynnong',
+    caption: 'Riwai living root bridge and lush rainforest flora near Mawlynnong village',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/mawlynnong_bridge',
+      secureUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Meghalaya',
+      region: 'Northeast India',
+      destination: 'Meghalaya',
+      city: 'Mawlynnong',
+      locality: 'Riwai',
+      poi: 'Riwai Living Root Bridge'
+    },
+    tags: ['root bridge', 'greenery', 'forest', 'nature', 'meghalaya', 'scenic', 'canopy'],
+    featured: false
+  },
+
+  // =========================================================================
+  // GOA NATURE-FIRST ENRICHED ASSETS (Beaches, Coastlines, Estuaries, Lagoons)
+  // =========================================================================
+  {
+    title: 'Palolem Crescent Beach & Coconut Palm Fringe',
+    altText: 'Curved white sandy beach with turquoise Arabian Sea waters and leaning coconut palms',
+    caption: 'Idyllic crescent bay and lush tropical palm canopy at Palolem in South Goa',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/palolem_beach',
+      secureUrl: 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Goa',
+      region: 'West India',
+      destination: 'Goa',
+      city: 'Canacona',
+      locality: 'Palolem',
+      poi: 'Palolem Beach'
+    },
+    tags: ['beach', 'palms', 'coastline', 'ocean', 'nature', 'sunset', 'scenic', 'goa'],
+    featured: true
+  },
+  {
+    title: 'Vagator Red Cliff Coastline & Arabian Sea Horizon',
+    altText: 'Dramatic red laterite rocky cliffs overlooking crashing waves and secluded beaches',
+    caption: 'Rugged cliffside vistas and sunset panorama overlooking Vagator and Chapora coastline',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/vagator_cliffs',
+      secureUrl: 'https://images.unsplash.com/photo-1506953823976-52e1fdc0149a?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Goa',
+      region: 'West India',
+      destination: 'Goa',
+      city: 'Vagator',
+      locality: 'Ozran',
+      poi: 'Vagator Beach'
+    },
+    tags: ['cliffs', 'ocean', 'beach', 'sunset', 'nature', 'coastal', 'scenic', 'goa'],
+    featured: true
+  },
+  {
+    title: 'Morjim Peaceful Turtle Shoreline & Estuary Mangroves',
+    altText: 'Wide serene sandbars with gentle waves and migratory birds at Chapora river mouth',
+    caption: 'Pristine coastal sanctuary and tranquil waters along Morjim shoreline',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/morjim_beach',
+      secureUrl: 'https://images.unsplash.com/photo-1473186578172-c141e6798cf4?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Goa',
+      region: 'West India',
+      destination: 'Goa',
+      city: 'Morjim',
+      locality: 'Morjim',
+      poi: 'Morjim Beach'
+    },
+    tags: ['beach', 'mangroves', 'nature', 'sunset', 'ocean', 'peaceful', 'scenic', 'goa'],
+    featured: false
+  },
+  {
+    title: 'Cola Beach Fresh Water Emerald Lagoon & Palms',
+    altText: 'Secluded golden beach nestled between lush green hills and a crystal clear lagoon',
+    caption: 'Hidden emerald freshwater lagoon meeting the Arabian Sea at Cola Beach',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/cola_lagoon',
+      secureUrl: 'https://images.unsplash.com/photo-1506929562872-bb421503ef21?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Goa',
+      region: 'West India',
+      destination: 'Goa',
+      city: 'Canacona',
+      locality: 'Cola',
+      poi: 'Cola Beach'
+    },
+    tags: ['lagoon', 'beach', 'palms', 'water', 'nature', 'scenic', 'goa'],
+    featured: false
+  },
+
+  // =========================================================================
+  // BALI NATURE-FIRST ENRICHED ASSETS (Terraces, Volcanoes, Sea Cliffs)
+  // =========================================================================
+  {
+    title: 'Tegallalang Layered Emerald Rice Terraces',
+    altText: 'Spectacular stepped emerald green rice paddies surrounded by tropical jungle in Ubud',
+    caption: 'Iconic Subak irrigation rice terrace landscape in the heart of Ubud, Bali',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/tegallalang_terraces',
+      secureUrl: 'https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'Indonesia',
+      state: 'Bali',
+      region: 'Southeast Asia',
+      destination: 'Bali',
+      city: 'Ubud',
+      locality: 'Tegallalang',
+      poi: 'Tegallalang Rice Terraces'
+    },
+    tags: ['rice terraces', 'greenery', 'nature', 'ubud', 'bali', 'palms', 'scenic', 'valley'],
+    featured: true
+  },
+  {
+    title: 'Mount Batur Volcanic Caldera & Lake Sunrise Panorama',
+    altText: 'Sunrise over volcanic mountain rim and shimmering Lake Batur in Kintamani highlands',
+    caption: 'Early morning golden glow across active volcano Mount Batur and crater lake',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/mount_batur',
+      secureUrl: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'Indonesia',
+      state: 'Bali',
+      region: 'Southeast Asia',
+      destination: 'Bali',
+      city: 'Kintamani',
+      locality: 'Batur',
+      poi: 'Mount Batur'
+    },
+    tags: ['volcano', 'sunrise', 'lake', 'mountains', 'nature', 'scenic', 'caldera', 'bali'],
+    featured: true
+  },
+  {
+    title: 'Uluwatu Limestone Sea Cliffs & Coastal Swells',
+    altText: 'Dramatic 250 ft limestone ocean cliffs plunging into Indian Ocean waves at Uluwatu',
+    caption: 'Majestic cliffside sunset panorama along Bukit Peninsula in Uluwatu',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/uluwatu_cliffs',
+      secureUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'Indonesia',
+      state: 'Bali',
+      region: 'Southeast Asia',
+      destination: 'Bali',
+      city: 'Uluwatu',
+      locality: 'Pecatu',
+      poi: 'Uluwatu Cliffs'
+    },
+    tags: ['cliffs', 'ocean', 'sunset', 'waves', 'nature', 'scenic', 'bali'],
+    featured: false
+  },
+  {
+    title: 'Tibumana Hidden Jungle Waterfall & Plunge Pool',
+    altText: 'Straight vertical natural waterfall curtain pouring into tranquil jungle lagoon',
+    caption: 'Serene secluded rainforest waterfall and swimming pool at Tibumana near Ubud',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/tibumana_waterfall',
+      secureUrl: 'https://images.unsplash.com/photo-1552055909-5a133f99335f?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'Indonesia',
+      state: 'Bali',
+      region: 'Southeast Asia',
+      destination: 'Bali',
+      city: 'Bangli',
+      locality: 'Apuan',
+      poi: 'Tibumana Waterfall'
+    },
+    tags: ['waterfall', 'jungle', 'nature', 'rainforest', 'bali', 'pool', 'greenery'],
+    featured: false
+  },
+
+  // =========================================================================
+  // KERALA NATURE-FIRST ENRICHED ASSETS (Cliffs, Tea Valleys, Rainforests)
+  // =========================================================================
+  {
+    title: 'Varkala Red Laterite Cliffs & Arabian Sea Beach',
+    altText: 'High coastal red cliffs lined with coconut palms dropping down to golden sand beach',
+    caption: 'Scenic geological cliff formation and turquoise Arabian Sea vistas at Varkala',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/varkala_cliffs',
+      secureUrl: 'https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Kerala',
+      region: 'South India',
+      destination: 'Kerala',
+      city: 'Varkala',
+      locality: 'North Cliff',
+      poi: 'Varkala Cliff'
+    },
+    tags: ['cliffs', 'beach', 'sunset', 'ocean', 'nature', 'scenic', 'kerala'],
+    featured: true
+  },
+  {
+    title: 'Wayanad Chembra Peak & Rainforest Mist Trek',
+    altText: 'Lush green tea covered mountain slopes under misty clouds in Wayanad Western Ghats',
+    caption: 'Pristine rainforest ridges and tea hill treks in Wayanad highlands',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/wayanad_chembra',
+      secureUrl: 'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Kerala',
+      region: 'South India',
+      destination: 'Kerala',
+      city: 'Wayanad',
+      locality: 'Meppadi',
+      poi: 'Chembra Peak'
+    },
+    tags: ['mountains', 'rainforest', 'trekking', 'nature', 'greenery', 'mist', 'kerala'],
+    featured: false
+  },
+
+  // =========================================================================
+  // RAJASTHAN SCENIC NATURE & LAKES
+  // =========================================================================
+  {
+    title: 'Lake Pichola Scenic Waters & Aravalli Mountain Hills',
+    altText: 'Calm reflective waters of Lake Pichola with mountain ranges in the backdrop at sunset',
+    caption: 'Serene sunset vistas and tranquil ripples across Lake Pichola in Udaipur',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/lake_pichola',
+      secureUrl: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Rajasthan',
+      region: 'North India',
+      destination: 'Rajasthan',
+      city: 'Udaipur',
+      locality: 'Pichola',
+      poi: 'Lake Pichola'
+    },
+    tags: ['lake', 'sunset', 'scenic', 'water', 'udaipur', 'nature', 'heritage', 'hills'],
+    featured: true
+  },
+  {
+    title: 'Pushkar Sacred Desert Lake & Mountain Horizons',
+    altText: 'Vast desert landscape surrounded by jagged Aravalli mountain hills in Rajasthan',
+    caption: 'Timeless desert oasis and arid mountain scenery surrounding Pushkar',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/pushkar_desert',
+      secureUrl: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Rajasthan',
+      region: 'North India',
+      destination: 'Rajasthan',
+      city: 'Pushkar',
+      locality: 'Pushkar',
+      poi: 'Pushkar Lake'
+    },
+    tags: ['desert', 'lake', 'hills', 'sunset', 'nature', 'scenic', 'rajasthan'],
+    featured: false
+  },
+
+  // =========================================================================
+  // UTTARAKHAND / RISHIKESH / CHOPTA SCENIC NATURE
+  // =========================================================================
+  {
+    title: 'Rishikesh White Sand River Beach along the Ganges',
+    altText: 'Emerald green Himalayan river flowing past white sand riverbeds and forested foothills',
+    caption: 'Tranquil emerald waters and white sandy shores of the Ganga near Shivpuri',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/rishikesh_ganga_beach',
+      secureUrl: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Uttarakhand',
+      region: 'North India',
+      destination: 'Rishikesh',
+      city: 'Rishikesh',
+      locality: 'Shivpuri',
+      poi: 'Ganga Beach'
+    },
+    tags: ['river', 'ganga', 'foothills', 'beach', 'nature', 'mountains', 'scenic', 'rishikesh', 'uttarakhand'],
+    featured: true
+  },
+  {
+    title: 'Chopta Tungnath Alpine Meadow & Snow Peaks Panorama',
+    altText: 'Lush green Bugyal meadows surrounded by thick rhododendron forests and snow peaks',
+    caption: 'Mini Switzerland of India meadow trail leading towards Tungnath in Chopta',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/chopta_meadows',
+      secureUrl: 'https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Uttarakhand',
+      region: 'North India',
+      destination: 'Uttarakhand',
+      city: 'Chopta',
+      locality: 'Tungnath',
+      poi: 'Chopta Meadows'
+    },
+    tags: ['meadow', 'mountains', 'trekking', 'nature', 'scenic', 'rhododendron', 'uttarakhand', 'peaks'],
+    featured: true
+  },
+
+  // =========================================================================
+  // KASHMIR, LADAKH & SPITI ADDITIONAL NATURE
+  // =========================================================================
+  {
+    title: 'Pahalgam Betaab Valley Pine Meadows & Lidder River',
+    altText: 'Turquoise snow-fed river rushing through pine covered alpine mountain valleys',
+    caption: 'Picturesque pine forests and sparkling Lidder river currents in Betaab Valley',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/betaab_valley',
+      secureUrl: 'https://images.unsplash.com/photo-1598091383021-15ddea10925d?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Jammu & Kashmir',
+      region: 'North India',
+      destination: 'Kashmir',
+      city: 'Pahalgam',
+      locality: 'Betaab Valley',
+      poi: 'Betaab Valley'
+    },
+    tags: ['valley', 'river', 'pine forest', 'meadows', 'nature', 'scenic', 'kashmir'],
+    featured: true
+  },
+  {
+    title: 'Thiksey Monastery Mountain Vista & Indus Valley',
+    altText: 'Multi-story whitewashed monastery perched on rocky hill rising above fertile Indus valley',
+    caption: 'Sweeping high-altitude Himalayan desert vistas and Indus river groves at Thiksey',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/thiksey_vista',
+      secureUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Ladakh',
+      region: 'North India',
+      destination: 'Ladakh',
+      city: 'Leh',
+      locality: 'Thiksey',
+      poi: 'Thiksey Monastery'
+    },
+    tags: ['monastery', 'mountains', 'valley', 'nature', 'scenic', 'ladakh', 'high altitude'],
+    featured: false
+  },
+  {
+    title: 'Tosh Alpine Pine Village & Glacier Stream Valley',
+    altText: 'Traditional mountain homes perched high above deep pine ravines and glacier streams',
+    caption: 'Serene mountain valley and wooden alpine settlements at the head of Parvati Valley in Tosh',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/tosh_valley',
+      secureUrl: 'https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Himachal Pradesh',
+      region: 'North India',
+      destination: 'Kasol',
+      city: 'Tosh',
+      locality: 'Parvati Valley',
+      poi: 'Tosh Valley'
+    },
+    tags: ['valley', 'mountains', 'river', 'pine forest', 'nature', 'scenic', 'himachal', 'kasol'],
+    featured: false
+  },
+  {
+    title: 'Chandratal Crescent Moon Alpine Blue Lake in Spiti',
+    altText: 'Crystal clear crescent shaped alpine lake reflecting snow-capped Himalayan peaks at 14,000 ft',
+    caption: 'Spectacular turquoise waters of sacred Moon Lake Chandratal in high Spiti',
+    storage: {
+      provider: 'cloudinary',
+      publicId: 'wanderluxe/seed/chandratal_lake',
+      secureUrl: 'https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?w=1200&auto=format&fit=crop&q=80',
+      width: 1600,
+      height: 900
+    },
+    geography: {
+      country: 'India',
+      state: 'Himachal Pradesh',
+      region: 'North India',
+      destination: 'Spiti Valley',
+      city: 'Spiti',
+      locality: 'Chandratal',
+      poi: 'Chandratal Lake'
+    },
+    tags: ['lake', 'high altitude', 'mountains', 'reflections', 'nature', 'scenic', 'spiti'],
     featured: true
   }
 ];

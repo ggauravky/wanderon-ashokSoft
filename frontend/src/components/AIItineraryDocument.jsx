@@ -4,6 +4,7 @@ import {
   Sparkles, CheckCircle2, ShieldCheck, Sun, Luggage, BedDouble, 
   Utensils, Moon, Sunrise, ArrowRight, Star, Tag, Check, Award
 } from 'lucide-react';
+import ItineraryDayGallery from './ItineraryDayGallery';
 
 /**
  * Professional Offscreen / Printable A4 Travel Itinerary Document
@@ -118,24 +119,12 @@ const AIItineraryDocument = React.forwardRef(({ itinerary, template = 'classic' 
                 )}
               </div>
 
-              {/* Day Cover Image (Real Database Asset) */}
-              {dayItem.coverMedia?.url && (
-                <div className="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200/80">
-                  <img
-                    src={dayItem.coverMedia.url}
-                    alt={dayItem.coverMedia.altText || dayItem.title}
-                    className="w-24 h-16 rounded-lg object-cover shrink-0"
-                  />
-                  <div className="text-[10px] space-y-0.5 overflow-hidden">
-                    <span className="font-bold text-slate-800 block truncate">
-                      📍 {dayItem.locationName || dayItem.coverMedia.caption || dayItem.title}
-                    </span>
-                    <span className="text-slate-500 block text-[9px] truncate">
-                      {dayItem.coverMedia.altText || 'WanderLuxe Verified Location Photography'}
-                    </span>
-                  </div>
-                </div>
-              )}
+              {/* Day Gallery Preview (Compact Print Mode) */}
+              <ItineraryDayGallery
+                day={dayItem}
+                destination={destination}
+                compact={true}
+              />
 
               <div className="grid grid-cols-3 gap-3 text-[11px]">
                 <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200/60 space-y-1">
@@ -426,6 +415,13 @@ const AIItineraryDocument = React.forwardRef(({ itinerary, template = 'classic' 
                 </span>
               )}
             </div>
+
+            {/* Day Gallery Preview (Compact Print Mode) */}
+            <ItineraryDayGallery
+              day={dayItem}
+              destination={destination}
+              compact={true}
+            />
 
             <div className="grid grid-cols-3 gap-3 pt-1 text-[11px]">
               {/* Morning */}

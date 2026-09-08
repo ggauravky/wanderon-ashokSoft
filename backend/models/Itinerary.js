@@ -28,8 +28,7 @@ const daySchema = new mongoose.Schema({
     height: { type: Number, default: 900 }
   },
   coverMediaAssetId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'MediaAsset',
+    type: mongoose.Schema.Types.Mixed,
     default: null
   },
   galleryMedia: {
@@ -38,14 +37,33 @@ const daySchema = new mongoose.Schema({
         id: { type: String, default: '' },
         url: { type: String, default: '' },
         altText: { type: String, default: '' },
-        caption: { type: String, default: '' }
+        caption: { type: String, default: '' },
+        width: { type: Number, default: 1600 },
+        height: { type: Number, default: 900 }
+      }
+    ],
+    default: []
+  },
+  galleryMediaAssetIds: {
+    type: [{ type: String }],
+    default: []
+  },
+  gallery: {
+    type: [
+      {
+        id: { type: String, default: '' },
+        url: { type: String, default: '' },
+        altText: { type: String, default: '' },
+        caption: { type: String, default: '' },
+        width: { type: Number, default: 1600 },
+        height: { type: Number, default: 900 }
       }
     ],
     default: []
   },
   mediaSelectionMode: {
     type: String,
-    enum: ['AUTO', 'MANUAL'],
+    enum: ['AUTO', 'MANUAL', 'auto', 'manual'],
     default: 'AUTO'
   }
 }, { _id: false });
@@ -145,7 +163,7 @@ const itinerarySchema = new mongoose.Schema({
     estimatedTotal: { type: String, default: '' }
   },
   matchedTrip: {
-    id: { type: Number },
+    id: { type: mongoose.Schema.Types.Mixed },
     title: { type: String },
     price: { type: Number },
     image: { type: String },

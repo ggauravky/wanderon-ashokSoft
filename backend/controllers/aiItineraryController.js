@@ -10,7 +10,27 @@ import {
   buildAITravelContext,
   normalizeDestinationSlug
 } from '../services/travelKnowledgeService.js';
-import { resolveItineraryMedia } from '../services/mediaResolverService.js';
+import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/mediaResolverService.js';
+
+/**
+ * Safely enrich an itinerary with 3-image nature gallery if cover or gallery is missing
+ */
+async function enrichItineraryMediaIfNeeded(doc) {
+  if (!doc || !Array.isArray(doc.days) || doc.days.length === 0) return doc;
+  const needsResolution = doc.days.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+  if (needsResolution) {
+    const enrichedDays = await batchResolveItineraryMedia(doc.days, doc.destination, doc.title);
+    doc.days = enrichedDays;
+    if (typeof doc.save === 'function') {
+      try {
+        await doc.save();
+      } catch (err) {
+        console.warn('Silently saving enriched itinerary media error:', err.message);
+      }
+    }
+  }
+  return doc;
+}
 
 /**
  * Normalizes raw output into safe, complete structured JSON using Central Knowledge
@@ -282,9 +302,15 @@ JSON SCHEMA:
           day.locationName = locationCandidate;
           day.coverMedia = mediaResult.coverMedia;
           day.coverMediaAssetId = mediaResult.mediaAssetId;
-          day.mediaSelectionMode = 'auto';
+          day.galleryMedia = mediaResult.galleryMedia || [];
+          day.galleryMediaAssetIds = mediaResult.galleryMediaAssetIds || [];
+          day.gallery = mediaResult.gallery || (mediaResult.coverMedia ? [mediaResult.coverMedia] : []);
+          day.mediaSelectionMode = 'AUTO';
           if (mediaResult.mediaAssetId) {
-            usedAssetIds.push(mediaResult.mediaAssetId);
+            usedAssetIds.push(String(mediaResult.mediaAssetId));
+          }
+          if (Array.isArray(mediaResult.galleryMediaAssetIds)) {
+            mediaResult.galleryMediaAssetIds.forEach(id => usedAssetIds.push(String(id)));
           }
         } catch (mediaErr) {
           console.warn(`Media resolution error for day ${day.day}:`, mediaErr.message);
@@ -334,6 +360,12 @@ export const saveItineraryController = async (req, res) => {
 
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
 
+    let finalDays = itineraryData.days || itineraryData.itineraryDays || [];
+    const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+    if (needsResolution) {
+      finalDays = await batchResolveItineraryMedia(finalDays, itineraryData.destination, itineraryData.title);
+    }
+
     // 1. If document already has an _id, update existing document instead of creating a duplicate
     if (targetId) {
       let existingDoc = await Itinerary.findById(targetId);
@@ -355,12 +387,15 @@ export const saveItineraryController = async (req, res) => {
         existingDoc.totalEstimatedCost = itineraryData.totalEstimatedCost || existingDoc.totalEstimatedCost;
         existingDoc.weather = itineraryData.weather || existingDoc.weather;
         existingDoc.bestTimeToVisit = itineraryData.bestTimeToVisit || existingDoc.bestTimeToVisit;
-        existingDoc.days = itineraryData.days || itineraryData.itineraryDays || existingDoc.days;
+        existingDoc.days = finalDays;
         existingDoc.staySuggestions = itineraryData.staySuggestions || existingDoc.staySuggestions;
         existingDoc.foodSuggestions = itineraryData.foodSuggestions || existingDoc.foodSuggestions;
         existingDoc.packingList = itineraryData.packingList || itineraryData.packingSuggestions || existingDoc.packingList;
         existingDoc.localTips = itineraryData.localTips || existingDoc.localTips;
         existingDoc.budgetBreakdown = itineraryData.budgetBreakdown || existingDoc.budgetBreakdown;
+        if (itineraryData.matchedCatalogTrip || itineraryData.matchedTrip) {
+          existingDoc.matchedTrip = itineraryData.matchedCatalogTrip || itineraryData.matchedTrip;
+        }
         existingDoc.source = 'customized';
 
         await existingDoc.save();
@@ -389,7 +424,7 @@ export const saveItineraryController = async (req, res) => {
       totalEstimatedCost: itineraryData.totalEstimatedCost || 0,
       weather: itineraryData.weather || {},
       bestTimeToVisit: itineraryData.bestTimeToVisit || '',
-      days: itineraryData.days || itineraryData.itineraryDays || [],
+      days: finalDays,
       staySuggestions: itineraryData.staySuggestions || [],
       foodSuggestions: itineraryData.foodSuggestions || [],
       packingList: itineraryData.packingList || itineraryData.packingSuggestions || [],
@@ -409,7 +444,7 @@ export const saveItineraryController = async (req, res) => {
     });
   } catch (error) {
     console.error('Save Itinerary Error:', error);
-    res.status(500).json({ success: false, message: 'Could not save itinerary to database.' });
+    res.status(500).json({ success: false, message: 'Could not save itinerary to database: ' + error.message });
   }
 };
 
@@ -437,7 +472,14 @@ export const updateItineraryController = async (req, res) => {
 
     if (updateData.title) doc.title = updateData.title;
     if (updateData.tagline) doc.tagline = updateData.tagline;
-    if (updateData.days) doc.days = updateData.days;
+    if (updateData.days) {
+      let finalDays = updateData.days;
+      const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+      if (needsResolution) {
+        finalDays = await batchResolveItineraryMedia(finalDays, doc.destination, doc.title);
+      }
+      doc.days = finalDays;
+    }
     if (updateData.travelers) doc.travelers = updateData.travelers;
     if (updateData.travelStyle) doc.travelStyle = updateData.travelStyle;
     if (updateData.pace) doc.pace = updateData.pace;
@@ -476,6 +518,9 @@ export const getItineraryByIdController = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Itinerary not found.' });
     }
 
+    // Auto-enrich media if legacy or missing gallery
+    await enrichItineraryMediaIfNeeded(doc);
+
     // If public, allow read
     if (doc.isPublic) {
       return res.json({ success: true, data: doc });
@@ -509,13 +554,20 @@ export const getMyItinerariesController = async (req, res) => {
     const userId = req.user?._id;
 
     let filter = {};
-    if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
+    if (req.user?.role === 'admin') {
+      filter = {}; // Admin has master visibility into all saved AI itineraries
+    } else if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
       filter = { $or: [{ user: userId }, { userEmail }] };
     } else if (userEmail) {
       filter = { userEmail };
     }
 
     const docs = await Itinerary.find(filter).sort({ createdAt: -1 });
+
+    // Auto-enrich any legacy itineraries with complete 3-image galleries
+    for (const doc of docs) {
+      await enrichItineraryMediaIfNeeded(doc);
+    }
 
     res.json({
       success: true,
@@ -627,6 +679,8 @@ export const getPublicSharedItineraryController = async (req, res) => {
       });
     }
 
+    await enrichItineraryMediaIfNeeded(doc);
+
     res.json({
       success: true,
       data: doc
@@ -655,6 +709,9 @@ export const regenerateDayController = async (req, res) => {
     const locationCandidate = att1.location || att1.name || destMeta.name;
     let coverMedia = null;
     let coverMediaAssetId = null;
+    let galleryMedia = [];
+    let galleryMediaAssetIds = [];
+    let gallery = [];
 
     try {
       const mediaResult = await resolveItineraryMedia({
@@ -667,6 +724,9 @@ export const regenerateDayController = async (req, res) => {
       });
       coverMedia = mediaResult.coverMedia;
       coverMediaAssetId = mediaResult.mediaAssetId;
+      galleryMedia = mediaResult.galleryMedia || [];
+      galleryMediaAssetIds = mediaResult.galleryMediaAssetIds || [];
+      gallery = mediaResult.gallery || (coverMedia ? [coverMedia] : []);
     } catch (mediaErr) {
       console.warn('Regenerate day media resolution error:', mediaErr.message);
     }
@@ -684,7 +744,10 @@ export const regenerateDayController = async (req, res) => {
         resolutionSource: 'fallback'
       },
       coverMediaAssetId,
-      mediaSelectionMode: 'auto',
+      galleryMedia,
+      galleryMediaAssetIds,
+      gallery: gallery.length > 0 ? gallery : (coverMedia ? [coverMedia] : []),
+      mediaSelectionMode: 'AUTO',
       morning: [{ time: '09:00 AM', activity: `${att1.name} Excursion`, location: att1.location || destMeta.name, description: `Enjoy morning discovery at ${att1.name}.`, estimatedCost: '₹300 - ₹500', travelTime: '1 hr' }],
       afternoon: [{ time: '01:30 PM', activity: `${att2.name} Exploration`, location: att2.location || destMeta.name, description: `Explore ${att2.name} followed by regional lunch.`, estimatedCost: '₹400 - ₹600', travelTime: '1 hr' }],
       evening: [{ time: '06:00 PM', activity: 'Sunset View & Local Cafe', location: destMeta.name, description: 'Evening leisure, photography, and local dining.', estimatedCost: '₹400 - ₹700', travelTime: 'Walking' }],

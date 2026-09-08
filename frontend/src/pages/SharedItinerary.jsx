@@ -10,6 +10,7 @@ import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import AIItineraryDocument from '../components/AIItineraryDocument';
 import AIPlannerModal from '../components/AIPlannerModal';
+import ItineraryDayGallery from '../components/ItineraryDayGallery';
 import * as apiService from '../services/api.js';
 
 const getPublicSharedItineraryApi = async (...args) => (apiService.getPublicSharedItineraryApi || apiService.default?.getPublicSharedItineraryApi)?.(...args);
@@ -224,7 +225,14 @@ const SharedItinerary = () => {
 
               {openDay === item.day && (
                 <div className="p-5 pt-0 border-t border-slate-100 mt-2 space-y-4 text-xs">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3">
+                  {/* Curated 3-Image Nature Gallery Block */}
+                  <ItineraryDayGallery
+                    day={item}
+                    destination={itinerary.destination}
+                    className="pt-2"
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
                     <div className="space-y-1">
                       <span className="text-[10px] font-black uppercase text-amber-600 block">🌅 Morning</span>
                       <p className="text-slate-700">{typeof item.morning === 'string' ? item.morning : item.morning?.[0]?.activity || 'Sightseeing'}</p>
