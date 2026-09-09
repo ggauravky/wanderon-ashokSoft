@@ -2,6 +2,38 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
 /**
+ * Wait for all images within an element to be loaded / decoded.
+ * Fails gracefully so a single broken image never blocks PDF generation.
+ */
+const waitForImages = async (container, timeoutMs = 3500) => {
+  if (!container) return;
+  const images = Array.from(container.querySelectorAll('img'));
+  if (images.length === 0) return;
+
+  const promises = images.map((img) => {
+    // If already loaded and has dimensions
+    if (img.complete && img.naturalHeight !== 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(), timeoutMs);
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      img.onerror = () => {
+        clearTimeout(timer);
+        // Fallback: set crossOrigin and prevent broken image from breaking html2canvas
+        img.crossOrigin = 'anonymous';
+        resolve();
+      };
+    });
+  });
+
+  await Promise.all(promises);
+};
+
+/**
  * Ultra High-Resolution Multi-Page PDF Exporter for Travel Documents & Itineraries
  * Computes exact A4 page splits, eliminates blurriness, and prevents text cutoffs.
  */
@@ -12,22 +44,39 @@ export const exportElementToPdf = async (element, options = {}) => {
 
   const {
     filename = 'WanderLuxe-Travel-Itinerary.pdf',
-    scale = 3, // 300 DPI high-definition print quality
+    scale = 2.2, // ~210 DPI for crisp typography and sharp photos without GPU memory exhaustion
     orientation = 'portrait',
-    quality = 0.98
+    quality = 0.95,
+    onProgress = null
   } = options;
 
-  // 1. Capture element with high-definition pixel density
+  if (onProgress) onProgress('Preparing document & assets...');
+
+  // 1. Ensure custom web fonts are fully loaded
+  if (document.fonts && document.fonts.ready) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      // Proceed even if fonts timeout
+    }
+  }
+
+  // 2. Ensure all images are decoded and ready
+  if (onProgress) onProgress('Loading destination media...');
+  await waitForImages(element, 3500);
+
+  // 3. Capture element with canonical A4 dimensions (794px width)
+  if (onProgress) onProgress('Rendering high-definition print canvas...');
   const canvas = await html2canvas(element, {
     scale: scale,
     useCORS: true,
-    allowTaint: true,
+    allowTaint: false,
     logging: false,
     backgroundColor: '#ffffff',
     windowWidth: element.scrollWidth || 794,
     windowHeight: element.scrollHeight || 1123,
     onclone: (clonedDoc) => {
-      // Ensure all cloned text and fonts are crisp and rendered with opacity 1
+      // Ensure all cloned text and fonts are crisp and visible
       const clonedEl = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('#ai-itinerary-print-document');
       if (clonedEl) {
         clonedEl.style.opacity = '1';
@@ -36,13 +85,15 @@ export const exportElementToPdf = async (element, options = {}) => {
         clonedEl.style.position = 'relative';
         clonedEl.style.left = '0';
         clonedEl.style.top = '0';
+        // Remove browser-only drop-shadow from the print capture
+        clonedEl.style.boxShadow = 'none';
       }
     }
   });
 
   const imgData = canvas.toDataURL('image/jpeg', quality);
 
-  // 2. Standard A4 dimensions in millimeters
+  // 4. Standard A4 dimensions in millimeters (210mm x 297mm)
   const pdf = new jsPDF({
     orientation: orientation,
     unit: 'mm',
@@ -60,11 +111,13 @@ export const exportElementToPdf = async (element, options = {}) => {
   let position = 0;
   let pageNumber = 1;
 
-  // 3. Render first page
+  if (onProgress) onProgress('Composing PDF pages...');
+
+  // 5. Render first page
   pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
   heightLeft -= pageHeight;
 
-  // 4. Render subsequent pages if content exceeds single A4 page height
+  // 6. Render subsequent pages if content exceeds single A4 page height
   while (heightLeft > 2) {
     position -= pageHeight;
     pageNumber++;
@@ -73,8 +126,14 @@ export const exportElementToPdf = async (element, options = {}) => {
     heightLeft -= pageHeight;
   }
 
-  // 5. Save document
+  // 7. Save document
+  if (onProgress) onProgress('Downloading PDF...');
   pdf.save(filename);
+
+  // 8. Memory Cleanup: shrink canvas dimensions to release GPU and memory
+  canvas.width = 1;
+  canvas.height = 1;
+
   return true;
 };
 
@@ -118,6 +177,10 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
           }
           * {
             box-sizing: border-box;
+          }
+          .break-inside-avoid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
         </style>
       </head>

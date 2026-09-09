@@ -25,6 +25,7 @@ import { useAuth } from '../contexts/AuthContext';
 import AIItineraryDocument from './AIItineraryDocument';
 import ShareItineraryModal from './ShareItineraryModal';
 import ItineraryDayGallery from './ItineraryDayGallery';
+import PDFPreviewFrame from './PDFPreviewFrame';
 
 const AIPlannerModal = ({ 
   isOpen, 
@@ -71,6 +72,7 @@ const AIPlannerModal = ({
   // Synchronize when initialPlan or isOpen changes
   useEffect(() => {
     if (isOpen) {
+      document.body.style.overflow = 'hidden';
       if (initialPlan) {
         setGeneratedPlan(initialPlan);
         setStep(2);
@@ -80,7 +82,12 @@ const AIPlannerModal = ({
         setStep(1);
         setSavingState('idle');
       }
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen, initialPlan]);
 
   if (!isOpen) return null;
@@ -215,10 +222,11 @@ const AIPlannerModal = ({
     try {
       setDownloadingPdf(true);
       const cleanName = (generatedPlan?.destination || destination || 'Trip').replace(/[^a-zA-Z0-9]/g, '-');
-      const filename = `WanderLuxe-${cleanName}-${days}-Days-${pdfTemplate}-Itinerary.pdf`;
+      const numDays = generatedPlan?.duration || generatedPlan?.daysCount || days || 5;
+      const filename = `WanderLuxe-${cleanName}-${numDays}-Days-${pdfTemplate}-Itinerary.pdf`;
       await exportElementToPdf(docRef.current, {
         filename,
-        scale: 3,
+        scale: 2.2,
         orientation: 'portrait'
       });
     } catch (e) {
@@ -238,9 +246,9 @@ const AIPlannerModal = ({
 
   return (
     <>
-      {/* Hidden Offscreen Printable High-Fidelity A4 Document */}
+      {/* Hidden Offscreen Printable High-Fidelity A4 Document for Direct Export */}
       {generatedPlan && (
-        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -100, width: '794px', background: '#ffffff' }}>
+        <div style={{ position: 'fixed', top: 0, left: '-9999px', opacity: 1, pointerEvents: 'none', zIndex: -100, width: '794px', background: '#ffffff' }}>
           <AIItineraryDocument ref={docRef} itinerary={generatedPlan} template={pdfTemplate} />
         </div>
       )}
@@ -292,7 +300,11 @@ const AIPlannerModal = ({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="bg-white rounded-3xl max-w-3xl w-full my-8 p-6 sm:p-8 shadow-2xl relative border border-slate-100 max-h-[90vh] flex flex-col"
+            className={`bg-white rounded-3xl w-full my-auto shadow-2xl relative border border-slate-100 flex flex-col transition-all duration-200 ${
+              viewMode === 'preview'
+                ? 'max-w-5xl max-h-[95vh] h-[92vh] p-4 sm:p-6'
+                : 'max-w-3xl max-h-[90vh] p-6 sm:p-8'
+            }`}
           >
             {/* Header & Tabs */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
@@ -803,40 +815,16 @@ const AIPlannerModal = ({
 
               {/* PDF LIVE PREVIEW TAB */}
               {generatedPlan && !generating && viewMode === 'preview' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between bg-slate-100 p-3 rounded-2xl text-xs">
-                    <span className="font-bold text-slate-700">
-                      Live A4 PDF Preview ({pdfTemplate.toUpperCase()} Style)
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 bg-white p-1 rounded-xl">
-                        {['classic', 'visual', 'compact'].map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => setPdfTemplate(t)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
-                              pdfTemplate === t ? 'bg-slate-900 text-white' : 'text-slate-600'
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={handleDownloadPdf}
-                        disabled={downloadingPdf}
-                        className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-md"
-                      >
-                        <Download size={13} /> Download PDF
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-200 p-4 rounded-3xl overflow-x-auto flex justify-center border border-slate-300">
-                    <div className="transform scale-[0.85] origin-top bg-white shadow-2xl rounded-2xl overflow-hidden border border-slate-300">
-                      <AIItineraryDocument itinerary={generatedPlan} template={pdfTemplate} />
-                    </div>
-                  </div>
+                <div className="space-y-2">
+                  <PDFPreviewFrame
+                    template={pdfTemplate}
+                    onTemplateChange={setPdfTemplate}
+                    onDownloadPdf={handleDownloadPdf}
+                    onPrint={handlePrint}
+                    downloadingPdf={downloadingPdf}
+                  >
+                    <AIItineraryDocument itinerary={generatedPlan} template={pdfTemplate} />
+                  </PDFPreviewFrame>
                 </div>
               )}
             </div>
