@@ -8,7 +8,8 @@ import {
   deleteItineraryController,
   toggleShareItineraryController,
   getPublicSharedItineraryController,
-  regenerateDayController
+  regenerateDayController,
+  editPlanController
 } from '../controllers/aiItineraryController.js';
 import { protect } from '../middlewares/authMiddleware.js';
 
@@ -17,6 +18,7 @@ const router = express.Router();
 // Public Generation & Day Adjustment Endpoints
 router.post('/generate', generateItineraryController);
 router.post('/regenerate-day', regenerateDayController);
+router.post('/edit-plan', editPlanController);
 
 // Authenticated Itinerary CRUD
 router.post('/save', (req, res, next) => {

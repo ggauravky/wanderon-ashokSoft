@@ -31,6 +31,7 @@ import PublicQuotationView from './pages/PublicQuotationView';
 import QuotationDetail from './pages/QuotationDetail';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
+import AIPlannerPage from './pages/AIPlannerPage';
 import ScrollToTop from './components/ScrollToTop';
 
 function App() {
@@ -41,6 +42,8 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
+            <Route path="plan" element={<AIPlannerPage />} />
+            <Route path="plan/:planId" element={<AIPlannerPage />} />
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
             <Route path="trip/:id" element={<TripDetails />} />

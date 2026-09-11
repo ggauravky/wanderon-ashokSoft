@@ -11,6 +11,8 @@ import {
   normalizeDestinationSlug
 } from '../services/travelKnowledgeService.js';
 import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/mediaResolverService.js';
+import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
+import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
 
 /**
  * Safely enrich an itinerary with 3-image nature gallery if cover or gallery is missing
@@ -318,13 +320,17 @@ JSON SCHEMA:
       }
     }
 
+    // Run deterministic feasibility and physical travel audit
+    const { sanitizedItinerary, healthReport } = auditAndSanitizeItinerary(normalized, req.body);
+
     const responsePayload = {
       id: 'ai-plan-' + Date.now(),
       createdAt: new Date().toISOString(),
       source,
       weather,
       seasonContext: season.name,
-      ...normalized,
+      ...sanitizedItinerary,
+      healthReport,
       matchedCatalogTrip
     };
 
@@ -338,6 +344,31 @@ JSON SCHEMA:
       success: false,
       message: 'Failed to generate itinerary. Please try again.'
     });
+  }
+};
+
+
+
+/**
+ * @desc Process AI Copilot plan refinement requests and return structured diffs
+ * @route POST /api/ai/edit-plan
+ * @access Public / Authenticated
+ */
+export const editPlanController = async (req, res) => {
+  try {
+    const { itinerary, refinement } = req.body;
+    if (!itinerary) {
+      return res.status(400).json({ success: false, message: 'Itinerary payload is required.' });
+    }
+    let proposal = generateCopilotProposal(itinerary, refinement);
+    if (proposal && proposal.days) {
+      const { sanitizedItinerary, healthReport } = auditAndSanitizeItinerary(proposal, req.body);
+      proposal = { ...proposal, ...sanitizedItinerary, healthReport };
+    }
+    return res.json({ success: true, data: proposal });
+  } catch (error) {
+    console.error('Edit Plan Controller Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process copilot refinement.' });
   }
 };
 

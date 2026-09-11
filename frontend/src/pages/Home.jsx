@@ -342,13 +342,12 @@ const Home = () => {
                     <Shuffle size={13} className="text-emerald-500" /> Surprise Me
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => openAIPlannerFor(searchQuery || 'Meghalaya')}
+                  <Link
+                    to={`/plan?destination=${encodeURIComponent(searchQuery || 'Meghalaya')}`}
                     className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-black rounded-xl transition-all border border-emerald-200 flex items-center gap-1.5 cursor-pointer"
                   >
                     <Sparkles size={13} /> Custom Route with AI
-                  </button>
+                  </Link>
                 </div>
 
                 <button 
