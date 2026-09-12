@@ -109,13 +109,33 @@ const AIPlannerPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     try {
+      const totalTravelers = (formData.travelers?.adults || 2) + 
+                             (formData.travelers?.children || 0) + 
+                             (formData.travelers?.infants || 0) + 
+                             (formData.travelers?.seniors || 0);
+
       const result = await generateAIItinerary({
         destination: formData.destination,
         days: formData.duration || 5,
-        travelers: (formData.travelers?.adults || 2) + (formData.travelers?.children || 0),
+        duration: formData.duration || 5,
+        travelers: totalTravelers,
+        travelersBreakdown: formData.travelers,
+        origin: formData.origin || '',
+        dates: formData.dates,
+        dateType: formData.dateType || 'flexible',
+        month: formData.month || '',
         pace: formData.pace || 'Balanced',
         mood: formData.tripType || 'Adventure',
+        travelStyle: formData.tripType || 'Adventure',
+        interests: formData.interests || [],
         budgetLevel: formData.budgetLevel || 'Moderate',
+        budgetAmount: formData.budgetAmount || null,
+        stayStyle: formData.stayStyle || '',
+        transportPreference: formData.transportPreference || '',
+        dietary: formData.dietary || [],
+        mobilityConstraints: formData.mobilityConstraints || [],
+        mustInclude: formData.mustInclude || [],
+        avoid: formData.avoid || [],
         customPreferences: formData.customPreferences || ''
       });
 

@@ -546,6 +546,76 @@ export async function resolveItineraryMedia({
           if (galleryAssets.length >= 2) break;
         }
       }
+
+      // 4th pass: If still under 2 supporting images, pull from region pool (respecting tropical quarantine)
+      if (galleryAssets.length < 2 && targetRegion) {
+        let regionPool = [];
+        if (isDbConnected) {
+          const regionQuery = {
+            ...baseFilter,
+            _id: { $nin: Array.from(selectedIds) },
+            'geography.region': { $regex: new RegExp(targetRegion, 'i') }
+          };
+          if (isTropical) {
+            regionQuery.tags = { $nin: ['snow', 'ski', 'skiing', 'glacier', 'winter'] };
+          }
+          regionPool = await MediaAsset.find(regionQuery).lean();
+        } else {
+          regionPool = CANONICAL_MEDIA_ASSETS.filter(a => {
+            if (!a.active) return false;
+            const aId = String(a._id);
+            if (selectedIds.has(aId)) return false;
+            const reg = (a.geography?.region || '').toLowerCase();
+            if (!reg.includes(targetRegion.toLowerCase())) return false;
+            if (isTropical) {
+              const text = `${(a.tags || []).join(' ')} ${a.title || ''}`;
+              if (SNOW_CLIMATE_REGEX.test(text)) return false;
+            }
+            return true;
+          });
+        }
+        for (const asset of regionPool) {
+          const aId = String(asset._id);
+          if (selectedIds.has(aId)) continue;
+          galleryAssets.push(asset);
+          selectedIds.add(aId);
+          if (galleryAssets.length >= 2) break;
+        }
+      }
+
+      // 5th pass: If still under 2 supporting images, pull from verified nature pool (respecting tropical quarantine)
+      if (galleryAssets.length < 2) {
+        let naturePool = [];
+        if (isDbConnected) {
+          const natureQuery = {
+            ...baseFilter,
+            _id: { $nin: Array.from(selectedIds) },
+            tags: { $in: ['nature', 'landscape', 'waterfall', 'mountains', 'river', 'valley', 'lake'] }
+          };
+          if (isTropical) {
+            natureQuery.tags.$nin = ['snow', 'ski', 'skiing', 'glacier', 'winter'];
+          }
+          naturePool = await MediaAsset.find(natureQuery).limit(10).lean();
+        } else {
+          naturePool = CANONICAL_MEDIA_ASSETS.filter(a => {
+            if (!a.active) return false;
+            const aId = String(a._id);
+            if (selectedIds.has(aId)) return false;
+            if (isTropical) {
+              const text = `${(a.tags || []).join(' ')} ${a.title || ''}`;
+              if (SNOW_CLIMATE_REGEX.test(text)) return false;
+            }
+            return true;
+          });
+        }
+        for (const asset of naturePool) {
+          const aId = String(asset._id);
+          if (selectedIds.has(aId)) continue;
+          galleryAssets.push(asset);
+          selectedIds.add(aId);
+          if (galleryAssets.length >= 2) break;
+        }
+      }
     }
   }
 

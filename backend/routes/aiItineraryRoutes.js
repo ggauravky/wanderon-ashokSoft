@@ -42,26 +42,9 @@ router.get('/itinerary/:id', (req, res, next) => {
   next();
 }, getItineraryByIdController);
 
-router.put('/itinerary/:id', (req, res, next) => {
-  if (req.headers.authorization) {
-    return protect(req, res, next);
-  }
-  next();
-}, updateItineraryController);
-
-router.delete('/itinerary/:id', (req, res, next) => {
-  if (req.headers.authorization) {
-    return protect(req, res, next);
-  }
-  next();
-}, deleteItineraryController);
-
-router.post('/itinerary/:id/share', (req, res, next) => {
-  if (req.headers.authorization) {
-    return protect(req, res, next);
-  }
-  next();
-}, toggleShareItineraryController);
+router.put('/itinerary/:id', protect, updateItineraryController);
+router.delete('/itinerary/:id', protect, deleteItineraryController);
+router.post('/itinerary/:id/share', protect, toggleShareItineraryController);
 
 // Public Shared Itinerary Endpoint
 router.get('/shared/:shareToken', getPublicSharedItineraryController);

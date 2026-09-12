@@ -96,6 +96,7 @@ export const buildAITravelContext = ({
   style = 'Adventure',
   pace = 'Balanced',
   budget = 'Moderate',
+  interests = [],
   customPreferences = '',
   matchedTrip = null
 }) => {
@@ -103,6 +104,34 @@ export const buildAITravelContext = ({
   const season = getSeasonContext();
   const weather = getDestinationWeather(destination);
   const aiPlannerConfig = travelKnowledge.aiPlanner || {};
+
+  let prioritizedAttractions = [...(dest.attractions || [])];
+  const userInterests = Array.isArray(interests) ? interests : [];
+  if (userInterests.length > 0 && prioritizedAttractions.length > 0) {
+    const isCulture = userInterests.some(i => typeof i === 'string' && /culture|heritage|food|history/i.test(i));
+    const isNature = userInterests.some(i => typeof i === 'string' && /nature|photography|wildlife|view/i.test(i));
+    const isAdventure = userInterests.some(i => typeof i === 'string' && /adventure|trek/i.test(i));
+
+    prioritizedAttractions.sort((a, b) => {
+      const aText = `${a.name} ${a.location || ''}`.toLowerCase();
+      const bText = `${b.name} ${b.location || ''}`.toLowerCase();
+      let aScore = 0;
+      let bScore = 0;
+      if (isCulture) {
+        if (/museum|culture|heritage|bazar|market|craft|village|temple|monastery|palace|fort/i.test(aText)) aScore += 5;
+        if (/museum|culture|heritage|bazar|market|craft|village|temple|monastery|palace|fort/i.test(bText)) bScore += 5;
+      }
+      if (isNature) {
+        if (/waterfall|falls|lake|river|valley|canyon|root bridge|view|peak/i.test(aText)) aScore += 5;
+        if (/waterfall|falls|lake|river|valley|canyon|root bridge|view|peak/i.test(bText)) bScore += 5;
+      }
+      if (isAdventure) {
+        if (/trek|hike|cave|rafting|bridge|pass/i.test(aText)) aScore += 5;
+        if (/trek|hike|cave|rafting|bridge|pass/i.test(bText)) bScore += 5;
+      }
+      return bScore - aScore;
+    });
+  }
 
   return {
     destinationContext: {
@@ -112,7 +141,7 @@ export const buildAITravelContext = ({
       state: dest.state,
       bestMonths: dest.bestMonths,
       summary: dest.summary,
-      attractions: dest.attractions,
+      attractions: prioritizedAttractions,
       foodDelicacies: dest.food,
       aiNotes: dest.aiContext?.travelNotes || [],
       planningHints: dest.aiContext?.planningHints || []
@@ -128,6 +157,7 @@ export const buildAITravelContext = ({
       travelStyle: style,
       pace: pace,
       budgetLevel: budget,
+      interests: userInterests,
       customPreferences: customPreferences
     },
     planningRules: aiPlannerConfig.basePlanningRules || [],

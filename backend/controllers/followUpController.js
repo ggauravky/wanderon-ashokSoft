@@ -175,6 +175,15 @@ export const createFollowUp = async (req, res) => {
     if (isDbConnected()) {
       try {
         newFollowUp = await FollowUp.create(followUpData);
+        // Sync Lead document
+        if (mongoose.Types.ObjectId.isValid(leadId)) {
+          const lead = await Lead.findById(leadId);
+          if (lead) {
+            lead.nextFollowUpAt = newFollowUp.scheduledAt;
+            if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
+            await lead.save();
+          }
+        }
       } catch (dbErr) {
         console.warn('FollowUp DB save warning:', dbErr.message);
       }

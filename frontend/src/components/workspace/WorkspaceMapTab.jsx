@@ -14,6 +14,23 @@ const WorkspaceMapTab = ({ itinerary }) => {
     ...(activeDay?.evening || []).map((s) => ({ ...s, slot: 'Evening' }))
   ];
 
+  // Dynamically compute estimated day transit time
+  const totalTransitMinutes = stops.reduce((acc, stop) => {
+    const tt = (stop.travelTime || '').toLowerCase();
+    if (tt.includes('hr') || tt.includes('hour')) {
+      const match = tt.match(/([\d.]+)\s*(?:hr|hour)/);
+      if (match) return acc + Math.round(parseFloat(match[1]) * 60);
+    } else if (tt.includes('min')) {
+      const match = tt.match(/(\d+)\s*min/);
+      if (match) return acc + parseInt(match[1], 10);
+    }
+    return acc;
+  }, 0);
+
+  const transitLabel = totalTransitMinutes > 0
+    ? `~${Math.floor(totalTransitMinutes / 60)}h ${totalTransitMinutes % 60}m`
+    : '~1.5 - 2h';
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -56,7 +73,7 @@ const WorkspaceMapTab = ({ itinerary }) => {
           {/* Map Footer Info */}
           <div className="relative z-10 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
             <span>Overnight: <strong className="text-white">{activeDay?.stay || `${itinerary?.destination} Stay`}</strong></span>
-            <span>Est. Day Transit: <strong className="text-emerald-400">~2h 15m</strong></span>
+            <span>Est. Day Transit: <strong className="text-emerald-400">{transitLabel}</strong></span>
           </div>
         </div>
 

@@ -1,77 +1,44 @@
 import mongoose from 'mongoose';
-import Lead from '../models/Lead.js';
+import Lead, { generateLeadReferenceId } from '../models/Lead.js';
+import User from '../models/User.js';
+import FollowUp from '../models/FollowUp.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
-// Initial Mock Leads for offline memory resilience
-let memoryLeads = [
-  {
-    _id: 'lead_1',
-    name: 'Ananya Sharma',
-    email: 'ananya.s@gmail.com',
-    phone: '+91 9876543210',
-    leadType: 'callback_request',
-    tripId: 'spiti-valley-circuit-roadtrip',
-    tripTitle: 'Full Spiti Valley Circuit Group Tour From Delhi: Shimla To Manali',
-    destination: 'Spiti Valley, Himachal',
-    preferredCallDate: '2026-08-28',
-    preferredCallWindow: 'Afternoon',
-    travelersCount: 4,
-    travelMonth: 'October 2026',
-    travelDate: '04 Oct 2026 - 12 Oct 2026',
-    budgetPerPerson: '₹24,999',
-    message: 'Want to confirm room sharing options for a 4-person group.',
-    status: 'NEW',
-    source: 'trip_page',
-    assignedTo: 'Sales Concierge Team',
-    createdAt: new Date('2026-08-24T10:30:00Z')
-  },
-  {
-    _id: 'lead_2',
-    name: 'Rohan Verma',
-    email: 'rohan.v@outlook.com',
-    phone: '+91 9123456789',
-    leadType: 'trip_enquiry',
-    tripId: 'meghalaya-backpacking',
-    tripTitle: 'Meghalaya Living Root Bridges & Waterfalls Expedition',
-    destination: 'Meghalaya',
-    preferredCallDate: '2026-08-27',
-    preferredCallWindow: 'Evening',
-    travelersCount: 2,
-    travelMonth: 'September 2026',
-    travelDate: '15 Sep 2026 - 20 Sep 2026',
-    budgetPerPerson: '₹18,500',
-    message: 'Interested in private transfer upgrade.',
-    status: 'CONTACTED',
-    source: 'trip_page',
-    assignedTo: 'High Altitude Specialist',
-    createdAt: new Date('2026-08-25T14:15:00Z')
-  }
-];
+// Offline resilient memory fallback (ONLY for local offline dev when DB is not reachable)
+let memoryLeads = [];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ============================================================================
+// 1. CREATE LEAD / SUBMIT CALLBACK REQUEST
+// ============================================================================
 // @desc    Submit callback request / customized trip inquiry lead form
 // @route   POST /api/leads
 // @access  Public / Optional Auth
 export const createLead = async (req, res) => {
   try {
-    const { 
-      name, 
-      email, 
-      phone, 
-      leadType, 
-      tripId, 
-      tripTitle, 
-      destination, 
-      travelersCount, 
-      travelMonth, 
-      travelDate, 
-      budgetPerPerson, 
-      preferredCallDate, 
-      preferredCallWindow, 
-      message, 
-      source 
+    const {
+      name,
+      email,
+      phone,
+      leadType,
+      tripId,
+      tripRef,
+      tripSlug,
+      tripTitle,
+      tripPriceSnapshot,
+      selectedBatch,
+      destination,
+      travelersCount,
+      travelMonth,
+      travelDate,
+      budgetPerPerson,
+      preferredCallDate,
+      preferredCallWindow,
+      topics,
+      message,
+      source
     } = req.body;
 
     // 1. Strict Server-Side Validations
@@ -92,51 +59,66 @@ export const createLead = async (req, res) => {
 
     const formattedPhone = cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`;
     const determinedLeadType = leadType || (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
-    const allowedSources = ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry'];
-    const determinedSource = (source && allowedSources.includes(source)) 
-      ? source 
+    const allowedSources = [
+      'trip_page',
+      'contact_page',
+      'booking_page',
+      'custom_inquiry',
+      'Website Lead Form',
+      'website_lead_form',
+      'expert_inquiry',
+      'callback_request'
+    ];
+    const determinedSource = (source && allowedSources.includes(source))
+      ? source
       : (tripId ? 'trip_page' : 'custom_inquiry');
     const validCallWindows = ['Morning', 'Afternoon', 'Evening', 'Anytime', ''];
     const safeCallWindow = validCallWindows.includes(preferredCallWindow) ? preferredCallWindow : 'Anytime';
-    
+
     // Securely link authenticated user if token was decoded by optionalAuth
     const authUserId = req.user ? (req.user._id || req.user.id) : null;
+
+    // Calculate priority based on group size and intent
+    const parsedPax = Number(travelersCount) || 1;
+    let calculatedPriority = 'MEDIUM';
+    if (parsedPax >= 4 || (Array.isArray(topics) && topics.some(t => /discount|custom|corporate/i.test(t)))) {
+      calculatedPriority = 'HIGH';
+    }
+
+    // Parse structured topics
+    const cleanTopics = Array.isArray(topics) ? topics.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim()) : [];
 
     // 2. Duplicate / Spam Throttling (15-minute cool-down window per user/trip)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
 
     if (isDbConnected()) {
-      try {
-        const queryFilter = {
-          createdAt: { $gte: fifteenMinutesAgo },
-          $or: [
-            { email: cleanEmail },
-            { phone: formattedPhone },
-            { phone: cleanPhone }
-          ]
-        };
+      const queryFilter = {
+        createdAt: { $gte: fifteenMinutesAgo },
+        $or: [
+          { email: cleanEmail },
+          { phone: formattedPhone },
+          { phone: cleanPhone }
+        ]
+      };
 
-        if (tripId) {
-          queryFilter.tripId = String(tripId);
-        }
+      if (tripId) {
+        queryFilter.tripId = String(tripId);
+      }
 
-        const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
+      const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
 
-        if (existingLead) {
-          console.log(`ℹ️ [Lead Throttled] Duplicate callback/lead prevented for ${cleanEmail} (Lead ID: ${existingLead._id})`);
-          return res.status(200).json({
-            success: true,
-            isDuplicateThrottled: true,
-            message: 'We already received your inquiry for this journey! Our certified travel specialist is preparing your details and will connect with you shortly.',
-            lead: existingLead
-          });
-        }
-      } catch (err) {
-        console.warn('Duplicate check warning:', err.message);
+      if (existingLead) {
+        console.log(`ℹ️ [Lead Throttled] Duplicate callback/lead prevented for ${cleanEmail} (Lead: ${existingLead.referenceId || existingLead._id})`);
+        return res.status(200).json({
+          success: true,
+          isDuplicateThrottled: true,
+          message: 'We already received your inquiry for this journey! Our certified travel specialist is preparing your details and will connect with you shortly.',
+          lead: existingLead
+        });
       }
     } else {
-      // In-Memory Duplicate Check
-      const recentMemLead = memoryLeads.find(l => 
+      // In-Memory Duplicate Check for offline dev
+      const recentMemLead = memoryLeads.find(l =>
         (l.email === cleanEmail || l.phone === formattedPhone) &&
         (!tripId || l.tripId === String(tripId)) &&
         new Date(l.createdAt) >= fifteenMinutesAgo
@@ -153,76 +135,64 @@ export const createLead = async (req, res) => {
     }
 
     // 3. Create and Persist Lead
+    const referenceId = generateLeadReferenceId();
+
+    const leadPayload = {
+      referenceId,
+      name: name.trim(),
+      email: cleanEmail,
+      phone: formattedPhone,
+      leadType: determinedLeadType,
+      priority: calculatedPriority,
+      tripId: tripId ? String(tripId) : '',
+      tripRef: tripRef && mongoose.Types.ObjectId.isValid(tripRef) ? tripRef : null,
+      tripSlug: tripSlug ? String(tripSlug).trim() : '',
+      tripTitle: tripTitle ? String(tripTitle).trim() : '',
+      tripTitleSnapshot: tripTitle ? String(tripTitle).trim() : '',
+      tripPriceSnapshot: Number(tripPriceSnapshot) || 0,
+      selectedBatch: selectedBatch ? String(selectedBatch).trim() : '',
+      destination: destination || (tripTitle ? String(tripTitle) : 'Expedition'),
+      travelersCount: parsedPax,
+      travelMonth: travelMonth || '',
+      travelDate: travelDate || '',
+      budgetPerPerson: budgetPerPerson || '',
+      preferredCallDate: preferredCallDate || new Date().toISOString().split('T')[0],
+      preferredCallWindow: safeCallWindow,
+      topics: cleanTopics,
+      userId: authUserId,
+      message: message ? String(message).trim() : '',
+      status: 'NEW',
+      source: determinedSource,
+      assignedTo: 'Sales Concierge Team',
+      assignedToUser: null,
+      assignedToUserName: '',
+      whatsappNotification: {
+        sent: false,
+        status: 'NOT_CONFIGURED',
+        sentAt: null
+      }
+    };
+
     let newLead = null;
     if (isDbConnected()) {
-      try {
-        newLead = await Lead.create({
-          name: name.trim(),
-          email: cleanEmail,
-          phone: formattedPhone,
-          leadType: determinedLeadType,
-          tripId: tripId ? String(tripId) : '',
-          tripTitle: tripTitle ? String(tripTitle).trim() : '',
-          destination: destination || (tripTitle ? String(tripTitle) : 'Expedition'),
-          travelersCount: Number(travelersCount) || 1,
-          travelMonth: travelMonth || '',
-          travelDate: travelDate || '',
-          budgetPerPerson: budgetPerPerson || '',
-          preferredCallDate: preferredCallDate || new Date().toISOString().split('T')[0],
-          preferredCallWindow: safeCallWindow,
-          userId: authUserId,
-          message: message ? String(message).trim() : '',
-          status: 'NEW',
-          source: determinedSource,
-          assignedTo: 'Sales Concierge Team',
-          whatsappNotification: {
-            sent: true,
-            status: 'SIMULATED_SENT',
-            sentAt: new Date()
-          }
-        });
-      } catch (dbErr) {
-        console.warn('Lead DB save warning:', dbErr.message);
-      }
-    }
-
-    if (!newLead) {
+      newLead = await Lead.create(leadPayload);
+    } else {
+      // Memory fallback only when DB is completely offline in development
       newLead = {
         _id: 'lead_' + Date.now(),
-        name: name.trim(),
-        email: cleanEmail,
-        phone: formattedPhone,
-        leadType: determinedLeadType,
-        tripId: tripId ? String(tripId) : '',
-        tripTitle: tripTitle ? String(tripTitle).trim() : '',
-        destination: destination || (tripTitle ? String(tripTitle) : 'Expedition'),
-        travelersCount: Number(travelersCount) || 1,
-        travelMonth: travelMonth || '',
-        travelDate: travelDate || '',
-        budgetPerPerson: budgetPerPerson || '',
-        preferredCallDate: preferredCallDate || new Date().toISOString().split('T')[0],
-        preferredCallWindow: safeCallWindow,
-        userId: authUserId,
-        message: message ? String(message).trim() : '',
-        status: 'NEW',
-        source: determinedSource,
-        assignedTo: 'Sales Concierge Team',
-        whatsappNotification: {
-          sent: true,
-          status: 'SIMULATED_SENT',
-          sentAt: new Date()
-        },
-        createdAt: new Date()
+        ...leadPayload,
+        createdAt: new Date(),
+        updatedAt: new Date()
       };
       memoryLeads.unshift(newLead);
     }
 
     console.log(`\n======================================================`);
     console.log(`📞 [CRM NEW LEAD CAPTURED: ${determinedLeadType.toUpperCase()}]`);
-    console.log(`Traveler: ${newLead.name} (${newLead.email} • ${newLead.phone})`);
-    console.log(`Expedition: ${newLead.tripTitle || newLead.destination}`);
+    console.log(`Ref: ${newLead.referenceId} | Traveler: ${newLead.name} (${newLead.email} • ${newLead.phone})`);
+    console.log(`Expedition: ${newLead.tripTitle || newLead.destination} | Priority: ${newLead.priority}`);
     console.log(`Preferred Call: ${newLead.preferredCallDate} [${newLead.preferredCallWindow}]`);
-    console.log(`Source: ${newLead.source} | Authenticated: ${Boolean(authUserId)}`);
+    console.log(`Topics: ${cleanTopics.join(', ') || 'None'}`);
     console.log(`======================================================\n`);
 
     const confirmationMsg = determinedLeadType === 'callback_request'
@@ -240,7 +210,10 @@ export const createLead = async (req, res) => {
   }
 };
 
-// @desc    Get lead inquiries with RBAC Scoping & Privacy Masking
+// ============================================================================
+// 2. GET LEADS (Filtered with RBAC Scoping & Pagination)
+// ============================================================================
+// @desc    Get lead inquiries with RBAC Scoping, Search, Filtering & Privacy Masking
 // @route   GET /api/leads
 // @access  Private (Super Admin, Admin, Operations, Sales, Marketing)
 export const getLeads = async (req, res) => {
@@ -248,41 +221,139 @@ export const getLeads = async (req, res) => {
     const userRole = (req.user?.role || 'admin').toLowerCase();
     const userId = req.user?._id || req.user?.id;
     const userName = req.user?.name || '';
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
-    let filter = {};
-    // Sales role: Scoped to assigned leads or open unassigned pool
-    if (userRole === 'sales') {
-      filter = {
+    const {
+      search,
+      status,
+      priority,
+      leadType,
+      destination,
+      assignedToUser,
+      page = 1,
+      limit = 100,
+      sortBy = 'newest'
+    } = req.query;
+
+    const andConditions = [];
+
+    // RBAC Scoping for Sales: only see own assigned leads or unassigned pool
+    if (userRole === 'sales' && !isSuperOrAdmin) {
+      andConditions.push({
         $or: [
           { assignedToUser: userId },
           { assignedTo: userName },
+          { assignedToUser: null },
           { assignedTo: 'Sales Concierge Team' },
-          { assignedTo: '' },
-          { assignedTo: null }
+          { assignedTo: '' }
         ]
-      };
+      });
+    }
+
+    // Specific user assignment filter
+    if (assignedToUser) {
+      if (assignedToUser === 'unassigned') {
+        andConditions.push({
+          $or: [
+            { assignedToUser: null },
+            { assignedTo: 'Sales Concierge Team' },
+            { assignedTo: '' }
+          ]
+        });
+      } else if (assignedToUser === 'my' && userId) {
+        andConditions.push({
+          $or: [
+            { assignedToUser: userId },
+            { assignedTo: userName }
+          ]
+        });
+      } else if (mongoose.Types.ObjectId.isValid(assignedToUser)) {
+        andConditions.push({ assignedToUser: assignedToUser });
+      }
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      andConditions.push({ status });
+    }
+
+    // Priority filter
+    if (priority && priority !== 'all') {
+      andConditions.push({ priority });
+    }
+
+    // Lead type filter
+    if (leadType && leadType !== 'all') {
+      andConditions.push({ leadType });
+    }
+
+    // Destination filter
+    if (destination && destination !== 'all') {
+      andConditions.push({ destination: { $regex: destination, $options: 'i' } });
+    }
+
+    // Search query
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.trim();
+      andConditions.push({
+        $or: [
+          { referenceId: { $regex: q, $options: 'i' } },
+          { name: { $regex: q, $options: 'i' } },
+          { email: { $regex: q, $options: 'i' } },
+          { phone: { $regex: q, $options: 'i' } },
+          { tripTitle: { $regex: q, $options: 'i' } },
+          { destination: { $regex: q, $options: 'i' } }
+        ]
+      });
+    }
+
+    const filter = andConditions.length > 0 ? { $and: andConditions } : {};
+
+    let sortObj = { createdAt: -1 };
+    if (sortBy === 'priority') {
+      sortObj = { priority: 1, createdAt: -1 };
+    } else if (sortBy === 'updated') {
+      sortObj = { updatedAt: -1 };
+    } else if (sortBy === 'oldest') {
+      sortObj = { createdAt: 1 };
     }
 
     let leads = [];
-    if (isDbConnected()) {
-      try {
-        leads = await Lead.find(filter).sort({ createdAt: -1 });
-      } catch (dbErr) {
-        console.warn('Lead DB query warning:', dbErr.message);
-      }
-    }
+    let total = 0;
 
-    if (leads.length === 0) {
-      if (userRole === 'sales') {
-        leads = memoryLeads.filter(l => 
-          String(l.assignedToUser) === String(userId) ||
-          l.assignedTo === userName ||
-          l.assignedTo === 'Sales Concierge Team' ||
-          !l.assignedTo
-        );
-      } else {
-        leads = memoryLeads;
-      }
+    if (isDbConnected()) {
+      total = await Lead.countDocuments(filter);
+      leads = await Lead.find(filter)
+        .sort(sortObj)
+        .skip((Number(page) - 1) * Number(limit))
+        .limit(Number(limit))
+        .populate('assignedToUser', 'name email role avatar phone')
+        .populate('tripRef', 'title slug price destination location')
+        .populate('quotations', 'quotationNumber status pricing createdAt');
+    } else {
+      // Memory fallback for offline dev
+      leads = memoryLeads.filter(l => {
+        if (userRole === 'sales' && !isSuperOrAdmin) {
+          const isAssigned = String(l.assignedToUser) === String(userId) ||
+            l.assignedTo === userName ||
+            l.assignedTo === 'Sales Concierge Team' ||
+            !l.assignedTo;
+          if (!isAssigned) return false;
+        }
+        if (status && status !== 'all' && l.status !== status) return false;
+        if (priority && priority !== 'all' && l.priority !== priority) return false;
+        if (leadType && leadType !== 'all' && l.leadType !== leadType) return false;
+        if (search) {
+          const s = search.toLowerCase();
+          return (l.name || '').toLowerCase().includes(s) ||
+            (l.email || '').toLowerCase().includes(s) ||
+            (l.phone || '').includes(s) ||
+            (l.referenceId || '').toLowerCase().includes(s) ||
+            (l.tripTitle || '').toLowerCase().includes(s);
+        }
+        return true;
+      });
+      total = leads.length;
     }
 
     // Marketing role: Privacy masking on customer contact data
@@ -301,103 +372,219 @@ export const getLeads = async (req, res) => {
 
     res.json(leads);
   } catch (error) {
+    console.error('Get leads error:', error);
     res.status(500).json({ message: error.message || 'Server Error fetching leads' });
   }
 };
 
-// @desc    Update lead status & notes (Sales / Admin CRM)
-// @route   PUT /api/leads/:id/status
-// @access  Private (Sales/Admin)
-export const updateLeadStatus = async (req, res) => {
+// ============================================================================
+// 3. GET SINGLE LEAD BY ID / REFERENCE ID
+// ============================================================================
+// @desc    Get detailed lead dossier with populated history
+// @route   GET /api/leads/:id
+// @access  Private (Super Admin, Admin, Operations, Sales)
+export const getLeadById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes, assignedTo, assignedToUser } = req.body;
+    const userRole = (req.user?.role || 'admin').toLowerCase();
+    const userId = req.user?._id || req.user?.id;
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
     let lead = null;
     if (isDbConnected()) {
-      try {
-        lead = await Lead.findById(id);
-      } catch (e) {}
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        lead = await Lead.findById(id)
+          .populate('assignedToUser', 'name email role avatar phone')
+          .populate('tripRef', 'title slug price destination location image')
+          .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+          .populate('userId', 'name email phone avatar');
+      }
+      if (!lead) {
+        lead = await Lead.findOne({ referenceId: id })
+          .populate('assignedToUser', 'name email role avatar phone')
+          .populate('tripRef', 'title slug price destination location image')
+          .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+          .populate('userId', 'name email phone avatar');
+      }
+    } else {
+      lead = memoryLeads.find(l => String(l._id) === String(id) || l.referenceId === id);
     }
 
     if (!lead) {
-      const memIndex = memoryLeads.findIndex((l) => String(l._id) === String(id));
-      if (memIndex !== -1) {
-        memoryLeads[memIndex] = {
-          ...memoryLeads[memIndex],
-          ...(status ? { status } : {}),
-          ...(notes !== undefined ? { notes } : {}),
-          ...(assignedTo ? { assignedTo } : {}),
-          ...(assignedToUser ? { assignedToUser } : {})
-        };
-        return res.json(memoryLeads[memIndex]);
+      return res.status(404).json({ message: 'Lead dossier not found.' });
+    }
+
+    // Role check: sales cannot inspect another sales specialist's private lead
+    if (userRole === 'sales' && !isSuperOrAdmin) {
+      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
+      const isAssigned = !assignedId || assignedId === String(userId) || lead.assignedTo === req.user?.name || lead.assignedTo === 'Sales Concierge Team';
+      if (!isAssigned) {
+        return res.status(403).json({ message: 'Access denied. This lead is assigned to another specialist.' });
       }
-      return res.status(404).json({ message: 'Lead record not found.' });
-    }
-
-    if (status) lead.status = status;
-    if (notes !== undefined) lead.notes = notes;
-    if (assignedTo) lead.assignedTo = assignedTo;
-    if (assignedToUser) lead.assignedToUser = assignedToUser;
-
-    if (isDbConnected() && typeof lead.save === 'function') {
-      await lead.save();
-    }
-
-    res.json(lead);
-  } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error updating lead' });
-  }
-};
-
-// @desc    Assign lead to sales specialist
-// @route   PUT /api/leads/:id/assign
-// @access  Private (Super Admin / Admin)
-export const assignLead = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { assignedTo, assignedToUser, notes } = req.body;
-
-    if (!assignedTo && !assignedToUser) {
-      return res.status(400).json({ message: 'Assignee name or user ID is required.' });
-    }
-
-    let lead = null;
-    if (isDbConnected()) {
-      try {
-        lead = await Lead.findById(id);
-      } catch (e) {}
-    }
-
-    if (!lead) {
-      const memIndex = memoryLeads.findIndex((l) => String(l._id) === String(id));
-      if (memIndex !== -1) {
-        memoryLeads[memIndex] = {
-          ...memoryLeads[memIndex],
-          assignedTo: assignedTo || memoryLeads[memIndex].assignedTo,
-          assignedToUser: assignedToUser || memoryLeads[memIndex].assignedToUser || null,
-          notes: notes !== undefined ? notes : memoryLeads[memIndex].notes
-        };
-        return res.json({
-          success: true,
-          message: `Lead assigned to ${assignedTo || 'Sales Specialist'}.`,
-          lead: memoryLeads[memIndex]
-        });
-      }
-      return res.status(404).json({ message: 'Lead record not found.' });
-    }
-
-    if (assignedTo) lead.assignedTo = assignedTo;
-    if (assignedToUser) lead.assignedToUser = assignedToUser;
-    if (notes !== undefined) lead.notes = notes;
-
-    if (isDbConnected() && typeof lead.save === 'function') {
-      await lead.save();
     }
 
     res.json({
       success: true,
-      message: `Lead assigned to ${assignedTo || 'Sales Specialist'}.`,
+      lead
+    });
+  } catch (error) {
+    console.error('Get lead by ID error:', error);
+    res.status(500).json({ message: error.message || 'Server Error fetching lead details' });
+  }
+};
+
+// ============================================================================
+// 4. ATOMIC SALES CLAIM
+// ============================================================================
+// @desc    Atomic 1-click claim of unassigned lead by sales agent
+// @route   POST /api/leads/:id/claim
+// @access  Private (Sales, Operations, Admin)
+export const claimLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?._id || req.user?.id;
+    const userName = req.user?.name || 'Sales Specialist';
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Authentication required to claim lead.' });
+    }
+
+    let lead = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      // Atomic find and update: only update if currently unassigned or assigned to generic team
+      lead = await Lead.findOneAndUpdate(
+        {
+          _id: id,
+          $or: [
+            { assignedToUser: null },
+            { assignedTo: 'Sales Concierge Team' },
+            { assignedTo: '' },
+            { assignedToUser: userId } // idempotently allows reclaiming own lead
+          ]
+        },
+        {
+          $set: {
+            assignedToUser: userId,
+            assignedToUserName: userName,
+            assignedTo: userName,
+            assignedAt: new Date(),
+            assignedBy: userId,
+            assignedByName: userName,
+            status: 'IN_PROGRESS'
+          }
+        },
+        { new: true }
+      ).populate('assignedToUser', 'name email role avatar phone');
+
+      if (!lead) {
+        // Check if lead exists but was already claimed by someone else
+        const existing = await Lead.findById(id);
+        if (existing) {
+          return res.status(409).json({
+            message: `Lead has already been claimed by ${existing.assignedToUserName || existing.assignedTo || 'another specialist'}.`,
+            assignedTo: existing.assignedToUserName || existing.assignedTo
+          });
+        }
+        return res.status(404).json({ message: 'Lead not found.' });
+      }
+    } else {
+      const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
+      if (memIndex !== -1) {
+        const mem = memoryLeads[memIndex];
+        if (mem.assignedToUser && String(mem.assignedToUser) !== String(userId) && mem.assignedTo !== 'Sales Concierge Team') {
+          return res.status(409).json({
+            message: `Lead has already been claimed by ${mem.assignedToUserName || mem.assignedTo}.`
+          });
+        }
+        mem.assignedToUser = userId;
+        mem.assignedToUserName = userName;
+        mem.assignedTo = userName;
+        mem.assignedAt = new Date();
+        mem.status = 'IN_PROGRESS';
+        lead = mem;
+      } else {
+        return res.status(404).json({ message: 'Lead not found.' });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Lead ${lead.referenceId || lead._id} successfully claimed. You are now the primary specialist.`,
+      lead
+    });
+  } catch (error) {
+    console.error('Claim lead error:', error);
+    res.status(500).json({ message: error.message || 'Server Error claiming lead' });
+  }
+};
+
+// ============================================================================
+// 5. ASSIGN LEAD TO SALES SPECIALIST (NO WINDOW.PROMPT)
+// ============================================================================
+// @desc    Assign lead to specific sales specialist with audit
+// @route   PUT /api/leads/:id/assign
+// @access  Private (Super Admin, Admin, Operations)
+export const assignLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedToUserId, assignedToName, notes } = req.body;
+    const assignerId = req.user?._id || req.user?.id;
+    const assignerName = req.user?.name || 'Administrator';
+
+    if (!assignedToUserId && !assignedToName) {
+      return res.status(400).json({ message: 'Target specialist user ID or name is required.' });
+    }
+
+    let targetUser = null;
+    if (assignedToUserId && isDbConnected() && mongoose.Types.ObjectId.isValid(assignedToUserId)) {
+      targetUser = await User.findById(assignedToUserId).select('name email role avatar');
+      if (!targetUser) {
+        return res.status(404).json({ message: 'Selected sales specialist user not found.' });
+      }
+    }
+
+    const finalUserId = targetUser ? targetUser._id : (assignedToUserId || null);
+    const finalUserName = targetUser ? targetUser.name : (assignedToName || 'Sales Specialist');
+
+    let lead = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      lead = await Lead.findById(id);
+      if (!lead) return res.status(404).json({ message: 'Lead not found.' });
+
+      lead.assignedToUser = finalUserId;
+      lead.assignedToUserName = finalUserName;
+      lead.assignedTo = finalUserName;
+      lead.assignedAt = new Date();
+      lead.assignedBy = assignerId;
+      lead.assignedByName = assignerName;
+      if (notes !== undefined && notes !== '') lead.notes = notes;
+      if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
+
+      await lead.save();
+      await lead.populate('assignedToUser', 'name email role avatar phone');
+    } else {
+      const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
+      if (memIndex !== -1) {
+        memoryLeads[memIndex] = {
+          ...memoryLeads[memIndex],
+          assignedToUser: finalUserId,
+          assignedToUserName: finalUserName,
+          assignedTo: finalUserName,
+          assignedAt: new Date(),
+          assignedBy: assignerId,
+          assignedByName: assignerName,
+          notes: notes !== undefined ? notes : memoryLeads[memIndex].notes,
+          status: memoryLeads[memIndex].status === 'NEW' ? 'IN_PROGRESS' : memoryLeads[memIndex].status
+        };
+        lead = memoryLeads[memIndex];
+      } else {
+        return res.status(404).json({ message: 'Lead not found.' });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Lead successfully assigned to ${finalUserName}.`,
       lead
     });
   } catch (error) {
@@ -406,3 +593,237 @@ export const assignLead = async (req, res) => {
   }
 };
 
+// ============================================================================
+// 6. LOG CONTACT OUTCOME & AUTO-SCHEDULE FOLLOW-UP
+// ============================================================================
+// @desc    Log a call or WhatsApp contact attempt, auto-transition status
+// @route   POST /api/leads/:id/log-contact
+// @access  Private (Sales, Operations, Admin)
+export const logLeadContact = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      outcome,
+      channel = 'call',
+      notes = '',
+      nextFollowUpDate,
+      nextFollowUpWindow = 'Anytime',
+      nextFollowUpNotes = ''
+    } = req.body;
+
+    const validOutcomes = ['CONNECTED', 'BUSY', 'CALL_LATER', 'WRONG_NUMBER', 'WHATSAPP_SENT', 'EMAIL_SENT', 'NO_ANSWER'];
+    if (!outcome || !validOutcomes.includes(outcome)) {
+      return res.status(400).json({ message: `Please provide a valid contact outcome (${validOutcomes.join(', ')}).` });
+    }
+
+    const userId = req.user?._id || req.user?.id;
+    const userName = req.user?.name || 'Sales Specialist';
+
+    let lead = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      lead = await Lead.findById(id);
+    } else {
+      lead = memoryLeads.find(l => String(l._id) === String(id));
+    }
+
+    if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
+
+    // 1. Append Call Outcome
+    const outcomeEntry = {
+      outcome,
+      channel,
+      notes: notes.trim(),
+      loggedAt: new Date(),
+      loggedBy: userId,
+      loggedByName: userName
+    };
+
+    if (!Array.isArray(lead.callOutcomes)) {
+      lead.callOutcomes = [];
+    }
+    lead.callOutcomes.unshift(outcomeEntry);
+
+    // 2. Update contact metrics
+    lead.contactCount = (lead.contactCount || 0) + 1;
+    lead.lastContactAt = new Date();
+    if (!lead.firstContactAt) {
+      lead.firstContactAt = new Date();
+    }
+
+    // Auto-advance status if currently NEW
+    if (lead.status === 'NEW') {
+      lead.status = outcome === 'CONNECTED' ? 'CONTACTED' : 'IN_PROGRESS';
+    }
+
+    // 3. Handle Next Follow-Up if requested
+    let createdFollowUp = null;
+    if (nextFollowUpDate) {
+      const scheduledDate = new Date(nextFollowUpDate);
+      if (!isNaN(scheduledDate.getTime())) {
+        lead.nextFollowUpAt = scheduledDate;
+
+        if (isDbConnected()) {
+          try {
+            createdFollowUp = await FollowUp.create({
+              leadId: lead._id,
+              customerId: lead.userId || null,
+              salesUserId: userId,
+              salesUserName: userName,
+              title: `Follow-up on ${lead.tripTitle || lead.destination} (${outcome})`,
+              notes: nextFollowUpNotes || notes || `Follow-up after ${outcome.toLowerCase()}`,
+              scheduledAt: scheduledDate,
+              callWindow: nextFollowUpWindow,
+              channel: channel === 'whatsapp' ? 'whatsapp' : 'call',
+              priority: lead.priority === 'HIGH' || lead.priority === 'URGENT' ? 'high' : 'medium',
+              status: 'pending'
+            });
+          } catch (fuErr) {
+            console.warn('FollowUp DB create notice:', fuErr.message);
+          }
+        }
+      }
+    }
+
+    if (isDbConnected() && typeof lead.save === 'function') {
+      await lead.save();
+      await lead.populate('assignedToUser', 'name email role avatar phone');
+    }
+
+    res.json({
+      success: true,
+      message: `Contact outcome "${outcome}" logged successfully.`,
+      lead,
+      followUp: createdFollowUp
+    });
+  } catch (error) {
+    console.error('Log contact error:', error);
+    res.status(500).json({ message: error.message || 'Server Error logging contact' });
+  }
+};
+
+// ============================================================================
+// 7. UPDATE LEAD STATUS & NOTES
+// ============================================================================
+// @desc    Update lead status, priority, and notes
+// @route   PUT /api/leads/:id/status
+// @access  Private (Sales, Operations, Admin)
+export const updateLeadStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, priority, notes, lostReason, lostReasonDetail } = req.body;
+
+    const validStatuses = ['NEW', 'CONTACTED', 'IN_PROGRESS', 'QUALIFIED', 'CONVERTED', 'LOST'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ message: `Invalid status. Choose from: ${validStatuses.join(', ')}` });
+    }
+
+    if (status === 'LOST' && !lostReason) {
+      return res.status(400).json({ message: 'A reason is required when marking a lead as LOST (e.g. Budget Mismatch, Date Unavailable, Booked Elsewhere).' });
+    }
+
+    let lead = null;
+    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+      lead = await Lead.findById(id);
+    } else {
+      lead = memoryLeads.find(l => String(l._id) === String(id));
+    }
+
+    if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
+
+    if (status) lead.status = status;
+    if (priority) lead.priority = priority;
+    if (notes !== undefined) lead.notes = notes;
+    if (lostReason) lead.lostReason = lostReason;
+    if (lostReasonDetail) lead.lostReasonDetail = lostReasonDetail;
+
+    if (isDbConnected() && typeof lead.save === 'function') {
+      await lead.save();
+      await lead.populate('assignedToUser', 'name email role avatar phone');
+    }
+
+    res.json({
+      success: true,
+      message: `Lead updated to status ${lead.status}.`,
+      lead
+    });
+  } catch (error) {
+    console.error('Update lead status error:', error);
+    res.status(500).json({ message: error.message || 'Server Error updating lead status' });
+  }
+};
+
+// ============================================================================
+// 8. GET SALES SPECIALISTS LIST
+// ============================================================================
+// @desc    Get active sales specialists & admins available for lead assignment with workload
+// @route   GET /api/leads/sales-users
+// @access  Private (Admin, Operations, Sales)
+export const getSalesUsers = async (req, res) => {
+  try {
+    let salesUsers = [];
+    if (isDbConnected()) {
+      const rawUsers = await User.find({
+        role: { $in: ['sales', 'admin', 'super_admin', 'operations'] }
+      }).select('name email role avatar phone').lean();
+
+      // Aggregate active assigned leads count per user
+      const activeLeadCounts = await Lead.aggregate([
+        {
+          $match: {
+            status: { $in: ['NEW', 'CONTACTED', 'IN_PROGRESS', 'QUALIFIED'] },
+            assignedToUser: { $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: '$assignedToUser',
+            activeCount: { $sum: 1 }
+          }
+        }
+      ]);
+
+      const countMap = {};
+      activeLeadCounts.forEach(c => {
+        countMap[String(c._id)] = c.activeCount;
+      });
+
+      salesUsers = rawUsers.map(u => ({
+        _id: u._id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+        phone: u.phone,
+        activeLeadsCount: countMap[String(u._id)] || 0
+      }));
+    } else {
+      salesUsers = [
+        {
+          _id: 'usr_admin',
+          name: 'Gaurav Kumar (Master Admin)',
+          email: 'gaurav999@gmail.com',
+          role: 'admin',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+          activeLeadsCount: 2
+        },
+        {
+          _id: 'usr_sales_1',
+          name: 'Ashok Travel Concierge',
+          email: 'sales@wanderluxe.in',
+          role: 'sales',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+          activeLeadsCount: 5
+        }
+      ];
+    }
+
+    res.json({
+      success: true,
+      count: salesUsers.length,
+      users: salesUsers
+    });
+  } catch (error) {
+    console.error('Get sales users error:', error);
+    res.status(500).json({ message: error.message || 'Server Error fetching sales users' });
+  }
+};

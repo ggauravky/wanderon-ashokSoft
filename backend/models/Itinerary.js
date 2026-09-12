@@ -32,16 +32,7 @@ const daySchema = new mongoose.Schema({
     default: null
   },
   galleryMedia: {
-    type: [
-      {
-        id: { type: String, default: '' },
-        url: { type: String, default: '' },
-        altText: { type: String, default: '' },
-        caption: { type: String, default: '' },
-        width: { type: Number, default: 1600 },
-        height: { type: Number, default: 900 }
-      }
-    ],
+    type: mongoose.Schema.Types.Mixed,
     default: []
   },
   galleryMediaAssetIds: {
@@ -49,16 +40,7 @@ const daySchema = new mongoose.Schema({
     default: []
   },
   gallery: {
-    type: [
-      {
-        id: { type: String, default: '' },
-        url: { type: String, default: '' },
-        altText: { type: String, default: '' },
-        caption: { type: String, default: '' },
-        width: { type: Number, default: 1600 },
-        height: { type: Number, default: 900 }
-      }
-    ],
+    type: mongoose.Schema.Types.Mixed,
     default: []
   },
   mediaSelectionMode: {

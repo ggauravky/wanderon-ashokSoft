@@ -5,12 +5,12 @@ const WorkspaceBudgetTab = ({ itinerary, userTargetBudget, onTriggerCopilot }) =
   const totalCost = itinerary?.totalEstimatedCost || 45000;
   const rawBreakdown = itinerary?.budgetBreakdown || {};
 
-  // Compute clean breakdown
-  const stayCost = rawBreakdown.stay ? parseInt(rawBreakdown.stay.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.42) : Math.round(totalCost * 0.42);
+  // Compute clean breakdown strictly balancing to totalCost
+  const stayCost = rawBreakdown.stay ? parseInt(rawBreakdown.stay.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.45) : Math.round(totalCost * 0.45);
   const transportCost = rawBreakdown.transport ? parseInt(rawBreakdown.transport.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.22) : Math.round(totalCost * 0.22);
-  const activityCost = rawBreakdown.activities ? parseInt(rawBreakdown.activities.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.16) : Math.round(totalCost * 0.16);
-  const foodCost = rawBreakdown.food ? parseInt(rawBreakdown.food.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.12) : Math.round(totalCost * 0.12);
-  const bufferCost = Math.max(1500, totalCost - (stayCost + transportCost + activityCost + foodCost));
+  const foodCost = rawBreakdown.food ? parseInt(rawBreakdown.food.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.18) : Math.round(totalCost * 0.18);
+  const activityCost = rawBreakdown.activities ? parseInt(rawBreakdown.activities.replace(/[^\d]/g, '')) || Math.round(totalCost * 0.10) : Math.round(totalCost * 0.10);
+  const bufferCost = Math.max(0, totalCost - (stayCost + transportCost + activityCost + foodCost));
 
   const budgetItems = [
     { label: 'Verified Stays & Resorts', amount: stayCost, pct: Math.round((stayCost / totalCost) * 100), desc: 'Comfortable boutique hotels and homestays' },

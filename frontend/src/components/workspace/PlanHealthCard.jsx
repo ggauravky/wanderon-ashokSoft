@@ -6,40 +6,34 @@ const PlanHealthCard = ({ itinerary }) => {
   const pace = itinerary?.pace || 'Balanced';
   const budget = itinerary?.totalEstimatedCost || 0;
 
-  // Compute deterministic plan health checks
-  const healthItems = [];
+  const rawChecks = itinerary?.healthReport?.checks;
+  const healthItems = Array.isArray(rawChecks) && rawChecks.length > 0
+    ? rawChecks.map(c => ({
+        status: c.status || 'pass',
+        label: c.name || c.code || 'Feasibility Check',
+        detail: c.message || ''
+      }))
+    : [
+        {
+          status: 'pass',
+          label: 'Driving & Transit Balanced',
+          detail: 'Average intra-day drive under 1.5 hours between clusters.'
+        },
+        {
+          status: 'pass',
+          label: `Calibrated for ${pace} Pace`,
+          detail: pace === 'Relaxed'
+            ? 'Max 2 primary stops daily with ample downtime.'
+            : '3 structured time blocks balancing sightseeing & meals.'
+        },
+        {
+          status: 'pass',
+          label: 'Geographic Waypoints Grouped',
+          detail: 'Nearby waterfalls, caves, and scenic viewpoints batched together.'
+        }
+      ];
 
-  // Check 1: Driving / Route feasibility
-  healthItems.push({
-    status: 'pass',
-    label: 'Driving & Transit Balanced',
-    detail: 'Average intra-day drive under 1.5 hours between clusters.'
-  });
-
-  // Check 2: Pace compliance
-  healthItems.push({
-    status: 'pass',
-    label: `Calibrated for ${pace} Pace`,
-    detail: pace === 'Relaxed'
-      ? 'Max 2 primary stops daily with ample downtime.'
-      : '3 structured time blocks balancing sightseeing & meals.'
-  });
-
-  // Check 3: Geographic Backtracking
-  healthItems.push({
-    status: 'pass',
-    label: 'Geographic Waypoints Grouped',
-    detail: 'Nearby waterfalls, caves, and scenic viewpoints batched together.'
-  });
-
-  // Dynamic Checks based on data
-  if (days.length >= 4) {
-    healthItems.push({
-      status: 'info',
-      label: 'Early Start Recommended on Day 2 or 3',
-      detail: 'Clear morning light provides the best visibility at major viewpoints.'
-    });
-  }
+  const hasWarnings = healthItems.some(i => i.status === 'warning' || i.status === 'fail');
 
   return (
     <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/80 shadow-2xs space-y-4">

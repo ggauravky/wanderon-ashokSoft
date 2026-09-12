@@ -519,8 +519,15 @@ export async function createLeadApi(leadData) {
   return data;
 }
 
-export async function getAdminLeadsApi() {
-  const response = await fetch(`${API_BASE_URL}/leads`, {
+export async function getAdminLeadsApi(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '' && val !== 'all') {
+      query.append(key, val);
+    }
+  });
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/leads${queryString}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -530,6 +537,59 @@ export async function getAdminLeadsApi() {
     throw new Error(data.message || 'Failed to fetch leads');
   }
   return Array.isArray(data) ? data : (data.data || []);
+}
+
+export async function getLeadByIdApi(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch lead details');
+  }
+  return data.lead || data;
+}
+
+export async function claimLeadApi(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/claim`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to claim lead');
+  }
+  return data;
+}
+
+export async function logLeadContactApi(leadId, contactPayload) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/log-contact`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(contactPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to log contact outcome');
+  }
+  return data;
+}
+
+export async function getSalesUsersApi() {
+  const response = await fetch(`${API_BASE_URL}/leads/sales-users`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch sales users');
+  }
+  return data.users || [];
 }
 
 export async function updateLeadStatusApi(leadId, statusPayload) {
@@ -548,7 +608,9 @@ export async function updateLeadStatusApi(leadId, statusPayload) {
 }
 
 export async function assignLeadApi(leadId, assignPayload) {
-  const body = typeof assignPayload === 'string' ? { assignedTo: assignPayload } : assignPayload;
+  const body = typeof assignPayload === 'string'
+    ? { assignedToName: assignPayload }
+    : assignPayload;
   const response = await fetch(`${API_BASE_URL}/leads/${leadId}/assign`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -558,6 +620,82 @@ export async function assignLeadApi(leadId, assignPayload) {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to assign lead');
+  }
+  return data;
+}
+
+// CRM FOLLOW-UP APIS
+export async function getFollowUpsApi(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '' && val !== 'All') {
+      query.append(key, val);
+    }
+  });
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/follow-ups${queryString}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch follow-ups');
+  }
+  return data.followUps || [];
+}
+
+export async function createFollowUpApi(followUpData) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(followUpData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to create follow-up');
+  }
+  return data;
+}
+
+export async function updateFollowUpApi(id, followUpData) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(followUpData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update follow-up');
+  }
+  return data;
+}
+
+export async function completeFollowUpApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}/complete`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to complete follow-up');
+  }
+  return data;
+}
+
+export async function deleteFollowUpApi(id) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete follow-up');
   }
   return data;
 }
@@ -1150,8 +1288,17 @@ export default {
   getTripByIdOrSlugApi,
   createLeadApi,
   getAdminLeadsApi,
+  getLeadByIdApi,
+  claimLeadApi,
+  logLeadContactApi,
+  getSalesUsersApi,
   updateLeadStatusApi,
   assignLeadApi,
+  getFollowUpsApi,
+  createFollowUpApi,
+  updateFollowUpApi,
+  completeFollowUpApi,
+  deleteFollowUpApi,
   getTripReviewsApi,
   createReviewApi,
   generateAIItineraryApi,
