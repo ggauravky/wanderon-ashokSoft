@@ -1427,6 +1427,8 @@ export const createBookingFromQuotation = async (req, res) => {
         if (quotation.leadId) {
           await Lead.findByIdAndUpdate(quotation.leadId, { 
             status: 'CONVERTED',
+            convertedBookingId: createdBooking._id,
+            convertedBookingCode: bookingId,
             notes: `Lead successfully converted to Booking ${bookingId} from Quote ${quotation.quotationNumber}`
           });
         }

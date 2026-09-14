@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const leadSchema = new mongoose.Schema(
   {
@@ -216,7 +217,7 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry', 'callback_request'],
+      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry', 'callback_request', 'expert_callback_modal'],
       default: 'trip_page'
     },
     whatsappNotification: {
@@ -238,10 +239,15 @@ const leadSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Helper function to generate canonical reference ID
+// Helper function to generate canonical reference ID (collision-resistant)
 export function generateLeadReferenceId() {
   const year = new Date().getFullYear();
-  const rand = Math.floor(100000 + Math.random() * 900000);
+  let rand;
+  try {
+    rand = crypto.randomInt(100000, 999999);
+  } catch (e) {
+    rand = Math.floor(100000 + Math.random() * 900000);
+  }
   return `WLX-EXP-${year}-${rand}`;
 }
 
@@ -257,5 +263,7 @@ leadSchema.index({ status: 1, createdAt: -1 });
 leadSchema.index({ assignedToUser: 1, status: 1 });
 leadSchema.index({ leadType: 1, createdAt: -1 });
 leadSchema.index({ destination: 1, status: 1 });
+leadSchema.index({ priority: 1, createdAt: -1 });
+leadSchema.index({ preferredCallDate: 1 });
 
 export default mongoose.model('Lead', leadSchema);

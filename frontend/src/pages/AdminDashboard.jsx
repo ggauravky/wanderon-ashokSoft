@@ -6,7 +6,7 @@ import {
   DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, 
   Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, 
   Globe, Save, Upload, FileText, ArrowUpRight, MessageSquare, 
-  Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
+  Phone, PhoneCall, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
   Share2, Copy, Send, CreditCard, ExternalLink, Compass, Hotel, Car, Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,6 +51,7 @@ import ShareQuotationModal from '../components/ShareQuotationModal';
 import BookingDetailsModal from '../components/BookingDetailsModal';
 import MediaLibraryModal from '../components/MediaLibraryModal';
 import UploadLocationImageModal from '../components/UploadLocationImageModal';
+import AdminExpertRequests from '../components/AdminExpertRequests';
 
 const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const { 
@@ -498,17 +499,28 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
     }
   };
 
-  const handleAssignLeadAction = async (leadId, currentAssignee) => {
-    const newAssignee = window.prompt(`Assign lead to Sales Specialist:`, currentAssignee || 'Sales Concierge Specialist');
-    if (!newAssignee) return;
+  const [leadAssignModal, setLeadAssignModal] = useState(null); // { leadId, currentAssignee }
+  const [leadAssignTarget, setLeadAssignTarget] = useState('');
+  const [isAssigningLead, setIsAssigningLead] = useState(false);
+
+  const handleAssignLeadAction = (leadId, currentAssignee) => {
+    setLeadAssignModal({ leadId, currentAssignee });
+    setLeadAssignTarget(currentAssignee && currentAssignee !== 'Sales Concierge Team' ? currentAssignee : 'Aarav Sharma (Luxury Concierge)');
+  };
+
+  const handleConfirmLeadAssignment = async () => {
+    if (!leadAssignModal || !leadAssignTarget.trim()) return;
+    setIsAssigningLead(true);
     try {
-      const res = await assignLeadApi(leadId, { assignedTo: newAssignee });
+      const res = await assignLeadApi(leadAssignModal.leadId, { assignedTo: leadAssignTarget.trim() });
       if (res.lead) {
-        setLeads(prev => prev.map(l => (String(l._id || l.id) === String(leadId) ? res.lead : l)));
-        alert(`Lead successfully assigned to ${newAssignee}!`);
+        setLeads(prev => prev.map(l => (String(l._id || l.id) === String(leadAssignModal.leadId) ? res.lead : l)));
       }
+      setLeadAssignModal(null);
     } catch (err) {
       alert('Failed to assign lead: ' + err.message);
+    } finally {
+      setIsAssigningLead(false);
     }
   };
 
@@ -1034,6 +1046,7 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
           const allTabDefs = [
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
             { id: 'quotations', label: 'Quotations', icon: <FileText size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
+            { id: 'expert_requests', label: 'Expert Requests', icon: <PhoneCall size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales'] },
             { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
             { id: 'media_library', label: 'Media Library', icon: <Camera size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
             { id: 'pages', label: 'Pages CMS', icon: <Globe size={15} />, roles: ['super_admin', 'admin', 'marketing'] },
@@ -1632,6 +1645,19 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 2B: EXPERT REQUESTS (TALK TO A TRAVEL EXPERT / SALES CRM)            */}
+        {/* ========================================================================= */}
+        {activeTab === 'expert_requests' && (
+          <AdminExpertRequests 
+            onOpenQuotationBuilder={handleCreateQuotationFromLead}
+            onViewBooking={(code) => {
+              setBookingModalCode(code);
+              setShowBookingModal(true);
+            }}
+          />
         )}
 
         {/* ========================================================================= */}
@@ -3669,6 +3695,67 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Assignee Modal (Replaces window.prompt) */}
+      {leadAssignModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <UserCheck size={18} className="text-indigo-600" /> Assign Sales Specialist
+              </h3>
+              <button 
+                onClick={() => setLeadAssignModal(null)} 
+                className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Select or type the sales concierge specialist to assign this lead to:
+            </p>
+            <div className="space-y-3">
+              <select
+                value={leadAssignTarget}
+                onChange={(e) => setLeadAssignTarget(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-bold border border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-indigo-500"
+              >
+                <option value="Aarav Sharma (Luxury Concierge)">Aarav Sharma (Luxury Concierge)</option>
+                <option value="Priya Nair (Adventure Specialist)">Priya Nair (Adventure Specialist)</option>
+                <option value="Rohan Kapoor (Custom Journeys)">Rohan Kapoor (Custom Journeys)</option>
+                <option value="Neha Verma (VIP Desk)">Neha Verma (VIP Desk)</option>
+                <option value="Sales Concierge Specialist">Sales Concierge Specialist (General)</option>
+                <option value="Unassigned">Unassigned</option>
+              </select>
+              <input
+                type="text"
+                placeholder="Or type custom specialist name..."
+                value={leadAssignTarget}
+                onChange={(e) => setLeadAssignTarget(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-semibold border border-slate-200 rounded-xl bg-white outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setLeadAssignModal(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLeadAssignment}
+                disabled={isAssigningLead || !leadAssignTarget.trim()}
+                className="px-4 py-2 text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isAssigningLead && <Loader2 size={12} className="animate-spin" />}
+                Confirm Assignment
+              </button>
             </div>
           </div>
         </div>

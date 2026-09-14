@@ -9,7 +9,7 @@ import {
   getMediaCoverageReport,
   getMediaHealth
 } from '../controllers/mediaAssetController.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import { protect, adminOnly } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -17,13 +17,13 @@ const router = express.Router();
 router.get('/', listMediaAssets);
 router.post('/resolve-itinerary', resolveItineraryMediaController);
 
-// Protected Admin / Staff Operations
-router.get('/coverage', protect, getMediaCoverageReport);
-router.get('/health', protect, getMediaHealth);
-router.post('/', protect, createMediaAsset);
+// Protected Admin Operations
+router.get('/coverage', protect, adminOnly, getMediaCoverageReport);
+router.get('/health', protect, adminOnly, getMediaHealth);
+router.post('/', protect, adminOnly, createMediaAsset);
 router.get('/:id', protect, getMediaAssetById);
-router.put('/:id', protect, updateMediaAsset);
-router.patch('/:id', protect, updateMediaAsset);
-router.delete('/:id', protect, deleteMediaAsset);
+router.put('/:id', protect, adminOnly, updateMediaAsset);
+router.patch('/:id', protect, adminOnly, updateMediaAsset);
+router.delete('/:id', protect, adminOnly, deleteMediaAsset);
 
 export default router;

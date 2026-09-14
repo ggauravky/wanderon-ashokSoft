@@ -536,7 +536,10 @@ export async function getAdminLeadsApi(params = {}) {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch leads');
   }
-  return Array.isArray(data) ? data : (data.data || []);
+  if (params.envelope) {
+    return data;
+  }
+  return Array.isArray(data) ? data : (data.items || data.leads || data.data || []);
 }
 
 export async function getLeadByIdApi(leadId) {
@@ -1247,6 +1250,19 @@ export async function getMediaHealthApi() {
   return data.data;
 }
 
+// Dedicated Sales Dashboard API
+export async function getSalesDashboardApi() {
+  const response = await fetch(`${API_BASE_URL}/sales/dashboard`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch sales dashboard metrics');
+  }
+  return data;
+}
+
 export default {
   getHeaders,
   registerApi,
@@ -1342,5 +1358,6 @@ export default {
   createMediaAssetApi,
   updateMediaAssetApi,
   deleteMediaAssetApi,
-  getMediaHealthApi
+  getMediaHealthApi,
+  getSalesDashboardApi
 };

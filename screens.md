@@ -17,13 +17,13 @@
 | Customer Profile & Trips | 6 |
 | AI Itinerary Planner & Shared Plans | 2 |
 | Quotations (Admin & Public Proposal) | 4 |
-| CRM & Lead Management | 2 |
+| CRM & Lead Management | 3 |
 | Admin Control Center & Content CMS | 4 |
 | Canonical Location Media Library | 5 |
 | Real-Time Platform Analytics | 2 |
 | Creator & Influencer Partner Portal | 7 |
 | System, Fallback & Error Screens | 5 |
-| **Total Authority Screens** | **59** |
+| **Total Authority Screens** | **60** |
 
 ---
 
@@ -67,6 +67,7 @@
 | **QUO-004** | Public Client Quotation Proposal | `/quotation/:token`, `/quotations/:token` | Client (Public Token) | `frontend/src/pages/PublicQuotationView.jsx` | ACTIVE |
 | **CRM-001** | Master Bookings Ledger | `/admin` (`tab=bookings_crm`, Top Section) | Admin / Operations | `frontend/src/pages/AdminDashboard.jsx` | ACTIVE |
 | **CRM-002** | Customer Inquiries & Scheduled Callbacks | `/admin` (`tab=bookings_crm`, CRM Leads Section) | Admin / Sales | `frontend/src/pages/AdminDashboard.jsx` | ACTIVE |
+| **CRM-003** | Expert Requests & Sales Concierge CRM | `/admin` (`tab=expert_requests`) | Admin / Sales / Operations | `frontend/src/components/AdminExpertRequests.jsx` | ACTIVE |
 | **ADM-001** | Master Admin Control Center | `/admin` | Admin / Super Admin | `frontend/src/pages/AdminDashboard.jsx` | ACTIVE |
 | **ADM-002** | Discount Engine & Promo Coupons | `/admin` (`tab=coupons`) | Admin / Super Admin | `frontend/src/pages/AdminDashboard.jsx` | ACTIVE |
 | **ADM-003** | User Account & Role Authority Manager | `/admin` (`tab=users`) | Super Admin / Admin | `frontend/src/pages/AdminDashboard.jsx` | ACTIVE |
@@ -1363,6 +1364,67 @@ Real-time customer lead intake management. Captures callback requests from trip 
 
 **Related Screens:** `QUO-002 Quotation Builder Wizard`, `PUB-005 Contact`.  
 **Notes / Issues:** None.
+
+---
+
+## CRM-003 — Expert Requests & Sales Concierge CRM
+
+**Category:** CRM / Sales Operations  
+**Route:** `/admin` (`activeTab === 'expert_requests'` or `/admin?tab=expert_requests`)  
+**Audience:** Sales Specialists, Sales Concierge Team, Operations, Administrators  
+**Primary Component:** `frontend/src/components/AdminExpertRequests.jsx`  
+**Layout:** Enterprise Sales Command Center with Real-Time KPI Cards, Quick Filters, Queue Ledger, and Slide-Over Dossier Drawer  
+
+**Purpose:**  
+Authoritative operational workbench for handling high-intent "Talk to a Travel Expert" callback inquiries. Replaces fragmented inquiry tables with a unified sales pipeline: lead claim, assignment, contact outcome logging, follow-up scheduling, qualification, prefilled quotation drafting, and booking order conversion.
+
+**Data Dependencies:**  
+- Leads API: `GET /api/leads?leadType=callback_request&envelope=true` (supports pagination, search, quick filters)  
+- Claim Lead API: `POST /api/leads/:id/claim` (atomic 1-click claim, 409 conflict detection)  
+- Assign Lead API: `PUT /api/leads/:id/assign` (modal-based assignment, no `window.prompt`)  
+- Log Contact Outcome API: `POST /api/leads/:id/contact` (outcomes: `CONNECTED`, `BUSY`, `CALL_LATER`, `NO_ANSWER`, `WHATSAPP_SENT`, duration, notes)  
+- Follow-Up API: `POST /api/follow-ups` (linked to lead and scheduled on sales calendar)  
+- Sales Users API: `GET /api/leads/sales-users`  
+- Quotations Engine: Direct transition to `QuotationBuilderWizard` with pre-filled customer details  
+- Zero Mock Policy: Real database counts and metrics only; zero fake fallback records when DB is connected or empty  
+
+**Key Elements:**  
+- **KPI Metrics Ribbon:** Total Inquiries, Pending/Uncontacted Callbacks, Scheduled Today, Qualified Pipeline, and Converted Bookings  
+- **Quick Filter Bar:** `All`, `Due Today`, `Overdue`, `New Inquiries`, `Unassigned`, `My Leads`, `Qualified`  
+- **Multi-Factor Search & Status Filter:** Real-time search across traveler name, reference ID (`WLX-EXP-YYYY-XXXXXX`), phone, and trip title  
+- **Operational Data Table (Desktop) & Cards (Mobile):**  
+  - Traveler name, contact badges (phone dialer, WhatsApp direct chat link)  
+  - Canonical Reference ID badge (`WLX-EXP-YYYY-XXXXXX`)  
+  - Expedition snapshot with title, destination tag, and captured trip price snapshot  
+  - Structured topics tags (e.g., `Itinerary Customization`, `Luxury Stays`, `Flights & Logistics`)  
+  - Preferred callback schedule with overdue warning indicator  
+  - Sales specialist assignee badge with 1-click Claim and Assign buttons  
+  - Status chip (`NEW`, `CONTACTED`, `IN_PROGRESS`, `QUALIFIED`, `CONVERTED`, `LOST`)  
+- **Slide-Over Lead Dossier Drawer:**  
+  - Complete traveler profile & metadata  
+  - Captured trip requirements & custom notes  
+  - Action toolbar: Atomic Claim, Assign Specialist, Log Contact Outcome, Schedule Follow-Up, Mark Lost, Create Proposal  
+  - Contact history timeline showing chronological attempts, channels, and outcomes  
+  - Linked commercial documents: active quotation cards and converted booking order pills  
+
+**Primary Actions:**  
+- **Claim Lead (1-Click):** Atomically assigns the lead to the active sales agent, transitions status to `CONTACTED`, and logs audit trail  
+- **Assign Specialist Modal:** Replaces legacy prompt with searchable modal containing active sales concierges and custom input  
+- **Log Contact Outcome Modal:** Records channel (call, WhatsApp, email), outcome, duration, and notes  
+- **Schedule Follow-Up Modal:** Sets callback date, call window, and priority, syncing with FollowUp collection  
+- **Mark Lost Modal:** Captures required lost reason (e.g. Budget Mismatch, Date Unavailable) with status update  
+- **Create Quotation Proposal:** Launches `QuotationBuilderWizard` with prefilled customer name, phone, email, destination, and trip snapshot  
+- **View Converted Booking:** Opens `BookingDetailsModal` directly from the lead drawer if the inquiry converted  
+
+**Major States:**  
+- Loading skeleton  
+- Filtered queue ledger  
+- Selected lead dossier slide-over open  
+- Modal states (Assign, Contact Outcome, Follow-Up, Mark Lost)  
+- Zero matching inquiries state  
+
+**Related Screens:** `TRIP-003 Trip Details`, `QUO-002 Quotation Builder Wizard`, `CRM-001 Master Bookings Ledger`, `MOD-011 Master Booking Details Modal`.  
+**Notes / Issues:** Fully backed by automated test suite (`backend/test_expert_requests_sales_workflow.js`, 33/33 passing).
 
 ---
 

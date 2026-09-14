@@ -20,20 +20,18 @@ export const getSalesDashboard = async (req, res) => {
     let leadFilter = {};
     let quotationFilter = {};
     let followUpFilter = {};
+    const todayStr = new Date().toISOString().split('T')[0];
 
     if (userRole === 'sales' && userId) {
       leadFilter = {
         $or: [
-          { assignedToUser: userId },
-          { assignedTo: userName },
-          { assignedTo: 'Sales Concierge Team' },
-          { assignedTo: '' },
-          { assignedTo: null }
+          ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
+          { assignedTo: userName }
         ]
       };
       quotationFilter = {
         $or: [
-          { assignedTo: userId },
+          ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedTo: userId }] : []),
           { createdBy: userId }
         ]
       };
@@ -41,6 +39,8 @@ export const getSalesDashboard = async (req, res) => {
     }
 
     let totalLeads = 0;
+    let openRequestsCount = 0;
+    let dueTodayCount = 0;
     let leadsByStage = { NEW: 0, CONTACTED: 0, IN_PROGRESS: 0, QUALIFIED: 0, CONVERTED: 0, LOST: 0 };
     let totalQuotations = 0;
     let quotationsByStatus = { DRAFT: 0, SENT: 0, VIEWED: 0, APPROVED: 0, REJECTED: 0, CONVERTED: 0 };
@@ -62,6 +62,21 @@ export const getSalesDashboard = async (req, res) => {
           }
         }
         totalConverted = leadsByStage.CONVERTED || 0;
+
+        // Open requests in unassigned pool
+        openRequestsCount = await Lead.countDocuments({
+          $and: [
+            { $or: [{ assignedToUser: null }, { assignedToUser: { $exists: false } }] },
+            { $or: [{ assignedTo: 'Sales Concierge Team' }, { assignedTo: '' }, { assignedTo: null }, { assignedTo: { $exists: false } }] }
+          ]
+        });
+
+        // Due today for current user
+        dueTodayCount = await Lead.countDocuments({
+          ...leadFilter,
+          preferredCallDate: todayStr,
+          status: { $nin: ['CONVERTED', 'LOST'] }
+        });
 
         // 2. Quotations
         totalQuotations = await Quotation.countDocuments(quotationFilter);
@@ -104,15 +119,19 @@ export const getSalesDashboard = async (req, res) => {
       }
     }
 
-    // Fallback counts for memory mode
-    if (totalLeads === 0 && totalQuotations === 0) {
-      totalLeads = 12;
-      leadsByStage = { NEW: 4, CONTACTED: 3, IN_PROGRESS: 2, QUALIFIED: 1, CONVERTED: 2, LOST: 0 };
-      totalConverted = 2;
-      totalQuotations = memoryQuotations.length || 5;
-      quotationsByStatus = { DRAFT: 1, SENT: 2, VIEWED: 1, APPROVED: 1, REJECTED: 0, CONVERTED: 1 };
-      pendingFollowUpsCount = memoryFollowUps.filter(f => f.status === 'pending').length || 2;
-      totalClosedRevenue = 145000;
+    // Fallback counts ONLY for offline local development when database is disconnected
+    if (!isDbConnected() && process.env.NODE_ENV !== 'production' && process.env.ALLOW_IN_MEMORY_FALLBACK === 'true') {
+      if (totalLeads === 0 && totalQuotations === 0) {
+        totalLeads = 12;
+        openRequestsCount = 3;
+        dueTodayCount = 2;
+        leadsByStage = { NEW: 4, CONTACTED: 3, IN_PROGRESS: 2, QUALIFIED: 1, CONVERTED: 2, LOST: 0 };
+        totalConverted = 2;
+        totalQuotations = memoryQuotations.length || 5;
+        quotationsByStatus = { DRAFT: 1, SENT: 2, VIEWED: 1, APPROVED: 1, REJECTED: 0, CONVERTED: 1 };
+        pendingFollowUpsCount = memoryFollowUps.filter(f => f.status === 'pending').length || 2;
+        totalClosedRevenue = 145000;
+      }
     }
 
     const conversionRate = totalLeads > 0 
@@ -128,6 +147,8 @@ export const getSalesDashboard = async (req, res) => {
       },
       metrics: {
         totalAssignedLeads: totalLeads,
+        openRequestsCount,
+        dueTodayCount,
         leadsByStage,
         totalQuotations,
         quotationsByStatus,

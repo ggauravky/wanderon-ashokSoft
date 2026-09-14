@@ -136,11 +136,6 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
     setIsSubmitting(true);
 
     try {
-      const combinedMessage = [
-        selectedTopics.length > 0 ? `Inquiry Topics: ${selectedTopics.join(', ')}` : '',
-        customMessage.trim() ? `Note: ${customMessage.trim()}` : ''
-      ].filter(Boolean).join('\n');
-
       const batchText = typeof selectedBatch === 'object' ? selectedBatch?.dates : (selectedBatch || trip.nextBatch || '');
 
       const payload = {
@@ -149,7 +144,11 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
         phone: cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`,
         leadType: 'callback_request',
         tripId: String(trip.slug || trip.id || trip._id || ''),
+        tripRef: trip._id || null,
+        tripSlug: trip.slug || '',
         tripTitle: trip.title || 'Expedition',
+        tripPriceSnapshot: Number(trip.price) || 0,
+        selectedBatch: batchText,
         destination: trip.destination || trip.location || 'India',
         travelersCount: Number(travelersCount) || 1,
         travelMonth: trip.duration || '',
@@ -157,12 +156,13 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
         budgetPerPerson: trip.price ? `₹${trip.price.toLocaleString()}` : '',
         preferredCallDate: resolvedDate,
         preferredCallWindow: callWindow,
-        message: combinedMessage,
+        topics: selectedTopics,
+        message: customMessage.trim(),
         source: 'trip_page'
       };
 
       const res = await createLeadApi(payload);
-      setSubmittedLead(res.lead || payload);
+      setSubmittedLead(res.lead || res);
     } catch (err) {
       console.error('Callback request failed:', err);
       setErrorMsg(err.message || 'Unable to schedule callback. Please try again or chat via WhatsApp.');
@@ -248,7 +248,11 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
                   {trip.title}
                 </h4>
                 <div className="text-[10px] text-slate-300 font-semibold mt-0.5">
-                  Starting at <span className="text-white font-extrabold">₹{Number(trip.price || 18500).toLocaleString()}</span>
+                  {trip.price ? (
+                    <>Starting at <span className="text-white font-extrabold">₹{Number(trip.price).toLocaleString()}</span></>
+                  ) : (
+                    <span className="text-white font-bold">Price on request</span>
+                  )}
                   {(selectedBatch?.dates || trip.nextBatch) && (
                     <span className="ml-2 text-emerald-200">
                       • Batch: {selectedBatch?.dates || trip.nextBatch}
@@ -300,7 +304,9 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
                   </div>
                   <div className="flex justify-between items-center text-slate-600 font-medium">
                     <span>Reference ID:</span>
-                    <span className="font-mono font-bold text-slate-500">{submittedLead._id || 'REQ-' + Math.floor(100000 + Math.random() * 900000)}</span>
+                    <span className="font-mono font-bold text-slate-900 bg-slate-200/70 px-2 py-0.5 rounded text-[11px]">
+                      {submittedLead.referenceId || submittedLead.lead?.referenceId || submittedLead._id}
+                    </span>
                   </div>
                 </div>
 

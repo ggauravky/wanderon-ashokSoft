@@ -57,6 +57,13 @@ export const createLead = async (req, res) => {
       return res.status(400).json({ message: 'Please provide a valid 10-digit phone number.' });
     }
 
+    if (preferredCallDate) {
+      const parsedDate = new Date(preferredCallDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Please provide a valid callback date.' });
+      }
+    }
+
     const formattedPhone = cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`;
     const determinedLeadType = leadType || (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
     const allowedSources = [
@@ -67,7 +74,8 @@ export const createLead = async (req, res) => {
       'Website Lead Form',
       'website_lead_form',
       'expert_inquiry',
-      'callback_request'
+      'callback_request',
+      'expert_callback_modal'
     ];
     const determinedSource = (source && allowedSources.includes(source))
       ? source
@@ -86,7 +94,12 @@ export const createLead = async (req, res) => {
     }
 
     // Parse structured topics
-    const cleanTopics = Array.isArray(topics) ? topics.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim()) : [];
+    let cleanTopics = [];
+    if (Array.isArray(topics)) {
+      cleanTopics = topics.filter(t => typeof t === 'string' && t.trim()).map(t => t.trim());
+    } else if (typeof topics === 'string' && topics.trim()) {
+      cleanTopics = topics.split(',').map(t => t.trim()).filter(Boolean);
+    }
 
     // 2. Duplicate / Spam Throttling (15-minute cool-down window per user/trip)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
@@ -117,6 +130,11 @@ export const createLead = async (req, res) => {
         });
       }
     } else {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
+        return res.status(503).json({
+          message: 'Database service is currently unavailable. Please try again later.'
+        });
+      }
       // In-Memory Duplicate Check for offline dev
       const recentMemLead = memoryLeads.find(l =>
         (l.email === cleanEmail || l.phone === formattedPhone) &&
@@ -134,8 +152,8 @@ export const createLead = async (req, res) => {
       }
     }
 
-    // 3. Create and Persist Lead
-    const referenceId = generateLeadReferenceId();
+    // 3. Create and Persist Lead (With Reference ID retry)
+    let referenceId = generateLeadReferenceId();
 
     const leadPayload = {
       referenceId,
@@ -175,8 +193,26 @@ export const createLead = async (req, res) => {
 
     let newLead = null;
     if (isDbConnected()) {
-      newLead = await Lead.create(leadPayload);
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          newLead = await Lead.create(leadPayload);
+          break;
+        } catch (dbErr) {
+          if (dbErr.code === 11000 && retries > 1) {
+            retries--;
+            leadPayload.referenceId = generateLeadReferenceId();
+            continue;
+          }
+          throw dbErr;
+        }
+      }
     } else {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
+        return res.status(503).json({
+          message: 'Database service is currently unavailable. Please try again later.'
+        });
+      }
       // Memory fallback only when DB is completely offline in development
       newLead = {
         _id: 'lead_' + Date.now(),
@@ -230,24 +266,70 @@ export const getLeads = async (req, res) => {
       leadType,
       destination,
       assignedToUser,
+      quickFilter,
       page = 1,
       limit = 100,
-      sortBy = 'newest'
+      sortBy = 'newest',
+      envelope
     } = req.query;
 
     const andConditions = [];
+    const todayStr = new Date().toISOString().split('T')[0];
 
     // RBAC Scoping for Sales: only see own assigned leads or unassigned pool
     if (userRole === 'sales' && !isSuperOrAdmin) {
       andConditions.push({
         $or: [
-          { assignedToUser: userId },
+          ...(userId && mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
           { assignedTo: userName },
           { assignedToUser: null },
           { assignedTo: 'Sales Concierge Team' },
           { assignedTo: '' }
         ]
       });
+    }
+
+    // Quick Filter support
+    if (quickFilter) {
+      if (quickFilter === 'due_today') {
+        andConditions.push({ preferredCallDate: todayStr });
+      } else if (quickFilter === 'overdue') {
+        andConditions.push({
+          preferredCallDate: { $ne: '', $lt: todayStr },
+          status: { $nin: ['CONVERTED', 'LOST'] }
+        });
+      } else if (quickFilter === 'new') {
+        andConditions.push({ status: 'NEW' });
+      } else if (quickFilter === 'qualified') {
+        andConditions.push({ status: 'QUALIFIED' });
+      } else if (quickFilter === 'unassigned') {
+        andConditions.push({
+          $and: [
+            {
+              $or: [
+                { assignedToUser: null },
+                { assignedToUser: { $exists: false } }
+              ]
+            },
+            {
+              $or: [
+                { assignedTo: null },
+                { assignedTo: '' },
+                { assignedTo: 'Sales Concierge Team' },
+                { assignedTo: 'Unassigned' },
+                { assignedTo: { $exists: false } }
+              ]
+            }
+          ]
+        });
+      } else if (quickFilter === 'mine' && userId) {
+        andConditions.push({
+          $or: [
+            ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
+            { assignedTo: userName }
+          ]
+        });
+      }
     }
 
     // Specific user assignment filter
@@ -263,7 +345,7 @@ export const getLeads = async (req, res) => {
       } else if (assignedToUser === 'my' && userId) {
         andConditions.push({
           $or: [
-            { assignedToUser: userId },
+            ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
             { assignedTo: userName }
           ]
         });
@@ -329,8 +411,12 @@ export const getLeads = async (req, res) => {
         .limit(Number(limit))
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
-        .populate('quotations', 'quotationNumber status pricing createdAt');
+        .populate('quotations', 'quotationNumber status pricing createdAt')
+        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing');
     } else {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
+        return res.status(503).json({ message: 'Database service is currently unavailable.' });
+      }
       // Memory fallback for offline dev
       leads = memoryLeads.filter(l => {
         if (userRole === 'sales' && !isSuperOrAdmin) {
@@ -340,6 +426,11 @@ export const getLeads = async (req, res) => {
             !l.assignedTo;
           if (!isAssigned) return false;
         }
+        if (quickFilter === 'due_today' && l.preferredCallDate !== todayStr) return false;
+        if (quickFilter === 'overdue' && (l.preferredCallDate >= todayStr || ['CONVERTED', 'LOST'].includes(l.status))) return false;
+        if (quickFilter === 'new' && l.status !== 'NEW') return false;
+        if (quickFilter === 'qualified' && l.status !== 'QUALIFIED') return false;
+        if (quickFilter === 'unassigned' && l.assignedToUser && l.assignedTo !== 'Sales Concierge Team') return false;
         if (status && status !== 'all' && l.status !== status) return false;
         if (priority && priority !== 'all' && l.priority !== priority) return false;
         if (leadType && leadType !== 'all' && l.leadType !== leadType) return false;
@@ -370,6 +461,18 @@ export const getLeads = async (req, res) => {
       });
     }
 
+    if (envelope === 'true' || req.query.paginated === 'true') {
+      return res.json({
+        success: true,
+        items: leads,
+        leads,
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      });
+    }
+
     res.json(leads);
   } catch (error) {
     console.error('Get leads error:', error);
@@ -397,6 +500,7 @@ export const getLeadById = async (req, res) => {
           .populate('assignedToUser', 'name email role avatar phone')
           .populate('tripRef', 'title slug price destination location image')
           .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+          .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
           .populate('userId', 'name email phone avatar');
       }
       if (!lead) {
@@ -404,9 +508,13 @@ export const getLeadById = async (req, res) => {
           .populate('assignedToUser', 'name email role avatar phone')
           .populate('tripRef', 'title slug price destination location image')
           .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+          .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
           .populate('userId', 'name email phone avatar');
       }
     } else {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
+        return res.status(503).json({ message: 'Database service is currently unavailable.' });
+      }
       lead = memoryLeads.find(l => String(l._id) === String(id) || l.referenceId === id);
     }
 
@@ -459,16 +567,18 @@ export const claimLead = async (req, res) => {
             { assignedToUser: null },
             { assignedTo: 'Sales Concierge Team' },
             { assignedTo: '' },
-            { assignedToUser: userId } // idempotently allows reclaiming own lead
+            { assignedTo: null },
+            ...(userId && mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
+            { assignedTo: userName }
           ]
         },
         {
           $set: {
-            assignedToUser: userId,
+            assignedToUser: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null,
             assignedToUserName: userName,
             assignedTo: userName,
             assignedAt: new Date(),
-            assignedBy: userId,
+            assignedBy: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null,
             assignedByName: userName,
             status: 'IN_PROGRESS'
           }
@@ -527,7 +637,9 @@ export const claimLead = async (req, res) => {
 export const assignLead = async (req, res) => {
   try {
     const { id } = req.params;
-    const { assignedToUserId, assignedToName, notes } = req.body;
+    const assignedToName = req.body.assignedToName || req.body.assignedTo;
+    const assignedToUserId = req.body.assignedToUserId || req.body.assignedToId || req.body.assignedToUser;
+    const notes = req.body.notes;
     const assignerId = req.user?._id || req.user?.id;
     const assignerName = req.user?.name || 'Administrator';
 
@@ -537,13 +649,12 @@ export const assignLead = async (req, res) => {
 
     let targetUser = null;
     if (assignedToUserId && isDbConnected() && mongoose.Types.ObjectId.isValid(assignedToUserId)) {
-      targetUser = await User.findById(assignedToUserId).select('name email role avatar');
-      if (!targetUser) {
-        return res.status(404).json({ message: 'Selected sales specialist user not found.' });
-      }
+      try {
+        targetUser = await User.findById(assignedToUserId).select('name email role avatar');
+      } catch (e) {}
     }
 
-    const finalUserId = targetUser ? targetUser._id : (assignedToUserId || null);
+    const finalUserId = targetUser ? targetUser._id : (assignedToUserId && mongoose.Types.ObjectId.isValid(assignedToUserId) ? assignedToUserId : null);
     const finalUserName = targetUser ? targetUser.name : (assignedToName || 'Sales Specialist');
 
     let lead = null;
@@ -555,13 +666,15 @@ export const assignLead = async (req, res) => {
       lead.assignedToUserName = finalUserName;
       lead.assignedTo = finalUserName;
       lead.assignedAt = new Date();
-      lead.assignedBy = assignerId;
+      lead.assignedBy = (assignerId && mongoose.Types.ObjectId.isValid(assignerId)) ? assignerId : null;
       lead.assignedByName = assignerName;
       if (notes !== undefined && notes !== '') lead.notes = notes;
       if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
 
       await lead.save();
-      await lead.populate('assignedToUser', 'name email role avatar phone');
+      if (lead.assignedToUser) {
+        await lead.populate('assignedToUser', 'name email role avatar phone');
+      }
     } else {
       const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
       if (memIndex !== -1) {
@@ -611,13 +724,30 @@ export const logLeadContact = async (req, res) => {
       nextFollowUpNotes = ''
     } = req.body;
 
+    const outcomeMap = {
+      'spoke_interested': 'CONNECTED',
+      'connected': 'CONNECTED',
+      'no_answer': 'NO_ANSWER',
+      'busy': 'BUSY',
+      'call_later': 'CALL_LATER',
+      'call_back_later': 'CALL_LATER',
+      'wrong_number': 'WRONG_NUMBER',
+      'whatsapp_sent': 'WHATSAPP_SENT',
+      'whatsapp_shared': 'WHATSAPP_SENT',
+      'email_sent': 'EMAIL_SENT',
+      'budget_unfit': 'BUSY',
+      'dates_not_final': 'CALL_LATER'
+    };
+    const normalizedOutcome = outcomeMap[outcome?.toLowerCase?.()] || outcome?.toUpperCase?.();
     const validOutcomes = ['CONNECTED', 'BUSY', 'CALL_LATER', 'WRONG_NUMBER', 'WHATSAPP_SENT', 'EMAIL_SENT', 'NO_ANSWER'];
-    if (!outcome || !validOutcomes.includes(outcome)) {
+    if (!normalizedOutcome || !validOutcomes.includes(normalizedOutcome)) {
       return res.status(400).json({ message: `Please provide a valid contact outcome (${validOutcomes.join(', ')}).` });
     }
 
     const userId = req.user?._id || req.user?.id;
     const userName = req.user?.name || 'Sales Specialist';
+    const userRole = (req.user?.role || 'sales').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
     let lead = null;
     if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
@@ -628,13 +758,24 @@ export const logLeadContact = async (req, res) => {
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
 
+    // IDOR protection: Sales cannot log contact on a lead assigned to another specialist
+    if (userRole === 'sales' && !isSuperOrAdmin) {
+      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
+      const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
+      const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
+      const isOwner = isUnassigned || isAssignedToMe;
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Access denied: You cannot log contact for a lead assigned to another specialist.' });
+      }
+    }
+
     // 1. Append Call Outcome
     const outcomeEntry = {
-      outcome,
+      outcome: normalizedOutcome,
       channel,
       notes: notes.trim(),
       loggedAt: new Date(),
-      loggedBy: userId,
+      loggedBy: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null,
       loggedByName: userName
     };
 
@@ -650,9 +791,13 @@ export const logLeadContact = async (req, res) => {
       lead.firstContactAt = new Date();
     }
 
-    // Auto-advance status if currently NEW
-    if (lead.status === 'NEW') {
-      lead.status = outcome === 'CONNECTED' ? 'CONTACTED' : 'IN_PROGRESS';
+    // Auto-advance status if currently NEW or IN_PROGRESS
+    if (lead.status === 'NEW' || lead.status === 'IN_PROGRESS') {
+      if (normalizedOutcome === 'CONNECTED') {
+        lead.status = 'CONTACTED';
+      } else if (lead.status === 'NEW') {
+        lead.status = 'IN_PROGRESS';
+      }
     }
 
     // 3. Handle Next Follow-Up if requested
@@ -666,11 +811,11 @@ export const logLeadContact = async (req, res) => {
           try {
             createdFollowUp = await FollowUp.create({
               leadId: lead._id,
-              customerId: lead.userId || null,
-              salesUserId: userId,
+              customerId: (lead.userId && mongoose.Types.ObjectId.isValid(lead.userId)) ? lead.userId : null,
+              salesUserId: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null,
               salesUserName: userName,
-              title: `Follow-up on ${lead.tripTitle || lead.destination} (${outcome})`,
-              notes: nextFollowUpNotes || notes || `Follow-up after ${outcome.toLowerCase()}`,
+              title: `Follow-up on ${lead.tripTitle || lead.destination} (${normalizedOutcome})`,
+              notes: nextFollowUpNotes || notes || `Follow-up after ${normalizedOutcome.toLowerCase()}`,
               scheduledAt: scheduledDate,
               callWindow: nextFollowUpWindow,
               channel: channel === 'whatsapp' ? 'whatsapp' : 'call',
@@ -711,6 +856,10 @@ export const updateLeadStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, priority, notes, lostReason, lostReasonDetail } = req.body;
+    const userId = req.user?._id || req.user?.id;
+    const userName = req.user?.name || 'Sales Specialist';
+    const userRole = (req.user?.role || 'sales').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
     const validStatuses = ['NEW', 'CONTACTED', 'IN_PROGRESS', 'QUALIFIED', 'CONVERTED', 'LOST'];
     if (status && !validStatuses.includes(status)) {
@@ -729,6 +878,17 @@ export const updateLeadStatus = async (req, res) => {
     }
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
+
+    // IDOR protection: Sales cannot change status of another specialist's lead
+    if (userRole === 'sales' && !isSuperOrAdmin) {
+      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
+      const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
+      const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
+      const isOwner = isUnassigned || isAssignedToMe;
+      if (!isOwner) {
+        return res.status(403).json({ message: 'Access denied: You cannot update a lead assigned to another specialist.' });
+      }
+    }
 
     if (status) lead.status = status;
     if (priority) lead.priority = priority;
@@ -762,8 +922,14 @@ export const getSalesUsers = async (req, res) => {
   try {
     let salesUsers = [];
     if (isDbConnected()) {
+      const queryRole = req.query.role;
+      const roleFilter = queryRole 
+        ? { role: queryRole } 
+        : { role: { $in: ['sales', 'admin', 'super_admin', 'operations'] } };
+
       const rawUsers = await User.find({
-        role: { $in: ['sales', 'admin', 'super_admin', 'operations'] }
+        ...roleFilter,
+        isActive: { $ne: false }
       }).select('name email role avatar phone').lean();
 
       // Aggregate active assigned leads count per user
@@ -797,6 +963,9 @@ export const getSalesUsers = async (req, res) => {
         activeLeadsCount: countMap[String(u._id)] || 0
       }));
     } else {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
+        return res.status(503).json({ message: 'Database service is currently unavailable.' });
+      }
       salesUsers = [
         {
           _id: 'usr_admin',

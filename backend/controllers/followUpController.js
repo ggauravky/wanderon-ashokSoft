@@ -79,7 +79,7 @@ export const getFollowUps = async (req, res) => {
       }
     }
 
-    if (followUps.length === 0) {
+    if (!isDbConnected() && process.env.NODE_ENV !== 'production' && process.env.ALLOW_IN_MEMORY_FALLBACK === 'true') {
       followUps = memoryFollowUps.filter(f => {
         if (userRole === 'sales' && userId && String(f.salesUserId) !== String(userId) && String(f.salesUserId) !== 'usr_sales_1') return false;
         if (status && status !== 'All' && f.status !== status) return false;

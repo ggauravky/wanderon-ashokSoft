@@ -18,6 +18,8 @@ import About from './pages/About';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminRoute from './components/AdminRoute';
+import RoleProtectedRoute from './components/RoleProtectedRoute';
+import SalesPortal from './pages/SalesPortal';
 import InfluencerDashboard from './pages/InfluencerDashboard';
 import InfluencerLanding from './pages/InfluencerLanding';
 import InfluencerSignup from './pages/InfluencerSignup';
@@ -59,8 +61,17 @@ function App() {
             <Route path="quotations/:token" element={<PublicQuotationView />} />
             <Route path="profile" element={<Profile />} />
             
-            {/* Admin Routes */}
+            {/* Staff & Admin Routes */}
             <Route path="admin/login" element={<AdminLogin />} />
+            
+            {/* Dedicated Sales Portal (Sales & Admin Allowed) */}
+            <Route path="admin/sales" element={
+              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
+                <SalesPortal />
+              </RoleProtectedRoute>
+            } />
+
+            {/* Master Admin Dashboard (Admin & Super Admin ONLY - Sales Strictly Denied) */}
             <Route path="admin" element={
               <AdminRoute>
                 <AdminDashboard />
@@ -72,9 +83,9 @@ function App() {
               </AdminRoute>
             } />
             <Route path="admin/quotations/:id" element={
-              <AdminRoute>
+              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
                 <QuotationDetail />
-              </AdminRoute>
+              </RoleProtectedRoute>
             } />
             <Route path="admin/quotations/:quoteId/edit" element={
               <AdminRoute>

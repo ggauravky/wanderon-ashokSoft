@@ -4,6 +4,8 @@ import User from '../models/User.js';
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
 const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
+const SALES_1_EMAIL = (process.env.SALES_1_EMAIL || 'ashoksoftsales1@gmail.com').toLowerCase();
+const SALES_2_EMAIL = (process.env.SALES_2_EMAIL || 'ashoksoftsales2@gmail.com').toLowerCase();
 
 export const protect = async (req, res, next) => {
   let token;
@@ -29,7 +31,7 @@ export const protect = async (req, res, next) => {
         }
       }
 
-      // Memory Fallback / Admin / Influencer mock tokens
+      // Memory Fallback / Admin / Influencer / Sales mock tokens
       if (!req.user) {
         if (decoded.email === ADMIN_EMAIL || decoded.id === 'usr_admin') {
           req.user = {
@@ -47,6 +49,22 @@ export const protect = async (req, res, next) => {
             role: 'influencer',
             influencerStatus: 'approved'
           };
+        } else if (decoded.email === SALES_1_EMAIL || decoded.id === 'usr_sales_1') {
+          req.user = {
+            _id: 'usr_sales_1',
+            name: 'AshokSoft Sales 1',
+            email: SALES_1_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
+        } else if (decoded.email === SALES_2_EMAIL || decoded.id === 'usr_sales_2') {
+          req.user = {
+            _id: 'usr_sales_2',
+            name: 'AshokSoft Sales 2',
+            email: SALES_2_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
         } else if (decoded.id) {
           req.user = {
             _id: decoded.id,
@@ -60,6 +78,10 @@ export const protect = async (req, res, next) => {
 
       if (!req.user) {
         return res.status(401).json({ message: 'User not found or session expired. Please log in again.' });
+      }
+
+      if (req.user.isActive === false) {
+        return res.status(403).json({ message: 'Access denied: Account is deactivated. Please contact an administrator.' });
       }
 
       next();
