@@ -40,9 +40,9 @@ const RoleProtectedRoute = ({ allowedRoles = ['admin', 'super_admin'], children 
   }
 
   // 3. Role is NOT Allowed -> Direct Role-Appropriate Handling
-  // If Sales employee tries to access full /admin, redirect immediately to their dedicated portal /admin/sales
+  // If Sales employee tries to access full /admin, redirect immediately to their dedicated portal /staff/sales
   if (userRole === 'sales') {
-    return <Navigate to="/admin/sales" replace />;
+    return <Navigate to="/staff/sales" replace />;
   }
 
   // If normal customer or creator tries to access staff portals, show clean Access Denied page

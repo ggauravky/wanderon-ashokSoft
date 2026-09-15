@@ -4,20 +4,17 @@ import {
   PhoneCall, Clock, CheckCircle2, AlertCircle, Search, Filter, 
   User, Mail, Phone, ExternalLink, Calendar, MapPin, Sparkles, 
   ShieldCheck, MessageSquare, Plus, CheckSquare, X, ChevronRight,
-  ArrowRight, UserCheck, RefreshCw, Eye, Tag, FileText, Ticket,
+  ArrowRight, RefreshCw, Eye, Tag, FileText, Ticket,
   Loader2, Send, CornerDownRight, AlertTriangle, MessageCircle, MoreVertical,
-  Headphones, Users
+  Headphones
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   getAdminLeadsApi, 
   getLeadByIdApi, 
-  claimLeadApi, 
-  assignLeadApi, 
   logLeadContactApi, 
   updateLeadStatusApi, 
-  getSalesUsersApi,
   createFollowUpApi 
 } from '../services/api.js';
 
@@ -81,10 +78,9 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [quickFilter, setQuickFilter] = useState('all'); // 'all' | 'new' | 'unassigned' | 'mine' | 'due_today' | 'overdue' | 'qualified'
+  const [quickFilter, setQuickFilter] = useState('all'); // 'all' | 'new' | 'due_today' | 'overdue' | 'in_progress' | 'qualified'
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  const [salesFilter, setSalesFilter] = useState('all');
   const [destinationFilter, setDestinationFilter] = useState('all');
 
   // Pagination
@@ -98,22 +94,16 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Modals
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignModalLead, setAssignModalLead] = useState(null);
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showLostModal, setShowLostModal] = useState(false);
-
-  // Sales Specialist Directory
-  const [salesUsers, setSalesUsers] = useState([]);
-  const [claimLoadingId, setClaimLoadingId] = useState(null);
+  const [lostModalLead, setLostModalLead] = useState(null);
 
   // Drawer Keyboard Listener (Escape to close)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (showAssignModal) setShowAssignModal(false);
-        else if (showOutcomeModal) setShowOutcomeModal(false);
+        if (showOutcomeModal) setShowOutcomeModal(false);
         else if (showFollowUpModal) setShowFollowUpModal(false);
         else if (showLostModal) setShowLostModal(false);
         else if (isDrawerOpen) setIsDrawerOpen(false);
@@ -121,7 +111,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen, showAssignModal, showOutcomeModal, showFollowUpModal, showLostModal]);
+  }, [isDrawerOpen, showOutcomeModal, showFollowUpModal, showLostModal]);
 
   // Debounce Search
   useEffect(() => {
@@ -131,19 +121,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
     }, 280);
     return () => clearTimeout(handler);
   }, [searchQuery]);
-
-  // Fetch Sales Specialists for Assignment
-  useEffect(() => {
-    async function loadSalesReps() {
-      try {
-        const users = await getSalesUsersApi();
-        setSalesUsers(users || []);
-      } catch (e) {
-        console.warn('Unable to load sales specialists:', e.message);
-      }
-    }
-    loadSalesReps();
-  }, []);
 
   // Fetch Leads on filter changes
   const fetchLeads = async (isSilent = false) => {
@@ -158,7 +135,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         status: statusFilter,
         priority: priorityFilter,
         destination: destinationFilter,
-        assignedToUser: salesFilter === 'unassigned' ? 'unassigned' : (salesFilter === 'mine' ? 'my' : (salesFilter !== 'all' ? salesFilter : undefined)),
         quickFilter: quickFilter !== 'all' ? quickFilter : undefined,
         sortBy: 'newest'
       };
@@ -177,7 +153,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
 
   useEffect(() => {
     fetchLeads();
-  }, [debouncedSearch, quickFilter, statusFilter, priorityFilter, salesFilter, destinationFilter]);
+  }, [debouncedSearch, quickFilter, statusFilter, priorityFilter, destinationFilter]);
 
   // Open Drawer and load complete lead dossier
   const handleOpenDrawer = async (lead) => {
@@ -196,38 +172,11 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
     }
   };
 
-  // 1-Click Atomic Claim Request
-  const handleClaim = async (leadId, e) => {
-    if (e) e.stopPropagation();
-    setClaimLoadingId(leadId);
-    try {
-      const res = await claimLeadApi(leadId);
-      if (res.lead) {
-        setLeads(prev => prev.map(l => (String(l._id || l.id) === String(leadId) ? res.lead : l)));
-        if (selectedLead && String(selectedLead._id || selectedLead.id) === String(leadId)) {
-          setSelectedLead(res.lead);
-        }
-      }
-    } catch (err) {
-      alert(err.message || 'Failed to claim request. It may have already been claimed.');
-      fetchLeads(true);
-    } finally {
-      setClaimLoadingId(null);
-    }
-  };
-
-  // Open Assignment Modal (Replaces legacy window.prompt)
-  const handleOpenAssignModal = (lead, e) => {
-    if (e) e.stopPropagation();
-    setAssignModalLead(lead);
-    setShowAssignModal(true);
-  };
-
   // Update Status directly
   const handleStatusChange = async (leadId, newStatus) => {
     if (newStatus === 'LOST') {
       const lead = leads.find(l => String(l._id || l.id) === String(leadId)) || selectedLead;
-      setAssignModalLead(lead);
+      setLostModalLead(lead);
       setShowLostModal(true);
       return;
     }
@@ -247,8 +196,9 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
   const metrics = useMemo(() => {
     const total = leads.length;
     let newCount = 0;
-    let unassignedCount = 0;
+    let inProgressCount = 0;
     let dueTodayCount = 0;
+    let overdueCount = 0;
     let qualifiedCount = 0;
     let convertedCount = 0;
 
@@ -256,13 +206,14 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
 
     leads.forEach(l => {
       if (l.status === 'NEW') newCount++;
-      if (!l.assignedToUser && (l.assignedTo === 'Sales Concierge Team' || !l.assignedTo)) unassignedCount++;
+      if (['IN_PROGRESS', 'CONTACTED'].includes(l.status)) inProgressCount++;
       if (l.preferredCallDate === todayStr && !['CONVERTED', 'LOST'].includes(l.status)) dueTodayCount++;
+      if (l.preferredCallDate && l.preferredCallDate < todayStr && !['CONVERTED', 'LOST'].includes(l.status)) overdueCount++;
       if (l.status === 'QUALIFIED') qualifiedCount++;
       if (l.status === 'CONVERTED') convertedCount++;
     });
 
-    return { total, newCount, unassignedCount, dueTodayCount, qualifiedCount, convertedCount };
+    return { total, newCount, inProgressCount, dueTodayCount, overdueCount, qualifiedCount, convertedCount };
   }, [leads]);
 
   // Unique destinations for filter dropdown
@@ -291,14 +242,14 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
             </span>
           </h2>
           <p className="text-xs text-slate-300 font-medium max-w-xl">
-            High-intent travelers requesting consultation from trip pages. Claims, callbacks, qualifications, and direct quotation dispatch.
+            High-intent travelers requesting consultation from trip pages. Shared sales queue, callbacks, qualifications, and direct quotation dispatch.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 relative z-10 shrink-0">
           {isSuperOrAdmin && (
             <Link
-              to="/admin/sales"
+              to="/staff/sales"
               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black rounded-2xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
               title="Open Dedicated Sales Portal Desk"
             >
@@ -320,55 +271,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         </div>
       </div>
 
-      {/* Sales Specialists Workload Panel (Real DB Data) */}
-      {isSuperOrAdmin && salesUsers.length > 0 && (
-        <div className="bg-slate-900 text-white p-4 rounded-3xl border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-              <Users size={18} />
-            </div>
-            <div>
-              <div className="text-xs font-black uppercase tracking-wider text-slate-200">Sales Desk Workload</div>
-              <div className="text-[11px] text-slate-400">Live assigned consultation inquiries per sales specialist</div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            {salesUsers.filter(u => u.role === 'sales').map(u => (
-              <div 
-                key={u._id}
-                onClick={() => setSalesFilter(u._id)}
-                className={`px-3.5 py-2 rounded-2xl border transition-all cursor-pointer flex items-center gap-2.5 ${
-                  salesFilter === u._id 
-                    ? 'bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-sm' 
-                    : 'bg-slate-800/90 border-slate-700 hover:border-slate-600 text-slate-200'
-                }`}
-                title={`Filter by ${u.name}`}
-              >
-                <div className="w-6 h-6 rounded-full bg-slate-700 border border-white/10 flex items-center justify-center text-[10px] font-black">
-                  {u.name.charAt(0)}
-                </div>
-                <div className="text-left">
-                  <div className="text-xs font-bold leading-none">{u.name}</div>
-                  <div className={`text-[10px] mt-0.5 ${salesFilter === u._id ? 'text-slate-950 font-bold' : 'text-emerald-400 font-semibold'}`}>
-                    {u.activeLeadsCount || 0} active
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <Link
-              to="/admin/sales"
-              className="px-3.5 py-2 rounded-2xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold flex items-center gap-1.5 transition-all"
-            >
-              <span>Sales Desk</span>
-              <ExternalLink size={13} />
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* 5-Card Operational Metrics Bar (Real Data Only) */}
+      {/* 5-Card Operational Metrics Bar (Shared Queue Metrics) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div 
           onClick={() => setQuickFilter('all')}
@@ -378,7 +281,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         >
           <div className="text-[10px] font-black uppercase tracking-wider opacity-70">Total Requests</div>
           <div className="text-2xl font-black mt-1">{metrics.total}</div>
-          <div className="text-[10px] opacity-60 mt-0.5">Callback pool</div>
+          <div className="text-[10px] opacity-60 mt-0.5">Shared callback pool</div>
         </div>
 
         <div 
@@ -393,17 +296,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         </div>
 
         <div 
-          onClick={() => setQuickFilter('unassigned')}
-          className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-            quickFilter === 'unassigned' ? 'bg-indigo-900 text-white shadow-md border-indigo-900' : 'bg-white text-slate-900 border-slate-200/80 hover:border-slate-300'
-          }`}
-        >
-          <div className="text-[10px] font-black uppercase tracking-wider text-indigo-600 opacity-90">Unassigned Pool</div>
-          <div className="text-2xl font-black mt-1 text-indigo-700">{metrics.unassignedCount}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Available to claim</div>
-        </div>
-
-        <div 
           onClick={() => setQuickFilter('due_today')}
           className={`p-4 rounded-2xl border transition-all cursor-pointer ${
             quickFilter === 'due_today' ? 'bg-amber-600 text-white shadow-md border-amber-600' : 'bg-white text-slate-900 border-slate-200/80 hover:border-slate-300'
@@ -412,6 +304,17 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
           <div className="text-[10px] font-black uppercase tracking-wider text-amber-700 opacity-90">Due Today</div>
           <div className="text-2xl font-black mt-1 text-amber-600">{metrics.dueTodayCount}</div>
           <div className="text-[10px] text-slate-400 mt-0.5">Scheduled call window</div>
+        </div>
+
+        <div 
+          onClick={() => setQuickFilter('in_progress')}
+          className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+            quickFilter === 'in_progress' ? 'bg-indigo-900 text-white shadow-md border-indigo-900' : 'bg-white text-slate-900 border-slate-200/80 hover:border-slate-300'
+          }`}
+        >
+          <div className="text-[10px] font-black uppercase tracking-wider text-indigo-600 opacity-90">In Progress</div>
+          <div className="text-2xl font-black mt-1 text-indigo-700">{metrics.inProgressCount}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Active conversations</div>
         </div>
 
         <div 
@@ -431,10 +334,9 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         {[
           { id: 'all', label: 'All Inquiries' },
           { id: 'new', label: 'New' },
-          { id: 'unassigned', label: 'Unassigned Pool' },
-          ...(userRole === 'sales' ? [{ id: 'mine', label: 'My Requests' }] : []),
           { id: 'due_today', label: 'Due Today' },
           { id: 'overdue', label: 'Overdue' },
+          { id: 'in_progress', label: 'In Progress' },
           { id: 'qualified', label: 'Qualified' }
         ].map(tab => (
           <button
@@ -483,20 +385,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
             <option value="LOST">LOST</option>
           </select>
 
-          {/* Sales Specialist Filter */}
-          {isSuperOrAdmin && (
-            <select
-              value={salesFilter}
-              onChange={(e) => setSalesFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs font-bold text-slate-800 outline-none cursor-pointer hover:border-slate-300"
-            >
-              <option value="all">All Sales Owners</option>
-              <option value="unassigned">Unassigned Only</option>
-              {salesUsers.map(u => (
-                <option key={u._id} value={u._id}>{u.name}</option>
-              ))}
-            </select>
-          )}
+
 
           {/* Destination Filter */}
           {availableDestinations.length > 0 && (
@@ -573,7 +462,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                     <th className="p-4">Trip Package</th>
                     <th className="p-4">Callback Window</th>
                     <th className="p-4">Travelers</th>
-                    <th className="p-4">Sales Owner</th>
+                    <th className="p-4">Last Activity</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Received</th>
                     <th className="p-4 text-right">Actions</th>
@@ -586,8 +475,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                     const waPhone = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
                     const waLink = `https://wa.me/${waPhone}?text=${encodeURIComponent(`Hi ${l.name || 'Traveler'}, this is regarding your callback request for ${l.tripTitle || l.destination || 'WanderLuxe'}. Is now a good time to connect?`)}`;
                     const schedBadge = getCallbackScheduleBadge(l.preferredCallDate, l.preferredCallWindow, l.status);
-                    const isUnassigned = !l.assignedToUser && (l.assignedTo === 'Sales Concierge Team' || !l.assignedTo);
-                    const isOwner = l.assignedToUser && String(l.assignedToUser._id || l.assignedToUser) === String(userId);
 
                     return (
                       <tr 
@@ -651,17 +538,20 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                           {l.travelersCount || 1} Pax
                         </td>
 
-                        {/* SALES OWNER */}
+                        {/* LAST ACTIVITY */}
                         <td className="p-4">
-                          {isUnassigned ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500">
-                              Unassigned
-                            </span>
-                          ) : (
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                              <User size={12} className="text-slate-400" />
-                              <span>{l.assignedToUserName || l.assignedTo || 'Specialist'}</span>
+                          {l.callOutcomes && l.callOutcomes.length > 0 ? (
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                                <User size={12} className="text-emerald-600" />
+                                <span>{l.callOutcomes[l.callOutcomes.length - 1].loggedByName || 'Specialist'}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {l.callOutcomes[l.callOutcomes.length - 1].outcome} • {formatRelativeTime(l.callOutcomes[l.callOutcomes.length - 1].loggedAt)}
+                              </div>
                             </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">No contact yet</span>
                           )}
                         </td>
 
@@ -706,35 +596,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                               <MessageSquare size={13} />
                             </a>
 
-                            {/* 1-Click Atomic Claim or Assign */}
-                            {isUnassigned ? (
-                              <button
-                                type="button"
-                                disabled={claimLoadingId === leadId}
-                                onClick={(e) => handleClaim(leadId, e)}
-                                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[11px] font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs disabled:bg-indigo-300"
-                                title="Claim this lead"
-                              >
-                                {claimLoadingId === leadId ? (
-                                  <Loader2 size={11} className="animate-spin" />
-                                ) : (
-                                  <ShieldCheck size={11} />
-                                )}
-                                <span>Claim</span>
-                              </button>
-                            ) : (
-                              isSuperOrAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleOpenAssignModal(l, e)}
-                                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[11px] font-bold transition-colors cursor-pointer"
-                                  title="Reassign specialist"
-                                >
-                                  Assign
-                                </button>
-                              )
-                            )}
-
                             {/* View Detail Drawer Button */}
                             <button
                               type="button"
@@ -757,8 +618,10 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
             <div className="md:hidden divide-y divide-slate-100">
               {leads.map((l) => {
                 const leadId = l._id || l.id;
-                const isUnassigned = !l.assignedToUser && (l.assignedTo === 'Sales Concierge Team' || !l.assignedTo);
                 const schedBadge = getCallbackScheduleBadge(l.preferredCallDate, l.preferredCallWindow, l.status);
+                const lastOutcome = Array.isArray(l.callOutcomes) && l.callOutcomes.length > 0
+                  ? l.callOutcomes[l.callOutcomes.length - 1]
+                  : null;
 
                 return (
                   <div 
@@ -792,6 +655,12 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                           {schedBadge.label}
                         </span>
                       </div>
+                      {lastOutcome && (
+                        <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                          <span>Last: <strong className="text-slate-700">{lastOutcome.outcome}</strong></span>
+                          <span>by {lastOutcome.loggedByName || 'Specialist'} ({formatRelativeTime(lastOutcome.loggedAt)})</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-1">
@@ -800,15 +669,6 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                       </span>
 
                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {isUnassigned && (
-                          <button
-                            type="button"
-                            onClick={(e) => handleClaim(leadId, e)}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-xl text-xs font-black"
-                          >
-                            Claim
-                          </button>
-                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenDrawer(l)}
@@ -1091,56 +951,44 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
                   </div>
                 </div>
 
-                {/* 5. SALES SPECIALIST OWNERSHIP */}
+                {/* 5. SHARED SALES QUEUE & RECENT ACTIVITY */}
                 <div className="space-y-3">
                   <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                    Sales Specialist Ownership
+                    Shared Queue & Action Attribution
                   </span>
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 font-black text-xs">
-                          {selectedLead.assignedToUserName ? selectedLead.assignedToUserName[0].toUpperCase() : 'U'}
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 font-black text-xs">
+                          <Headphones size={16} />
                         </div>
                         <div>
                           <div className="text-xs font-black text-slate-900">
-                            {selectedLead.assignedToUserName || selectedLead.assignedTo || 'Unassigned Pool'}
+                            Shared Sales Queue
                           </div>
                           <div className="text-[10px] text-slate-400 font-medium">
-                            {selectedLead.assignedAt ? `Assigned ${formatRelativeTime(selectedLead.assignedAt)}` : 'Available to claim'}
+                            Visible to all Sales Specialists
                           </div>
                         </div>
                       </div>
-
-                      {/* Claim or Reassign Actions */}
-                      <div className="flex items-center gap-2">
-                        {(!selectedLead.assignedToUser && (selectedLead.assignedTo === 'Sales Concierge Team' || !selectedLead.assignedTo)) ? (
-                          <button
-                            type="button"
-                            disabled={claimLoadingId === (selectedLead._id || selectedLead.id)}
-                            onClick={() => handleClaim(selectedLead._id || selectedLead.id)}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black flex items-center gap-1 shadow-xs cursor-pointer"
-                          >
-                            {claimLoadingId === (selectedLead._id || selectedLead.id) ? (
-                              <Loader2 size={12} className="animate-spin" />
-                            ) : (
-                              <ShieldCheck size={12} />
-                            )}
-                            <span>Claim Request</span>
-                          </button>
-                        ) : null}
-
-                        {isSuperOrAdmin && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenAssignModal(selectedLead)}
-                            className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
-                          >
-                            {selectedLead.assignedToUser ? 'Reassign' : 'Assign Sales'}
-                          </button>
-                        )}
-                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Open Shared Access
+                      </span>
                     </div>
+
+                    {/* Latest contact attribution */}
+                    {Array.isArray(selectedLead.callOutcomes) && selectedLead.callOutcomes.length > 0 ? (
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                        <span className="text-slate-500">Latest Contact:</span>
+                        <span className="font-bold text-slate-800">
+                          {selectedLead.callOutcomes[selectedLead.callOutcomes.length - 1].loggedByName || 'Specialist'} ({formatRelativeTime(selectedLead.callOutcomes[selectedLead.callOutcomes.length - 1].loggedAt)})
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="pt-2 border-t border-slate-200/60 text-[11px] text-slate-400 italic">
+                        No calls recorded yet. Any sales specialist can contact and log outcome.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1329,164 +1177,7 @@ const AdminExpertRequests = ({ onOpenQuotationBuilder, onViewBooking }) => {
         )}
       </AnimatePresence>
 
-      {/* ========================================================================= */}
-      {/* MODAL: ASSIGN SALES SPECIALIST (Replaces legacy window.prompt) */}
-      {/* ========================================================================= */}
-      <AnimatePresence>
-        {showAssignModal && assignModalLead && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" onClick={() => setShowAssignModal(false)} />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-white rounded-3xl p-6 max-w-md w-full z-10 shadow-2xl space-y-4 border border-slate-200"
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  <UserCheck size={18} className="text-emerald-600" /> Assign Sales Specialist
-                </h4>
-                <button 
-                  type="button" 
-                  onClick={() => setShowAssignModal(false)} 
-                  className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
 
-              <div className="space-y-1">
-                <div className="text-xs text-slate-500">
-                  Traveler: <span className="font-extrabold text-slate-900">{assignModalLead.name}</span> • <span className="text-emerald-700 font-bold">{assignModalLead.tripTitle || assignModalLead.destination}</span>
-                </div>
-                <div className="text-[11px] font-mono text-slate-400">
-                  Ref: {assignModalLead.referenceId || assignModalLead._id}
-                </div>
-              </div>
-
-              {/* Reassignment Warning */}
-              {(assignModalLead.assignedToUserName || (assignModalLead.assignedTo && assignModalLead.assignedTo !== 'Sales Concierge Team')) && (
-                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
-                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Reassign this request?</span> Currently assigned to <span className="font-extrabold">{assignModalLead.assignedToUserName || assignModalLead.assignedTo}</span>. Selecting a new specialist will transfer lead ownership and edit rights.
-                  </div>
-                </div>
-              )}
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const targetUserId = e.target.specialist.value;
-                  const selectedUser = salesUsers.find(u => u._id === targetUserId);
-                  if (!selectedUser) return;
-
-                  const isReassign = !!(assignModalLead.assignedToUserName || (assignModalLead.assignedTo && assignModalLead.assignedTo !== 'Sales Concierge Team'));
-                  if (isReassign && !window.confirm(`Reassign this request to ${selectedUser.name}?`)) {
-                    return;
-                  }
-
-                  try {
-                    const res = await assignLeadApi(assignModalLead._id || assignModalLead.id, {
-                      assignedToUserId: selectedUser._id,
-                      assignedToName: selectedUser.name
-                    });
-                    if (res.lead) {
-                      setLeads(prev => prev.map(l => (String(l._id || l.id) === String(assignModalLead._id || assignModalLead.id) ? res.lead : l)));
-                      if (selectedLead && String(selectedLead._id || selectedLead.id) === String(assignModalLead._id || assignModalLead.id)) {
-                        setSelectedLead(res.lead);
-                      }
-                      // Refresh sales users workload counts
-                      const updatedUsers = await getSalesUsersApi();
-                      setSalesUsers(updatedUsers || []);
-                    }
-                    setShowAssignModal(false);
-                  } catch (err) {
-                    alert(err.message || 'Failed to assign specialist');
-                  }
-                }}
-                className="space-y-3.5"
-              >
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-2">
-                    Choose Sales Specialist
-                  </label>
-                  
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {salesUsers.filter(u => u.role === 'sales').map(u => (
-                      <label 
-                        key={u._id}
-                        className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30 transition-all cursor-pointer has-[:checked]:border-emerald-600 has-[:checked]:bg-emerald-50/60"
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="specialist"
-                            value={u._id}
-                            required
-                            defaultChecked={String(assignModalLead.assignedToUser?._id || assignModalLead.assignedToUser) === String(u._id)}
-                            className="accent-emerald-600 w-4 h-4 cursor-pointer"
-                          />
-                          <div>
-                            <div className="text-xs font-black text-slate-900">{u.name}</div>
-                            <div className="text-[11px] text-slate-500 font-mono">{u.email}</div>
-                          </div>
-                        </div>
-
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-700">
-                          {u.activeLeadsCount || 0} active
-                        </span>
-                      </label>
-                    ))}
-
-                    {/* Fallback for other staff roles */}
-                    {salesUsers.filter(u => u.role !== 'sales').map(u => (
-                      <label 
-                        key={u._id}
-                        className="flex items-center justify-between p-2.5 rounded-2xl border border-slate-200 hover:border-slate-400 transition-all cursor-pointer text-slate-600"
-                      >
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="radio"
-                            name="specialist"
-                            value={u._id}
-                            className="accent-slate-800 w-4 h-4"
-                          />
-                          <div>
-                            <div className="text-xs font-bold text-slate-800">{u.name} ({u.role})</div>
-                            <div className="text-[11px] text-slate-400 font-mono">{u.email}</div>
-                          </div>
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-bold">
-                          {u.activeLeadsCount || 0} active
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAssignModal(false)}
-                    className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black shadow-md cursor-pointer transition-all"
-                  >
-                    {assignModalLead.assignedToUserName || (assignModalLead.assignedTo && assignModalLead.assignedTo !== 'Sales Concierge Team')
-                      ? 'Reassign Request' 
-                      : 'Assign Request'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* ========================================================================= */}
       {/* MODAL: LOG CONTACT OUTCOME */}

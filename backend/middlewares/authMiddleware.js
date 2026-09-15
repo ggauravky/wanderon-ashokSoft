@@ -23,7 +23,7 @@ export const protect = async (req, res, next) => {
       );
 
       // Attempt to load user from MongoDB database
-      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && mongoose.Types.ObjectId.isValid(decoded.id) && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer' && decoded.id !== 'usr_sales_1' && decoded.id !== 'usr_sales_2') {
         try {
           req.user = await User.findById(decoded.id).select('-password');
         } catch (dbErr) {
@@ -260,7 +260,7 @@ export const optionalAuth = async (req, res, next) => {
         process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026'
       );
 
-      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && mongoose.Types.ObjectId.isValid(decoded.id) && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer' && decoded.id !== 'usr_sales_1' && decoded.id !== 'usr_sales_2') {
         try {
           req.user = await User.findById(decoded.id).select('-password');
         } catch (dbErr) {

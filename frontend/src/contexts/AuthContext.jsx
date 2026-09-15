@@ -218,7 +218,7 @@ export const AuthProvider = ({ children }) => {
       success: true,
       user: staffUser,
       role: staffUser.role,
-      destination: staffUser.role === 'sales' ? '/admin/sales' : '/admin'
+      destination: staffUser.role === 'sales' ? '/staff/sales' : '/admin'
     };
   };
 

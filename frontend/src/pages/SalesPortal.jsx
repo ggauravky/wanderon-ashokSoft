@@ -4,22 +4,19 @@ import {
   Headphones, PhoneCall, Clock, CheckCircle2, AlertCircle, Search, Filter, 
   User, Mail, Phone, ExternalLink, Calendar, MapPin, Sparkles, 
   ShieldCheck, MessageSquare, Plus, CheckSquare, X, ChevronRight,
-  ArrowRight, UserCheck, RefreshCw, Eye, Tag, FileText, Ticket,
+  ArrowRight, RefreshCw, Eye, Tag, FileText, Ticket,
   Loader2, Send, CornerDownRight, AlertTriangle, MessageCircle, LogOut,
-  Shield, ArrowLeft
+  Shield, ArrowLeft, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   getAdminLeadsApi, 
   getLeadByIdApi, 
-  claimLeadApi, 
   logLeadContactApi, 
   updateLeadStatusApi, 
   createFollowUpApi,
-  getSalesDashboardApi,
-  assignLeadApi,
-  getSalesUsersApi
+  getSalesDashboardApi
 } from '../services/api.js';
 
 // Relative time formatter helper
@@ -81,8 +78,8 @@ const SalesPortal = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Tab & Filters: Default to 'mine' for Sales, 'all' for Admin
-  const [activeTab, setActiveTab] = useState(userRole === 'sales' ? 'mine' : 'all');
+  // Tab & Filters: Default to 'all' for Shared Sales Queue
+  const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -96,30 +93,12 @@ const SalesPortal = () => {
   const [showOutcomeModal, setShowOutcomeModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showLostModal, setShowLostModal] = useState(false);
-  const [claimLoadingId, setClaimLoadingId] = useState(null);
-
-  // Admin Assignment State
-  const [salesUsers, setSalesUsers] = useState([]);
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [assignTargetUserId, setAssignTargetUserId] = useState('');
-  const [assignNotes, setAssignNotes] = useState('');
-  const [assignLoading, setAssignLoading] = useState(false);
-
-  // Load sales specialist directory for admin assignment
-  useEffect(() => {
-    if (isSuperOrAdmin) {
-      getSalesUsersApi()
-        .then(users => setSalesUsers(users || []))
-        .catch(err => console.warn('Failed to load sales specialists for assignment:', err));
-    }
-  }, [isSuperOrAdmin]);
 
   // Close drawer on Escape
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        if (showAssignModal) setShowAssignModal(false);
-        else if (showOutcomeModal) setShowOutcomeModal(false);
+        if (showOutcomeModal) setShowOutcomeModal(false);
         else if (showFollowUpModal) setShowFollowUpModal(false);
         else if (showLostModal) setShowLostModal(false);
         else if (isDrawerOpen) setIsDrawerOpen(false);
@@ -127,9 +106,9 @@ const SalesPortal = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen, showAssignModal, showOutcomeModal, showFollowUpModal, showLostModal]);
+  }, [isDrawerOpen, showOutcomeModal, showFollowUpModal, showLostModal]);
 
-  // Fetch leads with server scoping
+  // Fetch leads with server scoping (returns all callback_requests for shared queue)
   const fetchLeads = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
@@ -141,16 +120,16 @@ const SalesPortal = () => {
         sortBy: 'newest'
       };
 
-      if (activeTab === 'mine') {
-        params.quickFilter = 'mine';
-      } else if (activeTab === 'unassigned') {
-        params.quickFilter = 'unassigned';
+      if (activeTab === 'new') {
+        params.quickFilter = 'new';
       } else if (activeTab === 'due_today') {
         params.quickFilter = 'due_today';
-      } else if (activeTab === 'qualified') {
-        params.quickFilter = 'qualified';
       } else if (activeTab === 'overdue') {
         params.quickFilter = 'overdue';
+      } else if (activeTab === 'in_progress') {
+        params.quickFilter = 'in_progress';
+      } else if (activeTab === 'qualified') {
+        params.quickFilter = 'qualified';
       }
 
       if (statusFilter !== 'all') params.status = statusFilter;
@@ -191,26 +170,7 @@ const SalesPortal = () => {
     }
   };
 
-  // Claim Request Handler
-  const handleClaimLead = async (leadId) => {
-    setClaimLoadingId(leadId);
-    try {
-      const res = await claimLeadApi(leadId);
-      if (res.lead) {
-        setLeads(prev => prev.map(l => (String(l._id || l.id) === String(leadId) ? res.lead : l)));
-        if (selectedLead && String(selectedLead._id || selectedLead.id) === String(leadId)) {
-          setSelectedLead(res.lead);
-        }
-      }
-    } catch (err) {
-      alert(err.message || 'Unable to claim request. It may have already been claimed.');
-      fetchLeads(true);
-    } finally {
-      setClaimLoadingId(null);
-    }
-  };
-
-  // Status Change Handler
+  // Status Change Handler (Permitted for any specialist in shared queue)
   const handleStatusChange = async (leadId, newStatus) => {
     if (newStatus === 'LOST') {
       setShowLostModal(true);
@@ -230,33 +190,30 @@ const SalesPortal = () => {
     }
   };
 
-  // Calculate Real Operational Summary Metrics
+  // Shared Queue Metrics (Unified across all sales specialists)
   const metrics = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
-    
-    // Scoped assigned leads for sales, all leads for admin
-    const myLeads = leads.filter(l => {
-      const assignedId = l.assignedToUser ? String(l.assignedToUser._id || l.assignedToUser) : null;
-      return assignedId === String(userId) || l.assignedTo === user?.name;
-    });
-
-    const targetList = userRole === 'sales' ? myLeads : leads;
-
-    const assignedCount = myLeads.length;
-    const openCount = leads.filter(l => !l.assignedToUser && (!l.assignedTo || l.assignedTo === 'Sales Concierge Team')).length;
-    const dueTodayCount = targetList.filter(l => l.preferredCallDate === todayStr && !['CONVERTED', 'LOST'].includes(l.status)).length;
-    const qualifiedCount = targetList.filter(l => l.status === 'QUALIFIED').length;
-    const followUpsCount = targetList.filter(l => l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= new Date()).length;
+    const totalCount = leads.length;
+    const newCount = leads.filter(l => l.status === 'NEW').length;
+    const dueTodayCount = leads.filter(l => l.preferredCallDate === todayStr && !['CONVERTED', 'LOST'].includes(l.status)).length;
+    const overdueCount = leads.filter(l => {
+      if (['CONVERTED', 'LOST'].includes(l.status)) return false;
+      const callbackOverdue = l.preferredCallDate && l.preferredCallDate < todayStr;
+      const followUpOverdue = l.nextFollowUpAt && new Date(l.nextFollowUpAt) <= new Date();
+      return callbackOverdue || followUpOverdue;
+    }).length;
+    const inProgressCount = leads.filter(l => ['CONTACTED', 'IN_PROGRESS'].includes(l.status)).length;
+    const qualifiedCount = leads.filter(l => l.status === 'QUALIFIED').length;
 
     return {
-      assignedCount,
-      openCount,
+      totalCount,
+      newCount,
       dueTodayCount,
-      qualifiedCount,
-      followUpsCount,
-      totalCount: leads.length
+      overdueCount,
+      inProgressCount,
+      qualifiedCount
     };
-  }, [leads, userId, user?.name, userRole]);
+  }, [leads]);
 
   // Client-side search filtering
   const filteredLeads = useMemo(() => {
@@ -271,20 +228,6 @@ const SalesPortal = () => {
       (l.destination || '').toLowerCase().includes(q)
     );
   }, [leads, searchQuery]);
-
-  // Helper: check if current user is owner of the lead
-  const isLeadOwner = (lead) => {
-    if (!lead) return false;
-    if (isSuperOrAdmin) return true;
-    const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
-    return assignedId === String(userId) || lead.assignedTo === user?.name;
-  };
-
-  const isLeadUnassigned = (lead) => {
-    if (!lead) return false;
-    const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
-    return !assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === '');
-  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
@@ -301,12 +244,12 @@ const SalesPortal = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-extrabold text-white tracking-tight">WanderLuxe Sales Desk</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {userRole === 'sales' ? 'Sales Specialist' : 'Admin Supervision'}
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <Users size={11} /> Shared Sales Queue
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Welcome back, <span className="text-slate-200 font-bold">{user?.name || 'Sales Representative'}</span>
+                Welcome back, <span className="text-slate-200 font-bold">{user?.name || 'Sales Specialist'}</span> • Open team collaboration
               </p>
             </div>
           </div>
@@ -353,28 +296,28 @@ const SalesPortal = () => {
       {/* 2. MAIN CONTENT AREA */}
       {/* ========================================================================= */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
-        {/* Metric Summary Cards (Real DB Data) */}
+        {/* Metric Summary Cards (Shared Team KPIs) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div 
-            onClick={() => setActiveTab('mine')}
+            onClick={() => setActiveTab('all')}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-              activeTab === 'mine' ? 'bg-emerald-950/60 border-emerald-500/50 text-white shadow-lg shadow-emerald-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
+              activeTab === 'all' ? 'bg-emerald-950/60 border-emerald-500/50 text-white shadow-lg shadow-emerald-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
             }`}
           >
-            <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Assigned to Me</div>
-            <div className="text-2xl font-black mt-1 text-white">{metrics.assignedCount}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Active traveler leads</div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Total Requests</div>
+            <div className="text-2xl font-black mt-1 text-white">{metrics.totalCount}</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Shared consultation queue</div>
           </div>
 
           <div 
-            onClick={() => setActiveTab('unassigned')}
+            onClick={() => setActiveTab('new')}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-              activeTab === 'unassigned' ? 'bg-indigo-950/60 border-indigo-500/50 text-white shadow-lg shadow-indigo-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
+              activeTab === 'new' ? 'bg-teal-950/60 border-teal-500/50 text-white shadow-lg shadow-teal-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
             }`}
           >
-            <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400">Open Requests</div>
-            <div className="text-2xl font-black mt-1 text-white">{metrics.openCount}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Available to claim</div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-teal-400">New Inquiries</div>
+            <div className="text-2xl font-black mt-1 text-teal-300">{metrics.newCount}</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Awaiting first contact</div>
           </div>
 
           <div 
@@ -385,18 +328,18 @@ const SalesPortal = () => {
           >
             <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">Due Today</div>
             <div className="text-2xl font-black mt-1 text-amber-300">{metrics.dueTodayCount}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Scheduled callback</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Scheduled callbacks</div>
           </div>
 
           <div 
-            onClick={() => setActiveTab('overdue')}
+            onClick={() => setActiveTab('in_progress')}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
-              activeTab === 'overdue' ? 'bg-rose-950/60 border-rose-500/50 text-white shadow-lg shadow-rose-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
+              activeTab === 'in_progress' ? 'bg-indigo-950/60 border-indigo-500/50 text-white shadow-lg shadow-indigo-950/40' : 'bg-slate-900/60 border-white/10 hover:border-white/20 text-slate-300'
             }`}
           >
-            <div className="text-[10px] font-black uppercase tracking-wider text-rose-400">Follow-ups Due</div>
-            <div className="text-2xl font-black mt-1 text-rose-300">{metrics.followUpsCount}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">Pending touchpoints</div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-indigo-400">In Progress</div>
+            <div className="text-2xl font-black mt-1 text-indigo-300">{metrics.inProgressCount}</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Active conversations</div>
           </div>
 
           <div 
@@ -414,12 +357,12 @@ const SalesPortal = () => {
         {/* Tab Selection Chips */}
         <div className="flex flex-wrap items-center gap-2 pt-1 border-b border-white/10 pb-4">
           {[
-            { id: 'mine', label: 'My Assigned Requests', badge: metrics.assignedCount },
-            { id: 'unassigned', label: 'Open Claim Pool', badge: metrics.openCount },
+            { id: 'all', label: 'All Requests', badge: metrics.totalCount },
+            { id: 'new', label: 'New', badge: metrics.newCount },
             { id: 'due_today', label: 'Due Today', badge: metrics.dueTodayCount },
-            { id: 'overdue', label: 'Follow-ups / Overdue', badge: metrics.followUpsCount },
-            { id: 'qualified', label: 'Qualified', badge: metrics.qualifiedCount },
-            ...(isSuperOrAdmin ? [{ id: 'all', label: 'All Requests (Admin)', badge: metrics.totalCount }] : [])
+            { id: 'overdue', label: 'Overdue / Follow-ups', badge: metrics.overdueCount },
+            { id: 'in_progress', label: 'In Progress', badge: metrics.inProgressCount },
+            { id: 'qualified', label: 'Qualified', badge: metrics.qualifiedCount }
           ].map(tab => (
             <button
               key={tab.id}
@@ -452,7 +395,7 @@ const SalesPortal = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search traveler name, phone, reference ID, trip..."
+              placeholder="Search traveler name, phone, reference ID, destination..."
               className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs font-bold text-white placeholder-slate-500 outline-none focus:border-emerald-500"
             />
           </div>
@@ -498,19 +441,8 @@ const SalesPortal = () => {
             <Headphones size={36} className="text-slate-600 mx-auto" />
             <h3 className="text-base font-bold text-slate-300">No Consultation Requests Found</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              {activeTab === 'mine' 
-                ? 'You currently have no traveler requests assigned to your desk. Check the Open Claim Pool to claim new inquiries.'
-                : 'No requests matched the current filter criteria.'}
+              No requests matched the current filter criteria in the shared queue.
             </p>
-            {activeTab === 'mine' && metrics.openCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('unassigned')}
-                className="mt-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-all"
-              >
-                View {metrics.openCount} Open Requests to Claim
-              </button>
-            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -526,15 +458,16 @@ const SalesPortal = () => {
                       <th className="py-3 px-4">Callback Schedule</th>
                       <th className="py-3 px-4">Status</th>
                       <th className="py-3 px-4">Priority</th>
-                      <th className="py-3 px-4">Owner</th>
+                      <th className="py-3 px-4">Last Activity</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-medium">
                     {filteredLeads.map((lead) => {
-                      const isOwner = isLeadOwner(lead);
-                      const isUnassigned = isLeadUnassigned(lead);
                       const scheduleBadge = getCallbackBadge(lead.preferredCallDate, lead.status);
+                      const lastOutcome = Array.isArray(lead.callOutcomes) && lead.callOutcomes.length > 0
+                        ? lead.callOutcomes[lead.callOutcomes.length - 1]
+                        : null;
 
                       return (
                         <tr 
@@ -591,11 +524,18 @@ const SalesPortal = () => {
                             </span>
                           </td>
 
-                          {/* Owner */}
+                          {/* Last Activity (Attribution) */}
                           <td className="py-3.5 px-4 text-[11px]">
-                            {lead.assignedToUserName || (lead.assignedTo && lead.assignedTo !== 'Sales Concierge Team' ? lead.assignedTo : (
-                              <span className="text-amber-400 font-bold">Unassigned</span>
-                            ))}
+                            {lastOutcome ? (
+                              <div>
+                                <span className="font-bold text-slate-200 block">{lastOutcome.outcome}</span>
+                                <span className="text-[10px] text-slate-400">
+                                  by {lastOutcome.loggedByName || 'Specialist'} ({formatRelativeTime(lastOutcome.loggedAt)})
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 italic">No contact yet</span>
+                            )}
                           </td>
 
                           {/* Actions */}
@@ -620,24 +560,13 @@ const SalesPortal = () => {
                                 <MessageCircle size={13} />
                               </a>
                             )}
-                            {isUnassigned ? (
-                              <button
-                                type="button"
-                                onClick={() => handleClaimLead(lead._id || lead.id)}
-                                disabled={claimLoadingId === (lead._id || lead.id)}
-                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-black transition-all cursor-pointer"
-                              >
-                                {claimLoadingId === (lead._id || lead.id) ? 'Claiming...' : 'Claim'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenLead(lead)}
-                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                              >
-                                View
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenLead(lead)}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                            >
+                              View
+                            </button>
                           </td>
                         </tr>
                       );
@@ -650,9 +579,10 @@ const SalesPortal = () => {
             {/* Mobile Cards (Responsive 360px - 768px) */}
             <div className="md:hidden space-y-3">
               {filteredLeads.map((lead) => {
-                const isOwner = isLeadOwner(lead);
-                const isUnassigned = isLeadUnassigned(lead);
                 const scheduleBadge = getCallbackBadge(lead.preferredCallDate, lead.status);
+                const lastOutcome = Array.isArray(lead.callOutcomes) && lead.callOutcomes.length > 0
+                  ? lead.callOutcomes[lead.callOutcomes.length - 1]
+                  : null;
 
                 return (
                   <div
@@ -687,6 +617,13 @@ const SalesPortal = () => {
                       </span>
                     </div>
 
+                    {lastOutcome && (
+                      <div className="text-[10px] text-slate-400 pt-1 border-t border-white/5 flex items-center justify-between">
+                        <span>Last: <strong className="text-slate-200">{lastOutcome.outcome}</strong></span>
+                        <span>by {lastOutcome.loggedByName || 'Specialist'} ({formatRelativeTime(lastOutcome.loggedAt)})</span>
+                      </div>
+                    )}
+
                     {/* Action buttons */}
                     <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                       {lead.phone && (
@@ -707,16 +644,13 @@ const SalesPortal = () => {
                           <MessageCircle size={13} /> WhatsApp
                         </a>
                       )}
-                      {isUnassigned && (
-                        <button
-                          type="button"
-                          onClick={() => handleClaimLead(lead._id || lead.id)}
-                          disabled={claimLoadingId === (lead._id || lead.id)}
-                          className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold"
-                        >
-                          Claim
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLead(lead)}
+                        className="px-3 py-2 bg-slate-800 text-slate-200 rounded-xl text-xs font-bold"
+                      >
+                        Details
+                      </button>
                     </div>
                   </div>
                 );
@@ -802,7 +736,7 @@ const SalesPortal = () => {
                   
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Trip / Expedition</span>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Trip / Destination</span>
                       <span className="text-white font-bold">{selectedLead.tripTitle || selectedLead.destination}</span>
                     </div>
                     <div>
@@ -822,8 +756,10 @@ const SalesPortal = () => {
                       <span className="text-amber-400 font-bold">{selectedLead.preferredCallDate || 'Anytime'} ({selectedLead.preferredCallWindow || 'Flexible'})</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Specialist Owner</span>
-                      <span className="text-white font-bold">{selectedLead.assignedToUserName || selectedLead.assignedTo || 'Unassigned Pool'}</span>
+                      <span className="text-slate-500 block text-[10px] uppercase font-bold">Queue Access</span>
+                      <span className="text-emerald-400 font-bold flex items-center gap-1">
+                        <Users size={12} /> Shared Sales Queue
+                      </span>
                     </div>
                   </div>
 
@@ -837,96 +773,63 @@ const SalesPortal = () => {
                   )}
                 </div>
 
-                {/* Consultation Workflow Actions */}
+                {/* Consultation Workflow Actions (Accessible by all specialists) */}
                 <div className="space-y-3">
                   <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Specialist Actions</h4>
 
-                  {/* If Unassigned -> Claim Button */}
-                  {isLeadUnassigned(selectedLead) && (
-                    <button
-                      type="button"
-                      onClick={() => handleClaimLead(selectedLead._id || selectedLead.id)}
-                      disabled={claimLoadingId === (selectedLead._id || selectedLead.id)}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-emerald-600/20 cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <UserCheck size={16} /> Claim This Request Now
-                    </button>
-                  )}
-
-                  {/* If Owner / Admin -> Workflow Action Buttons */}
-                  {(isLeadOwner(selectedLead) || isSuperOrAdmin) && (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowOutcomeModal(true)}
-                          className="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10"
-                        >
-                          <PhoneCall size={14} className="text-emerald-400" /> Log Call Outcome
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowFollowUpModal(true)}
-                          className="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10"
-                        >
-                          <Calendar size={14} className="text-indigo-400" /> Schedule Follow-up
-                        </button>
-                      </div>
-
-                      {/* Admin Specialist Assignment Action */}
-                      {isSuperOrAdmin && (
-                        <div className="pt-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAssignTargetUserId(selectedLead.assignedToUser?._id || selectedLead.assignedToUser || '');
-                              setAssignNotes(selectedLead.notes || '');
-                              setShowAssignModal(true);
-                            }}
-                            className="w-full py-2.5 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                          >
-                            <UserCheck size={14} className="text-emerald-400" />
-                            {selectedLead.assignedToUser ? 'Reassign Sales Specialist' : 'Assign to Sales Specialist'}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Status Dropdown */}
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-slate-400 font-bold whitespace-nowrap">Status:</label>
-                        <select
-                          value={selectedLead.status}
-                          onChange={(e) => handleStatusChange(selectedLead._id || selectedLead.id, e.target.value)}
-                          className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none cursor-pointer"
-                        >
-                          <option value="NEW">NEW</option>
-                          <option value="CONTACTED">CONTACTED</option>
-                          <option value="IN_PROGRESS">IN_PROGRESS</option>
-                          <option value="QUALIFIED">QUALIFIED</option>
-                          <option value="LOST">LOST (Mark as Unresponsive/Budget Unfit)</option>
-                        </select>
-                      </div>
-
-                      {/* Create Quotation if Qualified */}
-                      {selectedLead.status === 'QUALIFIED' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigate(`/admin/quotations?leadId=${selectedLead._id || selectedLead.id}`);
-                          }}
-                          className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-purple-600/20 cursor-pointer flex items-center justify-center gap-2 mt-2"
-                        >
-                          <FileText size={16} /> Open Quotation Builder for Traveler
-                        </button>
-                      )}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowOutcomeModal(true)}
+                        className="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10"
+                      >
+                        <PhoneCall size={14} className="text-emerald-400" /> Log Call Outcome
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowFollowUpModal(true)}
+                        className="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-white/10"
+                      >
+                        <Calendar size={14} className="text-indigo-400" /> Schedule Follow-up
+                      </button>
                     </div>
-                  )}
+
+                    {/* Status Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-slate-400 font-bold whitespace-nowrap">Status:</label>
+                      <select
+                        value={selectedLead.status}
+                        onChange={(e) => handleStatusChange(selectedLead._id || selectedLead.id, e.target.value)}
+                        className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none cursor-pointer"
+                      >
+                        <option value="NEW">NEW</option>
+                        <option value="CONTACTED">CONTACTED</option>
+                        <option value="IN_PROGRESS">IN_PROGRESS</option>
+                        <option value="QUALIFIED">QUALIFIED</option>
+                        <option value="LOST">LOST (Mark as Unresponsive/Budget Unfit)</option>
+                      </select>
+                    </div>
+
+                    {/* Create Quotation if Qualified */}
+                    {selectedLead.status === 'QUALIFIED' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigate(`/admin/quotations?leadId=${selectedLead._id || selectedLead.id}`);
+                        }}
+                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-black shadow-lg shadow-purple-600/20 cursor-pointer flex items-center justify-center gap-2 mt-2"
+                      >
+                        <FileText size={16} /> Open Quotation Builder for Traveler
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Call History / Activity Timeline */}
                 {Array.isArray(selectedLead.callOutcomes) && selectedLead.callOutcomes.length > 0 && (
                   <div className="space-y-3 pt-4 border-t border-white/10">
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Interaction History</h4>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-400">Interaction History & Action Attribution</h4>
                     <div className="space-y-2.5">
                       {selectedLead.callOutcomes.map((co, idx) => (
                         <div key={idx} className="p-3 bg-slate-950/80 rounded-xl border border-white/5 text-xs space-y-1">
@@ -935,7 +838,9 @@ const SalesPortal = () => {
                             <span className="text-[10px] text-slate-500">{formatRelativeTime(co.loggedAt)}</span>
                           </div>
                           {co.notes && <p className="text-slate-300 text-[11px]">{co.notes}</p>}
-                          <div className="text-[10px] text-slate-500">Logged by: {co.loggedByName || 'Specialist'}</div>
+                          <div className="text-[10px] text-slate-400 pt-0.5">
+                            Logged by: <span className="font-bold text-slate-200">{co.loggedByName || 'Specialist'}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1263,120 +1168,6 @@ const SalesPortal = () => {
                     className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black"
                   >
                     Confirm Lost
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ========================================================================= */}
-      {/* 7. MODAL: ASSIGN SPECIALIST (ADMIN SUPERVISION) */}
-      {/* ========================================================================= */}
-      <AnimatePresence>
-        {showAssignModal && selectedLead && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs" onClick={() => setShowAssignModal(false)} />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-slate-900 border border-white/10 rounded-3xl p-6 max-w-md w-full z-10 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between">
-                <h4 className="text-base font-extrabold text-white flex items-center gap-2">
-                  <UserCheck size={18} className="text-emerald-400" /> Assign Consultation Specialist
-                </h4>
-                <button 
-                  type="button" 
-                  onClick={() => setShowAssignModal(false)} 
-                  className="p-1 text-slate-400 hover:text-white cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-400">
-                Assign request <span className="font-mono text-emerald-400 font-bold">{selectedLead.referenceId || selectedLead._id}</span> to a verified travel specialist.
-              </p>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!assignTargetUserId) return;
-                  setAssignLoading(true);
-                  try {
-                    const targetUser = salesUsers.find(u => String(u._id || u.id) === String(assignTargetUserId));
-                    const res = await assignLeadApi(selectedLead._id || selectedLead.id, {
-                      assignedToUserId: assignTargetUserId,
-                      assignedToName: targetUser?.name || 'Sales Specialist',
-                      notes: assignNotes
-                    });
-
-                    if (res.lead) {
-                      setLeads(prev => prev.map(l => (String(l._id || l.id) === String(selectedLead._id || selectedLead.id) ? res.lead : l)));
-                      setSelectedLead(res.lead);
-                    }
-                    setShowAssignModal(false);
-                    setAssignTargetUserId('');
-                    setAssignNotes('');
-                  } catch (err) {
-                    alert(err.message || 'Failed to assign lead.');
-                  } finally {
-                    setAssignLoading(false);
-                  }
-                }}
-                className="space-y-3.5 text-xs"
-              >
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Select Sales Specialist *
-                  </label>
-                  <select
-                    value={assignTargetUserId}
-                    onChange={(e) => setAssignTargetUserId(e.target.value)}
-                    required
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl font-bold text-white outline-none cursor-pointer"
-                  >
-                    <option value="">-- Choose Sales Specialist --</option>
-                    {salesUsers
-                      .filter(u => u.role === 'sales')
-                      .map(u => (
-                        <option key={u._id || u.id} value={u._id || u.id}>
-                          {u.name} ({u.email}) {u.activeLeadsCount ? `• ${u.activeLeadsCount} active` : ''}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">
-                    Handover Notes / Instructions
-                  </label>
-                  <textarea
-                    value={assignNotes}
-                    onChange={(e) => setAssignNotes(e.target.value)}
-                    rows={2}
-                    placeholder="Specific priorities or traveler preferences..."
-                    className="w-full p-2.5 bg-slate-950 border border-white/10 rounded-xl text-white outline-none resize-none"
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAssignModal(false)}
-                    className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={assignLoading || !assignTargetUserId}
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-black shadow-md cursor-pointer"
-                  >
-                    {assignLoading ? 'Assigning...' : 'Confirm Assignment'}
                   </button>
                 </div>
               </form>

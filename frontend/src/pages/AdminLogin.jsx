@@ -23,7 +23,7 @@ const AdminLogin = () => {
       const isAdminEmail = user.email?.toLowerCase() === DEFAULT_ADMIN_EMAIL;
       
       if (role === 'sales') {
-        navigate('/admin/sales', { replace: true });
+        navigate('/staff/sales', { replace: true });
       } else if (isAdminEmail || role === 'admin' || role === 'super_admin') {
         navigate('/admin', { replace: true });
       }
@@ -49,7 +49,7 @@ const AdminLogin = () => {
         setRedirectStatus('Opening Sales Desk...');
         setTimeout(() => {
           setLoading(false);
-          navigate('/admin/sales', { replace: true });
+          navigate('/staff/sales', { replace: true });
         }, 300);
       } else {
         setRedirectStatus('Opening Admin Dashboard...');

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
 import Home from './pages/Home';
@@ -64,12 +64,15 @@ function App() {
             {/* Staff & Admin Routes */}
             <Route path="admin/login" element={<AdminLogin />} />
             
-            {/* Dedicated Sales Portal (Sales & Admin Allowed) */}
-            <Route path="admin/sales" element={
+            {/* Dedicated Sales Portal (Canonical: /staff/sales) */}
+            <Route path="staff/sales" element={
               <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
                 <SalesPortal />
               </RoleProtectedRoute>
             } />
+
+            {/* Backwards Compatibility Redirect: /admin/sales -> /staff/sales */}
+            <Route path="admin/sales" element={<Navigate to="/staff/sales" replace />} />
 
             {/* Master Admin Dashboard (Admin & Super Admin ONLY - Sales Strictly Denied) */}
             <Route path="admin" element={

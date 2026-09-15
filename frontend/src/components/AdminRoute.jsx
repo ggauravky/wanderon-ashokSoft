@@ -3,7 +3,7 @@ import RoleProtectedRoute from './RoleProtectedRoute';
 
 /**
  * AdminRoute: Restricts master /admin pages to admin & super_admin roles.
- * Sales specialists attempting to access /admin are automatically redirected to /admin/sales.
+ * Sales specialists attempting to access /admin are automatically redirected to /staff/sales.
  */
 const AdminRoute = ({ children }) => {
   return (

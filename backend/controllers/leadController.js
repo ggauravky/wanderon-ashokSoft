@@ -276,17 +276,17 @@ export const getLeads = async (req, res) => {
     const andConditions = [];
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // RBAC Scoping for Sales: only see own assigned leads or unassigned pool
+    // RBAC Scoping for Sales:
+    // Sales strictly operates on the Shared Sales Queue for Travel Expert Requests (leadType = 'callback_request').
+    // Server-authoritative: Sales is forced to callback_request regardless of query parameters.
+    // All Sales employees see ALL callback_request leads with NO ownership or assignedToUser restriction.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      andConditions.push({
-        $or: [
-          ...(userId && mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
-          { assignedTo: userName },
-          { assignedToUser: null },
-          { assignedTo: 'Sales Concierge Team' },
-          { assignedTo: '' }
-        ]
-      });
+      andConditions.push({ leadType: 'callback_request' });
+    } else {
+      // Non-sales roles (Admin/Operations) can filter by leadType if provided
+      if (leadType && leadType !== 'all') {
+        andConditions.push({ leadType });
+      }
     }
 
     // Quick Filter support
@@ -300,9 +300,11 @@ export const getLeads = async (req, res) => {
         });
       } else if (quickFilter === 'new') {
         andConditions.push({ status: 'NEW' });
+      } else if (quickFilter === 'in_progress') {
+        andConditions.push({ status: { $in: ['IN_PROGRESS', 'CONTACTED'] } });
       } else if (quickFilter === 'qualified') {
         andConditions.push({ status: 'QUALIFIED' });
-      } else if (quickFilter === 'unassigned') {
+      } else if (quickFilter === 'unassigned' && isSuperOrAdmin) {
         andConditions.push({
           $and: [
             {
@@ -322,7 +324,7 @@ export const getLeads = async (req, res) => {
             }
           ]
         });
-      } else if (quickFilter === 'mine' && userId) {
+      } else if (quickFilter === 'mine' && userId && isSuperOrAdmin) {
         andConditions.push({
           $or: [
             ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedToUser: userId }] : []),
@@ -332,8 +334,8 @@ export const getLeads = async (req, res) => {
       }
     }
 
-    // Specific user assignment filter
-    if (assignedToUser) {
+    // Specific user assignment filter (only for general CRM admin workflows, not restricting sales shared queue)
+    if (assignedToUser && isSuperOrAdmin) {
       if (assignedToUser === 'unassigned') {
         andConditions.push({
           $or: [
@@ -362,11 +364,6 @@ export const getLeads = async (req, res) => {
     // Priority filter
     if (priority && priority !== 'all') {
       andConditions.push({ priority });
-    }
-
-    // Lead type filter
-    if (leadType && leadType !== 'all') {
-      andConditions.push({ leadType });
     }
 
     // Destination filter
@@ -420,20 +417,18 @@ export const getLeads = async (req, res) => {
       // Memory fallback for offline dev
       leads = memoryLeads.filter(l => {
         if (userRole === 'sales' && !isSuperOrAdmin) {
-          const isAssigned = String(l.assignedToUser) === String(userId) ||
-            l.assignedTo === userName ||
-            l.assignedTo === 'Sales Concierge Team' ||
-            !l.assignedTo;
-          if (!isAssigned) return false;
+          if (l.leadType !== 'callback_request') return false;
+        } else if (leadType && leadType !== 'all' && l.leadType !== leadType) {
+          return false;
         }
         if (quickFilter === 'due_today' && l.preferredCallDate !== todayStr) return false;
         if (quickFilter === 'overdue' && (l.preferredCallDate >= todayStr || ['CONVERTED', 'LOST'].includes(l.status))) return false;
         if (quickFilter === 'new' && l.status !== 'NEW') return false;
+        if (quickFilter === 'in_progress' && !['IN_PROGRESS', 'CONTACTED'].includes(l.status)) return false;
         if (quickFilter === 'qualified' && l.status !== 'QUALIFIED') return false;
-        if (quickFilter === 'unassigned' && l.assignedToUser && l.assignedTo !== 'Sales Concierge Team') return false;
+        if (quickFilter === 'unassigned' && isSuperOrAdmin && l.assignedToUser && l.assignedTo !== 'Sales Concierge Team') return false;
         if (status && status !== 'all' && l.status !== status) return false;
         if (priority && priority !== 'all' && l.priority !== priority) return false;
-        if (leadType && leadType !== 'all' && l.leadType !== leadType) return false;
         if (search) {
           const s = search.toLowerCase();
           return (l.name || '').toLowerCase().includes(s) ||
@@ -522,12 +517,12 @@ export const getLeadById = async (req, res) => {
       return res.status(404).json({ message: 'Lead dossier not found.' });
     }
 
-    // Role check: sales cannot inspect another sales specialist's private lead
+    // Role check:
+    // For callback_request (Expert Requests), all sales specialists operate on a shared queue with full access.
+    // Non-callback lead types remain restricted from unauthorized sales access.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
-      const isAssigned = !assignedId || assignedId === String(userId) || lead.assignedTo === req.user?.name || lead.assignedTo === 'Sales Concierge Team';
-      if (!isAssigned) {
-        return res.status(403).json({ message: 'Access denied. This lead is assigned to another specialist.' });
+      if (lead.leadType !== 'callback_request') {
+        return res.status(403).json({ message: 'Access denied: Sales portal is restricted to Travel Expert Requests.' });
       }
     }
 
@@ -555,6 +550,29 @@ export const claimLead = async (req, res) => {
 
     if (!userId) {
       return res.status(401).json({ message: 'Authentication required to claim lead.' });
+    }
+
+    let targetLead = null;
+    if (isDbConnected()) {
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        targetLead = await Lead.findById(id);
+      }
+      if (!targetLead) {
+        targetLead = await Lead.findOne({ referenceId: id });
+      }
+    } else {
+      targetLead = memoryLeads.find(l => String(l._id) === String(id) || l.referenceId === id);
+    }
+
+    if (!targetLead) {
+      return res.status(404).json({ message: 'Lead not found.' });
+    }
+
+    if (targetLead.leadType === 'callback_request') {
+      return res.status(400).json({
+        success: false,
+        message: 'Expert Requests use the shared Sales queue and cannot be claimed.'
+      });
     }
 
     let lead = null;
@@ -662,6 +680,13 @@ export const assignLead = async (req, res) => {
       lead = await Lead.findById(id);
       if (!lead) return res.status(404).json({ message: 'Lead not found.' });
 
+      if (lead.leadType === 'callback_request') {
+        return res.status(400).json({
+          success: false,
+          message: 'Expert Requests use the shared Sales queue and cannot be assigned.'
+        });
+      }
+
       lead.assignedToUser = finalUserId;
       lead.assignedToUserName = finalUserName;
       lead.assignedTo = finalUserName;
@@ -678,6 +703,12 @@ export const assignLead = async (req, res) => {
     } else {
       const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
       if (memIndex !== -1) {
+        if (memoryLeads[memIndex].leadType === 'callback_request') {
+          return res.status(400).json({
+            success: false,
+            message: 'Expert Requests use the shared Sales queue and cannot be assigned.'
+          });
+        }
         memoryLeads[memIndex] = {
           ...memoryLeads[memIndex],
           assignedToUser: finalUserId,
@@ -758,14 +789,18 @@ export const logLeadContact = async (req, res) => {
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
 
-    // IDOR protection: Sales cannot log contact on a lead assigned to another specialist
+    // IDOR protection:
+    // For callback_request (Expert Requests), all sales specialists operate on a shared queue and can log contacts.
+    // For other lead types, sales cannot log contact on a lead assigned to another specialist.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
-      const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
-      const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
-      const isOwner = isUnassigned || isAssignedToMe;
-      if (!isOwner) {
-        return res.status(403).json({ message: 'Access denied: You cannot log contact for a lead assigned to another specialist.' });
+      if (lead.leadType !== 'callback_request') {
+        const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
+        const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
+        const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
+        const isOwner = isUnassigned || isAssignedToMe;
+        if (!isOwner) {
+          return res.status(403).json({ message: 'Access denied: You cannot log contact for a lead assigned to another specialist.' });
+        }
       }
     }
 
@@ -879,14 +914,18 @@ export const updateLeadStatus = async (req, res) => {
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
 
-    // IDOR protection: Sales cannot change status of another specialist's lead
+    // IDOR protection:
+    // For callback_request (Expert Requests), all sales specialists operate on a shared queue and can update status.
+    // For other lead types, sales cannot update a lead assigned to another specialist.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
-      const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
-      const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
-      const isOwner = isUnassigned || isAssignedToMe;
-      if (!isOwner) {
-        return res.status(403).json({ message: 'Access denied: You cannot update a lead assigned to another specialist.' });
+      if (lead.leadType !== 'callback_request') {
+        const assignedId = lead.assignedToUser ? String(lead.assignedToUser._id || lead.assignedToUser) : null;
+        const isUnassigned = (!assignedId && (!lead.assignedTo || lead.assignedTo === 'Sales Concierge Team' || lead.assignedTo === 'Unassigned' || lead.assignedTo === ''));
+        const isAssignedToMe = (assignedId && assignedId === String(userId)) || (lead.assignedTo && lead.assignedTo === userName);
+        const isOwner = isUnassigned || isAssignedToMe;
+        if (!isOwner) {
+          return res.status(403).json({ message: 'Access denied: You cannot update a lead assigned to another specialist.' });
+        }
       }
     }
 
