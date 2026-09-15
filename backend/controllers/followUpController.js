@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import FollowUp from '../models/FollowUp.js';
 import Lead from '../models/Lead.js';
+import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -153,12 +154,27 @@ export const createFollowUp = async (req, res) => {
       });
     }
 
-    const assignedSalesId = salesUserId || req.user?._id || new mongoose.Types.ObjectId('64f000000000000000000001');
+    const candidateSalesId = salesUserId || req.user?._id;
+    const assignedSalesId = (candidateSalesId && isValidMongoObjectId(candidateSalesId))
+      ? toObjectIdOrNull(candidateSalesId)
+      : null;
     const assignedSalesName = salesUserName || req.user?.name || 'Sales Concierge';
 
+    const safeCustomerId = (customerId && isValidMongoObjectId(customerId))
+      ? toObjectIdOrNull(customerId)
+      : null;
+
+    const safeCreatorId = (req.user?._id && isValidMongoObjectId(req.user._id))
+      ? toObjectIdOrNull(req.user._id)
+      : null;
+
+    const safeLeadId = (leadId && isValidMongoObjectId(leadId))
+      ? toObjectIdOrNull(leadId)
+      : null;
+
     const followUpData = {
-      leadId: mongoose.Types.ObjectId.isValid(leadId) ? leadId : new mongoose.Types.ObjectId('64f000000000000000000002'),
-      customerId: customerId || null,
+      leadId: safeLeadId || new mongoose.Types.ObjectId('64f000000000000000000002'),
+      customerId: safeCustomerId,
       salesUserId: assignedSalesId,
       salesUserName: assignedSalesName,
       title: title.trim(),
@@ -168,7 +184,7 @@ export const createFollowUp = async (req, res) => {
       channel: channel || 'call',
       priority: priority || 'medium',
       status: 'pending',
-      createdBy: req.user?._id
+      createdBy: safeCreatorId
     };
 
     let newFollowUp = null;
@@ -287,7 +303,7 @@ export const completeFollowUp = async (req, res) => {
     followUp.status = 'completed';
     followUp.outcomeNotes = outcomeNotes || 'Follow-up completed successfully.';
     followUp.completedAt = new Date();
-    followUp.completedBy = req.user?._id;
+    followUp.completedBy = (req.user?._id && isValidMongoObjectId(req.user._id)) ? toObjectIdOrNull(req.user._id) : null;
 
     if (isDbConnected() && typeof followUp.save === 'function') {
       await followUp.save();

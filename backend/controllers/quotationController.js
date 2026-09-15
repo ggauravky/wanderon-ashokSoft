@@ -7,6 +7,7 @@ import Booking from '../models/Booking.js';
 import User from '../models/User.js';
 import { calculateQuotationPrice } from '../services/quotationPricingService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
+import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -1345,9 +1346,14 @@ export const createBookingFromQuotation = async (req, res) => {
 
     const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
 
+    const candidateBookingUserId = quotation.customerId || userId;
+    const safeBookingUserId = (candidateBookingUserId && isValidMongoObjectId(candidateBookingUserId))
+      ? toObjectIdOrNull(candidateBookingUserId)
+      : new mongoose.Types.ObjectId('64f000000000000000000001');
+
     const bookingData = {
       bookingId,
-      userId: quotation.customerId || userId || new mongoose.Types.ObjectId('64f000000000000000000001'),
+      userId: safeBookingUserId,
       tripId: quotation.sourceTripId || ('custom-quotation-' + quotation.quotationNumber),
       tripSnapshot: {
         title: quotation.tripRequirements.title,

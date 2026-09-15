@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Lead, { generateLeadReferenceId } from '../models/Lead.js';
 import User from '../models/User.js';
 import FollowUp from '../models/FollowUp.js';
+import { resolveCustomerUserObjectId, isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -83,8 +84,8 @@ export const createLead = async (req, res) => {
     const validCallWindows = ['Morning', 'Afternoon', 'Evening', 'Anytime', ''];
     const safeCallWindow = validCallWindows.includes(preferredCallWindow) ? preferredCallWindow : 'Anytime';
 
-    // Securely link authenticated user if token was decoded by optionalAuth
-    const authUserId = req.user ? (req.user._id || req.user.id) : null;
+    // Securely resolve authenticated customer user ObjectId (Staff roles or synthetic IDs resolve to null)
+    const authUserId = await resolveCustomerUserObjectId(req.user);
 
     // Calculate priority based on group size and intent
     const parsedPax = Number(travelersCount) || 1;
@@ -155,6 +156,14 @@ export const createLead = async (req, res) => {
     // 3. Create and Persist Lead (With Reference ID retry)
     let referenceId = generateLeadReferenceId();
 
+    // Safely resolve tripRef if candidate is a valid ObjectId
+    let validTripRef = null;
+    if (tripRef && isValidMongoObjectId(tripRef)) {
+      validTripRef = toObjectIdOrNull(tripRef);
+    } else if (!tripRef && tripId && isValidMongoObjectId(tripId)) {
+      validTripRef = toObjectIdOrNull(tripId);
+    }
+
     const leadPayload = {
       referenceId,
       name: name.trim(),
@@ -163,7 +172,7 @@ export const createLead = async (req, res) => {
       leadType: determinedLeadType,
       priority: calculatedPriority,
       tripId: tripId ? String(tripId) : '',
-      tripRef: tripRef && mongoose.Types.ObjectId.isValid(tripRef) ? tripRef : null,
+      tripRef: validTripRef,
       tripSlug: tripSlug ? String(tripSlug).trim() : '',
       tripTitle: tripTitle ? String(tripTitle).trim() : '',
       tripTitleSnapshot: tripTitle ? String(tripTitle).trim() : '',
@@ -223,6 +232,13 @@ export const createLead = async (req, res) => {
       memoryLeads.unshift(newLead);
     }
 
+    if (!newLead || (!newLead._id && !newLead.referenceId)) {
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to schedule callback right now. Please try again.'
+      });
+    }
+
     console.log(`\n======================================================`);
     console.log(`📞 [CRM NEW LEAD CAPTURED: ${determinedLeadType.toUpperCase()}]`);
     console.log(`Ref: ${newLead.referenceId} | Traveler: ${newLead.name} (${newLead.email} • ${newLead.phone})`);
@@ -241,8 +257,21 @@ export const createLead = async (req, res) => {
       lead: newLead
     });
   } catch (error) {
-    console.error('Lead submission error:', error);
-    res.status(500).json({ message: error.message || 'Server Error processing lead submission' });
+    console.error('Lead submission error:', {
+      name: error.name,
+      message: error.message,
+      errors: error.errors
+        ? Object.keys(error.errors).map(k => ({
+            path: k,
+            kind: error.errors[k].kind,
+            message: error.errors[k].message
+          }))
+        : null
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Unable to schedule callback right now. Please try again or connect with us directly on WhatsApp.'
+    });
   }
 };
 

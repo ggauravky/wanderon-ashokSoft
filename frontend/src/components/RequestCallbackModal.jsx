@@ -162,6 +162,9 @@ const RequestCallbackModal = ({ isOpen, onClose, trip, selectedBatch }) => {
       };
 
       const res = await createLeadApi(payload);
+      if (!res || (!res.lead && !res._id && !res.referenceId)) {
+        throw new Error(res?.message || 'Server did not return a valid submission confirmation.');
+      }
       setSubmittedLead(res.lead || res);
     } catch (err) {
       console.error('Callback request failed:', err);
