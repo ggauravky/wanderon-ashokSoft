@@ -473,7 +473,7 @@ const Navbar = () => {
 
                           {isAdmin && (
                             <Link
-                              to="/admin"
+                              to="/staff/admin"
                               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-indigo-700 hover:bg-indigo-50 transition-colors"
                             >
                               <ShieldCheck size={14} className="text-indigo-600" /> Admin CRM & CMS

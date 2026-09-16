@@ -20,244 +20,120 @@ let couponsList = [
 // @access  Private/Admin
 export const getAdminStats = async (req, res) => {
   try {
-    const { range = '30d' } = req.query;
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Platform analytics are unavailable while the database is disconnected.' });
+    }
 
-    let dateFilter = {};
+    const requestedRange = String(req.query.range || '30d').toLowerCase();
+    const allowedRanges = new Set(['7d', '30d', '90d', 'year', 'all']);
+    const range = allowedRanges.has(requestedRange) ? requestedRange : '30d';
     const now = new Date();
+    let startDate = null;
+    if (range === '7d') startDate = new Date(now.getTime() - 7 * 86400000);
+    if (range === '30d') startDate = new Date(now.getTime() - 30 * 86400000);
+    if (range === '90d') startDate = new Date(now.getTime() - 90 * 86400000);
+    if (range === 'year') startDate = new Date(now.getFullYear(), 0, 1);
+    const createdMatch = startDate ? { createdAt: { $gte: startDate, $lte: now } } : {};
+    const expertRequestMatch = { ...createdMatch, leadType: 'callback_request' };
 
-    if (range === '7d') {
-      const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      dateFilter = { createdAt: { $gte: past7 } };
-    } else if (range === '30d') {
-      const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      dateFilter = { createdAt: { $gte: past30 } };
-    } else if (range === '90d') {
-      const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      dateFilter = { createdAt: { $gte: past90 } };
-    } else if (range === 'year') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      dateFilter = { createdAt: { $gte: startOfYear } };
-    }
+    const paymentDateCondition = startDate
+      ? { $and: [{ $gte: ['$$payment.verifiedAt', startDate] }, { $lte: ['$$payment.verifiedAt', now] }] }
+      : { $ne: ['$$payment.verifiedAt', null] };
+    const legacyPaidAtMatch = startDate
+      ? { 'payment.paidAt': { $gte: startDate, $lte: now } }
+      : { 'payment.paidAt': { $ne: null } };
 
-    let totalUsers = 0;
-    let totalBookings = 0;
-    let confirmedBookings = 0;
-    let pendingBookings = 0;
-    let cancelledBookings = 0;
-    let totalRevenue = 0;
-    let activeTrips = 0;
-    let totalLeads = 0;
-    let convertedLeads = 0;
-    let totalReviews = 0;
-    let monthlyRevenue = [];
-    let destinationBreakdown = [];
-    let topTrips = [];
+    const [userGroups, tripGroups, leadGroups, quotationGroups, bookingGroups, revenueRows, reviewCount] = await Promise.all([
+      User.aggregate([{ $match: createdMatch }, { $group: { _id: '$role', count: { $sum: 1 } } }]),
+      Trip.aggregate([{ $match: createdMatch }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Lead.aggregate([{ $match: expertRequestMatch }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Quotation.aggregate([{ $match: createdMatch }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
+      Booking.aggregate([
+        { $match: createdMatch },
+        { $group: { _id: { bookingStatus: '$bookingStatus', paymentStatus: '$paymentStatus' }, count: { $sum: 1 }, bookingValue: { $sum: { $ifNull: ['$pricing.finalAmount', 0] } }, pendingAmount: { $sum: { $ifNull: ['$pricing.amountOutstanding', 0] } } } }
+      ]),
+      Booking.aggregate([
+        { $match: { $or: [{ 'payments.verifiedAt': { $ne: null } }, legacyPaidAtMatch] } },
+        { $project: {
+          paymentEvents: { $filter: { input: { $ifNull: ['$payments', []] }, as: 'payment', cond: paymentDateCondition } },
+          legacyAmount: { $cond: [{ $and: [{ $eq: [{ $size: { $ifNull: ['$payments', []] } }, 0] }, startDate ? { $gte: ['$payment.paidAt', startDate] } : { $ne: ['$payment.paidAt', null] }] }, { $ifNull: ['$pricing.amountPaid', 0] }, 0] }
+        } },
+        { $project: { amount: { $add: [{ $sum: '$paymentEvents.amount' }, '$legacyAmount'] } } },
+        { $group: { _id: null, paidRevenue: { $sum: '$amount' } } }
+      ]),
+      Review.countDocuments(createdMatch)
+    ]);
 
-    if (isDbConnected()) {
-      try {
-        // 1. Users Count
-        totalUsers = await User.countDocuments();
+    const toMap = (rows) => Object.fromEntries(rows.map((row) => [String(row._id || 'unknown').toUpperCase(), row.count]));
+    const usersByRole = toMap(userGroups);
+    const tripsByStatus = toMap(tripGroups);
+    const leadsByStatus = toMap(leadGroups);
+    const quotationsByStatus = toMap(quotationGroups);
+    const totalUsers = userGroups.reduce((sum, row) => sum + row.count, 0);
+    const totalTrips = tripGroups.reduce((sum, row) => sum + row.count, 0);
+    const totalExpertRequests = leadGroups.reduce((sum, row) => sum + row.count, 0);
+    const totalQuotations = quotationGroups.reduce((sum, row) => sum + row.count, 0);
+    const totalBookings = bookingGroups.reduce((sum, row) => sum + row.count, 0);
+    const bookingValue = bookingGroups.reduce((sum, row) => sum + row.bookingValue, 0);
+    const pendingAmount = bookingGroups
+      .filter((row) => ['UNPAID', 'PARTIALLY_PAID'].includes(row._id.paymentStatus) && !['CANCELLED', 'FAILED'].includes(row._id.bookingStatus))
+      .reduce((sum, row) => sum + row.pendingAmount, 0);
+    const countBookingStatus = (status) => bookingGroups.filter((row) => row._id.bookingStatus === status).reduce((sum, row) => sum + row.count, 0);
+    const countPaymentStatus = (status) => bookingGroups.filter((row) => row._id.paymentStatus === status).reduce((sum, row) => sum + row.count, 0);
+    const paidRevenue = revenueRows[0]?.paidRevenue || 0;
+    const customers = usersByRole.USER || 0;
+    const creators = usersByRole.INFLUENCER || 0;
+    const staff = totalUsers - customers - creators;
 
-        // 2. Active Trips
-        activeTrips = await Trip.countDocuments({ status: { $ne: 'draft' }, isActive: { $ne: false } });
-
-        // 3. Leads Count
-        totalLeads = await Lead.countDocuments(dateFilter);
-        convertedLeads = await Lead.countDocuments({ ...dateFilter, status: 'CONVERTED' });
-
-        // 4. Reviews Count
-        totalReviews = await Review.countDocuments();
-
-        // 5. Booking Counts
-        totalBookings = await Booking.countDocuments(dateFilter);
-        confirmedBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: 'CONFIRMED' });
-        pendingBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: { $in: ['PENDING_PAYMENT', 'PENDING'] } });
-        cancelledBookings = await Booking.countDocuments({ ...dateFilter, bookingStatus: 'CANCELLED' });
-
-        // 6. Verified Revenue (Collected Cash from PAID and PARTIALLY_PAID bookings)
-        const revenueAgg = await Booking.aggregate([
-          {
-            $match: {
-              ...dateFilter,
-              $or: [
-                { 'payment.status': 'PAID' },
-                { paymentStatus: { $in: ['PAID', 'PARTIALLY_PAID'] } },
-                { bookingStatus: { $in: ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'] } }
-              ]
-            }
-          },
-          {
-            $group: {
-              _id: null,
-              totalAmount: {
-                $sum: {
-                  $cond: [
-                    { $gt: ['$pricing.amountPaid', 0] },
-                    '$pricing.amountPaid',
-                    { $ifNull: ['$pricing.finalAmount', 0] }
-                  ]
-                }
-              }
-            }
-          }
-        ]);
-        totalRevenue = revenueAgg[0]?.totalAmount || 0;
-
-        // 7. Monthly Revenue & Booking Trend (Last 12 Months)
-        const monthsMap = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const monthlyAgg = await Booking.aggregate([
-          {
-            $match: {
-              $or: [
-                { 'payment.status': 'PAID' },
-                { paymentStatus: { $in: ['PAID', 'PARTIALLY_PAID'] } },
-                { bookingStatus: { $in: ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'] } }
-              ]
-            }
-          },
-          {
-            $group: {
-              _id: {
-                year: { $year: '$createdAt' },
-                month: { $month: '$createdAt' }
-              },
-              revenue: {
-                $sum: {
-                  $cond: [
-                    { $gt: ['$pricing.amountPaid', 0] },
-                    '$pricing.amountPaid',
-                    { $ifNull: ['$pricing.finalAmount', 0] }
-                  ]
-                }
-              },
-              bookings: { $sum: 1 }
-            }
-          },
-          { $sort: { '_id.year': 1, '_id.month': 1 } }
-        ]);
-
-        if (monthlyAgg.length > 0) {
-          monthlyRevenue = monthlyAgg.map(item => ({
-            month: `${monthsMap[item._id.month - 1]} ${item._id.year}`,
-            revenue: item.revenue,
-            bookings: item.bookings
-          }));
-        }
-
-        // 8. Destination Breakdown from Verified Bookings
-        const destAgg = await Booking.aggregate([
-          {
-            $group: {
-              _id: { $ifNull: ['$tripSnapshot.destination', '$tripSnapshot.location'] },
-              count: { $sum: 1 },
-              revenue: { $sum: '$pricing.finalAmount' }
-            }
-          },
-          { $sort: { count: -1 } },
-          { $limit: 6 }
-        ]);
-
-        if (destAgg.length > 0 && totalBookings > 0) {
-          destinationBreakdown = destAgg.filter(d => d._id).map(d => ({
-            name: d._id || 'Expeditions',
-            count: d.count,
-            revenue: d.revenue,
-            percentage: Math.round((d.count / (totalBookings || 1)) * 100)
-          }));
-        }
-
-        // 9. Top Trips from Bookings
-        const topTripsAgg = await Booking.aggregate([
-          {
-            $group: {
-              _id: '$tripSnapshot.title',
-              bookingCount: { $sum: 1 },
-              totalRevenue: { $sum: '$pricing.finalAmount' }
-            }
-          },
-          { $sort: { bookingCount: -1 } },
-          { $limit: 5 }
-        ]);
-
-        topTrips = topTripsAgg.filter(t => t._id).map(t => ({
-          title: t._id,
-          bookingCount: t.bookingCount,
-          totalRevenue: t.totalRevenue
-        }));
-
-        // 7. Quotation Conversion Metrics (Real Pipeline Aggregation)
-        const totalQuotations = await Quotation.countDocuments(dateFilter);
-        const sentQuotations = await Quotation.countDocuments({ ...dateFilter, status: { $in: ['SENT', 'VIEWED', 'APPROVED', 'CONVERTED'] } });
-        const approvedQuotations = await Quotation.countDocuments({ ...dateFilter, status: { $in: ['APPROVED', 'CONVERTED'] } });
-        const convertedQuotations = await Quotation.countDocuments({ ...dateFilter, status: 'CONVERTED' });
-        const quotationConversionRate = totalQuotations > 0
-          ? `${((convertedQuotations / totalQuotations) * 100).toFixed(1)}%`
-          : '0.0%';
-
-        const conversionRate = totalLeads > 0 
-          ? `${((convertedLeads / totalLeads) * 100).toFixed(1)}%` 
-          : (totalUsers > 0 && confirmedBookings > 0 ? `${((confirmedBookings / totalUsers) * 100).toFixed(1)}%` : '0%');
-
-        const statsData = {
-          totalRevenue,
-          totalBookings,
-          confirmedBookings,
-          pendingBookings,
-          cancelledBookings,
-          activeTrips,
-          totalUsers,
-          totalLeads,
-          convertedLeads,
-          conversionRate,
-          totalReviews,
-          // Quotation Metrics
-          totalQuotations,
-          sentQuotations,
-          approvedQuotations,
-          convertedQuotations,
-          quotationConversionRate,
-          monthlyRevenue,
-          destinationBreakdown,
-          topTrips,
-          period: range,
-          isRealData: true
-        };
-
-        return res.json(statsData);
-      } catch (dbErr) {
-        console.warn('MongoDB Analytics aggregate error:', dbErr.message);
-      }
-    }
-
-    const conversionRate = totalLeads > 0 
-      ? `${((convertedLeads / totalLeads) * 100).toFixed(1)}%` 
-      : (totalUsers > 0 && confirmedBookings > 0 ? `${((confirmedBookings / totalUsers) * 100).toFixed(1)}%` : '0%');
-
-    const statsData = {
-      totalRevenue,
+    return res.json({
+      success: true,
+      range,
+      startDate,
+      generatedAt: now,
+      totals: { users: totalUsers, trips: totalTrips, expertRequests: totalExpertRequests, bookings: totalBookings, quotations: totalQuotations, reviews: reviewCount },
+      users: { customers, staff, creators },
+      trips: { active: tripsByStatus.PUBLISHED || 0, draft: tripsByStatus.DRAFT || 0, inactive: tripsByStatus.INACTIVE || 0 },
+      bookings: {
+        pendingPayment: countBookingStatus('PENDING_PAYMENT'),
+        partiallyPaid: countPaymentStatus('PARTIALLY_PAID'),
+        paid: countPaymentStatus('PAID'),
+        cancelled: countBookingStatus('CANCELLED'),
+        bookingValue,
+        pendingAmount,
+        paidRevenue
+      },
+      leads: {
+        new: leadsByStatus.NEW || 0,
+        inProgress: (leadsByStatus.IN_PROGRESS || 0) + (leadsByStatus.CONTACTED || 0),
+        qualified: leadsByStatus.QUALIFIED || 0,
+        converted: leadsByStatus.CONVERTED || 0
+      },
+      quotations: {
+        draft: quotationsByStatus.DRAFT || 0,
+        sent: quotationsByStatus.SENT || 0,
+        viewed: quotationsByStatus.VIEWED || 0,
+        approved: quotationsByStatus.APPROVED || 0,
+        rejected: quotationsByStatus.REJECTED || 0,
+        converted: quotationsByStatus.CONVERTED || 0
+      },
+      // Flat aliases keep unmigrated legacy consumers stable during the transition.
+      totalRevenue: paidRevenue,
       totalBookings,
-      confirmedBookings,
-      pendingBookings,
-      cancelledBookings,
-      activeTrips,
+      confirmedBookings: countBookingStatus('CONFIRMED'),
+      pendingBookings: countBookingStatus('PENDING_PAYMENT'),
+      cancelledBookings: countBookingStatus('CANCELLED'),
+      activeTrips: tripsByStatus.PUBLISHED || 0,
       totalUsers,
-      totalLeads,
-      convertedLeads,
-      conversionRate,
-      totalReviews,
-      totalQuotations: 0,
-      sentQuotations: 0,
-      approvedQuotations: 0,
-      convertedQuotations: 0,
-      quotationConversionRate: '0.0%',
-      monthlyRevenue,
-      destinationBreakdown,
-      topTrips,
+      totalLeads: totalExpertRequests,
+      convertedLeads: leadsByStatus.CONVERTED || 0,
+      totalReviews: reviewCount,
+      totalQuotations,
+      sentQuotations: quotationsByStatus.SENT || 0,
+      approvedQuotations: quotationsByStatus.APPROVED || 0,
+      convertedQuotations: quotationsByStatus.CONVERTED || 0,
       period: range,
       isRealData: true
-    };
-
-    res.json(statsData);
+    });
   } catch (error) {
     console.error('getAdminStats Error:', error);
     res.status(500).json({ message: error.message || 'Server Error generating analytics' });

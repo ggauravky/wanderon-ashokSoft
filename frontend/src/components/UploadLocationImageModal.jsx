@@ -18,7 +18,7 @@ export default function UploadLocationImageModal({
   const [directUrl, setDirectUrl] = useState('');
   const [uploadMode, setUploadMode] = useState('file'); // 'file' | 'url'
 
-  const [destination, setDestination] = useState(initialDestination || 'Meghalaya');
+  const [destination, setDestination] = useState(initialDestination || '');
   const [locality, setLocality] = useState(initialLocationName || '');
   const [poi, setPoi] = useState(initialLocationName || '');
   const [city, setCity] = useState('');

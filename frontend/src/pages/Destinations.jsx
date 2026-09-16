@@ -13,7 +13,6 @@ import FilterSidebar, {
   DESTINATION_OPTIONS, MONTH_OPTIONS, DURATION_OPTIONS, 
   BUDGET_OPTIONS, TRIP_TYPE_OPTIONS, MOOD_OPTIONS, STARTING_CITY_OPTIONS 
 } from '../components/FilterSidebar.jsx';
-import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import { getPresetByPath } from '../config/discoveryTaxonomy.js';
 
@@ -31,7 +30,7 @@ const Destinations = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const travelCtx = useTravelContext() || {};
-  const recommendedTrips = travelCtx.recommendedTrips || UPCOMING_TRIPS || [];
+  const recommendedTrips = travelCtx.recommendedTrips || [];
   const season = travelCtx.season || {};
 
   // Resolve current route's authoritative taxonomy preset
@@ -236,7 +235,7 @@ const Destinations = () => {
   // Main Filtered Trips Computation with Sorting
   const filteredTrips = useMemo(() => {
     try {
-      const catalog = recommendedTrips && recommendedTrips.length > 0 ? recommendedTrips : UPCOMING_TRIPS;
+      const catalog = recommendedTrips || [];
 
       let result = catalog.filter((trip) => matchTripAgainstFilters(trip, filters, searchQuery));
 
@@ -261,13 +260,13 @@ const Destinations = () => {
       return result;
     } catch (err) {
       console.warn('Filter computation error:', err);
-      return UPCOMING_TRIPS;
+      return [];
     }
   }, [recommendedTrips, matchTripAgainstFilters, filters, searchQuery, sortBy]);
 
   // Real Counts Matrix for Sidebar Badges
   const countsByOption = useMemo(() => {
-    const catalog = recommendedTrips && recommendedTrips.length > 0 ? recommendedTrips : UPCOMING_TRIPS;
+    const catalog = recommendedTrips || [];
     const matrix = {};
 
     DESTINATION_OPTIONS.forEach(opt => {

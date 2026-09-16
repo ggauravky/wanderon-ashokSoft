@@ -11,12 +11,17 @@ const bookingSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
       index: true
     },
     tripId: {
       type: String,
       required: true
+    },
+    batchId: {
+      type: String,
+      default: '',
+      index: true
     },
     tripSnapshot: {
       title: { type: String, required: true },
@@ -132,7 +137,9 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Quotation',
       default: null,
-      index: true
+      index: true,
+      unique: true,
+      sparse: true
     },
     leadId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -143,6 +150,27 @@ const bookingSchema = new mongoose.Schema(
     isCustomQuotationBooking: {
       type: Boolean,
       default: false
+    },
+    quotationSnapshot: {
+      quotationNumber: { type: String, default: '' },
+      statusAtConversion: { type: String, default: '' },
+      selectedHotel: { type: mongoose.Schema.Types.Mixed, default: null },
+      selectedTransport: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      activities: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      addOns: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      paymentTerms: { type: mongoose.Schema.Types.Mixed, default: null },
+      depositRequired: { type: Number, default: 0 },
+      convertedAt: { type: Date }
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
     }
   },
   { timestamps: true }

@@ -5,27 +5,6 @@ import {
 } from '../utils/travelContextEngine.js';
 import { getCurrentSeason, getDestinationWeather } from '../utils/weatherSeasonEngine.js';
 import { getRecentlyViewedTrips, getWishlistIds, getSavedAIItineraries } from '../utils/userHistory.js';
-import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
-
-const getAllStaticTrips = () => {
-  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
-    return travelKnowledgeService.getAllStaticTrips();
-  }
-  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
-    return travelKnowledgeService.default.getAllStaticTrips();
-  }
-  return [];
-};
-
-const mergeTripsWithLive = (liveTrips) => {
-  if (typeof travelKnowledgeService.mergeTripsWithLive === 'function') {
-    return travelKnowledgeService.mergeTripsWithLive(liveTrips);
-  }
-  if (typeof travelKnowledgeService.default?.mergeTripsWithLive === 'function') {
-    return travelKnowledgeService.default.mergeTripsWithLive(liveTrips);
-  }
-  return getAllStaticTrips();
-};
 
 export const useTravelContext = (customTrips) => {
   const [liveTrips, setLiveTrips] = useState([]);
@@ -36,18 +15,17 @@ export const useTravelContext = (customTrips) => {
         const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips`);
         if (res.ok) {
           const json = await res.json();
-          if (Array.isArray(json.data) && json.data.length > 0) {
-            setLiveTrips(json.data);
-          }
+          setLiveTrips(Array.isArray(json.data) ? json.data.map((trip) => ({ ...trip, availableBatches: Array.isArray(trip.batches) ? trip.batches : [] })) : []);
         }
       } catch (e) {
-        // Fallback to static
+        setLiveTrips([]);
       }
     };
     fetchLiveCatalog();
   }, []);
 
-  const tripsPool = customTrips || (liveTrips.length > 0 ? mergeTripsWithLive(liveTrips) : getAllStaticTrips());
+  // Operational/bookable inventory is API-only. Editorial knowledge remains in its own service.
+  const tripsPool = customTrips || liveTrips;
 
   // Active Context States
   const [now, setNow] = useState(new Date());
@@ -81,7 +59,7 @@ export const useTravelContext = (customTrips) => {
 
   // Weekend-specific getaways (2-3 days)
   const weekendGetaways = useMemo(() => {
-    return tripsPool.filter((t) => t.duration.includes('2N/3D') || t.duration.includes('3N/4D'));
+    return tripsPool.filter((t) => String(t.duration || '').includes('2N/3D') || String(t.duration || '').includes('3N/4D'));
   }, [tripsPool]);
 
   // Season-specific picks

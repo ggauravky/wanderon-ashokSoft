@@ -304,6 +304,10 @@ export const getLeads = async (req, res) => {
 
     const andConditions = [];
     const todayStr = new Date().toISOString().split('T')[0];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
     // RBAC Scoping for Sales:
     // Sales strictly operates on the Shared Sales Queue for Travel Expert Requests (leadType = 'callback_request').
@@ -321,10 +325,19 @@ export const getLeads = async (req, res) => {
     // Quick Filter support
     if (quickFilter) {
       if (quickFilter === 'due_today') {
-        andConditions.push({ preferredCallDate: todayStr });
+        andConditions.push({
+          status: { $nin: ['CONVERTED', 'LOST'] },
+          $or: [
+            { preferredCallDate: todayStr },
+            { nextFollowUpAt: { $gte: todayStart, $lt: tomorrowStart } }
+          ]
+        });
       } else if (quickFilter === 'overdue') {
         andConditions.push({
-          preferredCallDate: { $ne: '', $lt: todayStr },
+          $or: [
+            { preferredCallDate: { $ne: '', $lt: todayStr } },
+            { nextFollowUpAt: { $lt: todayStart } }
+          ],
           status: { $nin: ['CONVERTED', 'LOST'] }
         });
       } else if (quickFilter === 'new') {

@@ -6,6 +6,7 @@ import {
   verifyRemainingBalance,
   cancelBooking,
   getMyBookings, 
+  getSalesBookings,
   getBookingById, 
   getBoardingPassData,
   getProvisionalLetterData,
@@ -13,7 +14,7 @@ import {
   calculatePricingEndpoint,
   resendWhatsAppTicket
 } from '../controllers/bookingController.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import { protect, requireRoles } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ router.post('/:bookingId/verify-balance', protect, verifyRemainingBalance);
 router.post('/:bookingId/send-whatsapp', protect, resendWhatsAppTicket);
 
 router.get('/my-bookings', protect, getMyBookings);
+router.get('/staff/sales', protect, requireRoles('super_admin', 'admin', 'sales'), getSalesBookings);
 router.get('/:bookingId', protect, getBookingById);
 router.get('/:bookingId/boarding-pass', protect, getBoardingPassData);
 router.get('/:bookingId/provisional-letter', protect, getProvisionalLetterData);

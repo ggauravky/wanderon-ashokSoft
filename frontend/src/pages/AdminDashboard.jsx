@@ -6,7 +6,7 @@ import {
   DollarSign, MapPin, Calendar, Lock, AlertTriangle, Layers, Eye, 
   Power, Check, X, LogOut, Sparkles, Wallet, UserCheck, UserX, 
   Globe, Save, Upload, FileText, ArrowUpRight, MessageSquare, 
-  Phone, PhoneCall, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
+  Phone, Mail, CheckSquare, Clock, Filter, AlertCircle, Loader2, ChevronRight, HelpCircle,
   Share2, Copy, Send, CreditCard, ExternalLink, Compass, Hotel, Car, Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -51,9 +51,8 @@ import ShareQuotationModal from '../components/ShareQuotationModal';
 import BookingDetailsModal from '../components/BookingDetailsModal';
 import MediaLibraryModal from '../components/MediaLibraryModal';
 import UploadLocationImageModal from '../components/UploadLocationImageModal';
-import AdminExpertRequests from '../components/AdminExpertRequests';
 
-const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
+const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null, embedded = false }) => {
   const { 
     user, logout, eligiblePlans, allPayoutRequests, adminApprovePayout, adminTogglePlanEligibility,
     influencerApplications, fetchInfluencerApplications, approveInfluencerApplication, rejectInfluencerApplication
@@ -64,6 +63,20 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
 
   // Active Main Navigation Tab
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || defaultTab || 'analytics');
+
+  useEffect(() => {
+    if (embedded && activeTab === 'analytics') {
+      navigate('/staff/admin', { replace: true });
+      return;
+    }
+    if (embedded && activeTab === 'trips') {
+      navigate('/staff/admin/trips', { replace: true });
+      return;
+    }
+    if (activeTab === 'expert_requests' || activeTab === 'quotations') {
+      navigate(activeTab === 'quotations' ? '/staff/sales/quotations' : '/staff/sales/expert-requests', { replace: true });
+    }
+  }, [activeTab, embedded, navigate]);
 
   // ==========================================
   // 1. REAL ANALYTICS STATE (ZERO MOCK DATA)
@@ -230,26 +243,38 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const [bookingModalQuotation, setBookingModalQuotation] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
 
+  useEffect(() => {
+    const legacyBookingId = searchParams.get('bookingId');
+    if (!embedded || !legacyBookingId) return;
+    setBookingModalCode(legacyBookingId);
+    setBookingModalQuotation(null);
+    setShowBookingModal(true);
+  }, [embedded, searchParams]);
+
   // Load All Real Admin Data
   const fetchAllAdminData = async () => {
-    try {
-      setStatsLoading(true);
-      const statsRes = await getAdminStatsApi(analyticsRange);
-      setStats(statsRes);
-    } catch (err) {
-      console.warn('Stats fetch warning:', err.message);
-    } finally {
-      setStatsLoading(false);
+    if (!embedded) {
+      try {
+        setStatsLoading(true);
+        const statsRes = await getAdminStatsApi(analyticsRange);
+        setStats(statsRes);
+      } catch (err) {
+        console.warn('Stats fetch warning:', err.message);
+      } finally {
+        setStatsLoading(false);
+      }
     }
 
-    try {
-      setTripsLoading(true);
-      const tripsRes = await getAdminTripsApi();
-      setTrips(tripsRes);
-    } catch (err) {
-      console.warn('Trips fetch warning:', err.message);
-    } finally {
-      setTripsLoading(false);
+    if (!embedded) {
+      try {
+        setTripsLoading(true);
+        const tripsRes = await getAdminTripsApi();
+        setTrips(tripsRes);
+      } catch (err) {
+        console.warn('Trips fetch warning:', err.message);
+      } finally {
+        setTripsLoading(false);
+      }
     }
 
     try {
@@ -538,20 +563,21 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
 
   const handleAdminLogout = () => {
     logout();
-    navigate('/admin/login');
+    navigate('/staff/login');
   };
 
   // ==========================================
   // TRIP CMS ACTIONS
   // ==========================================
   const handleOpenAddTrip = () => {
-    setEditingTripId(null);
-    setTripForm(initialTripForm);
-    setTripModalTab('basic');
-    setShowTripModal(true);
+    navigate('/staff/admin/trips/new');
   };
 
   const handleOpenEditTrip = (trip) => {
+    if (trip?._id || trip?.id) {
+      navigate(`/staff/admin/trips/${trip._id || trip.id}/edit`);
+      return;
+    }
     setEditingTripId(trip._id || trip.id);
     setTripForm({
       title: trip.title || '',
@@ -1000,11 +1026,13 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
   const popularDestinationsList = getDestinations().map(d => d.name);
 
   return (
-    <div className="min-h-screen bg-slate-100/70 pb-24 pt-28 md:pt-32 text-slate-800 font-sans">
-      <div className="container mx-auto px-4 md:px-8 max-w-7xl">
+    <div className={embedded
+      ? 'text-slate-800 font-sans'
+      : 'min-h-screen bg-slate-100/70 pb-24 pt-28 md:pt-32 text-slate-800 font-sans'}>
+      <div className={embedded ? 'w-full' : 'container mx-auto px-4 md:px-8 max-w-7xl'}>
         
         {/* Header Admin Control Panel Banner */}
-        <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden border border-slate-800">
+        {!embedded ? <div className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden border border-slate-800">
           <div className="relative z-10 space-y-2">
             <div className="flex items-center gap-2">
               <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
@@ -1036,17 +1064,29 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
               <LogOut size={16} /> Exit Admin
             </button>
           </div>
-        </div>
+        </div> : (
+          <div className="mb-6 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Administration · Transitional</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Existing Admin Tools</h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenAddTrip}
+              className="flex min-h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+            >
+              <Plus size={16} aria-hidden="true" /> Add New Trip
+            </button>
+          </div>
+        )}
 
         {/* Role-Adaptive Master Tab Selector */}
         {(() => {
           const userRole = (user?.role || 'admin').toLowerCase();
-          const isSuperOrAdmin = ['admin', 'super_admin'].includes(userRole) || user?.email?.toLowerCase() === 'gaurav999@gmail.com';
+          const isSuperOrAdmin = ['admin', 'super_admin'].includes(userRole);
 
           const allTabDefs = [
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
-            { id: 'quotations', label: 'Quotations', icon: <FileText size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales', 'marketing'] },
-            { id: 'expert_requests', label: 'Expert Requests', icon: <PhoneCall size={15} />, roles: ['super_admin', 'admin', 'operations', 'sales'] },
             { id: 'trips', label: 'Trip CMS', icon: <Layers size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
             { id: 'media_library', label: 'Media Library', icon: <Camera size={15} />, roles: ['super_admin', 'admin', 'operations', 'marketing'] },
             { id: 'pages', label: 'Pages CMS', icon: <Globe size={15} />, roles: ['super_admin', 'admin', 'marketing'] },
@@ -1057,7 +1097,7 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
             { id: 'users', label: 'Users & Roles', icon: <Users size={15} />, roles: ['super_admin', 'admin'] }
           ];
 
-          const visibleTabs = allTabDefs.filter(t => isSuperOrAdmin || t.roles.includes(userRole));
+          const visibleTabs = allTabDefs.filter(t => (!embedded || !['analytics', 'trips'].includes(t.id)) && (isSuperOrAdmin || t.roles.includes(userRole)));
 
           return (
             <div className="flex flex-wrap gap-2 mb-8">
@@ -1645,19 +1685,6 @@ const AdminDashboard = ({ defaultTab = 'analytics', initialAction = null }) => {
               </div>
             </div>
           </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB 2B: EXPERT REQUESTS (TALK TO A TRAVEL EXPERT / SALES CRM)            */}
-        {/* ========================================================================= */}
-        {activeTab === 'expert_requests' && (
-          <AdminExpertRequests 
-            onOpenQuotationBuilder={handleCreateQuotationFromLead}
-            onViewBooking={(code) => {
-              setBookingModalCode(code);
-              setShowBookingModal(true);
-            }}
-          />
         )}
 
         {/* ========================================================================= */}

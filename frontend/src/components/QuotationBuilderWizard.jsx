@@ -6,7 +6,7 @@ import {
   Copy, ChevronRight, X, Clock, Tag, ShieldCheck, HelpCircle,
   Eye, Check, ArrowUp, ArrowDown, ExternalLink, RefreshCw, Lock,
   AlertTriangle, Layers, CreditCard, History, ChevronDown, Camera,
-  Image as ImageIcon
+  Image as ImageIcon, Upload
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,7 @@ import {
   TRANSPORT_TYPES,
   ADDON_PRESETS,
   calculateDuration,
-  getInitialQuotationState,
+  getBlankQuotationState,
   getEmptyHotelOption,
   getEmptyTransportOption,
   getEmptyActivity,
@@ -55,6 +55,8 @@ const WIZARD_STEPS = [
 export default function QuotationBuilderWizard({
   quotationId = null,
   initialLead = null,
+  embedded = false,
+  allowConversions = true,
   onClose = () => {},
   onQuotationSaved = () => {}
 }) {
@@ -65,7 +67,7 @@ export default function QuotationBuilderWizard({
   // Wizard Navigation
   const [currentStep, setCurrentStep] = useState(1);
   const [quotation, setQuotation] = useState(() => {
-    const base = getInitialQuotationState();
+    const base = getBlankQuotationState();
     if (initialLead) {
       base.leadId = initialLead._id || initialLead.id || null;
       base.customerSnapshot = {
@@ -75,12 +77,15 @@ export default function QuotationBuilderWizard({
         city: '',
         notes: initialLead.message || initialLead.notes || ''
       };
-      base.tripRequirements.title = initialLead.tripTitle ? `Curated ${initialLead.tripTitle}` : (initialLead.destination ? `${initialLead.destination} Tailored Journey` : 'Custom Himalayan Odyssey');
-      base.tripRequirements.destination = initialLead.destination || 'Spiti Valley, Himachal';
-      base.tripRequirements.adults = Math.max(1, Number(initialLead.travelersCount) || 2);
-      base.tripRequirements.totalTravelers = Math.max(1, Number(initialLead.travelersCount) || 2);
-      base.tripRequirements.specialRequests = initialLead.message || '';
-      base.assignedTo = initialLead.assignedTo || user?._id || null;
+      base.tripRequirements.title = initialLead.tripTitle || initialLead.tripTitleSnapshot || (initialLead.destination ? `${initialLead.destination} journey` : '');
+      base.tripRequirements.destination = initialLead.destination || '';
+      base.tripRequirements.adults = Math.max(1, Number(initialLead.travelersCount) || 1);
+      base.tripRequirements.totalTravelers = Math.max(1, Number(initialLead.travelersCount) || 1);
+      base.tripRequirements.specialRequests = [
+        initialLead.selectedBatch ? `Selected batch: ${initialLead.selectedBatch}` : '',
+        initialLead.message || ''
+      ].filter(Boolean).join('\n');
+      base.assignedTo = user?._id || user?.id || null;
     }
     return base;
   });
@@ -582,6 +587,10 @@ export default function QuotationBuilderWizard({
 
   // Save Draft (Explicit Save Workflow)
   const handleSaveDraft = async () => {
+    if (['SENT', 'VIEWED', 'APPROVED', 'CONVERTED', 'ARCHIVED'].includes(quotation.status)) {
+      setSaveStatusMsg('This quotation is read-only. Create a revision when available.');
+      return;
+    }
     try {
       setIsSaving(true);
       setSaveStatusMsg('Saving draft...');
@@ -770,6 +779,7 @@ export default function QuotationBuilderWizard({
   const selectedHotels = (quotation.hotelOptions || []).filter(h => h.selected);
   const selectedTransport = (quotation.transportOptions || []).find(t => t.selected) || quotation.transportOptions?.[0];
   const isSentOrViewed = ['SENT', 'VIEWED'].includes(quotation.status);
+  const isDirectEditLocked = ['SENT', 'VIEWED', 'APPROVED', 'CONVERTED', 'ARCHIVED'].includes(quotation.status);
 
   // Sales Role Concession Guard Warning Check
   const discountType = quotation.pricing?.discountType || 'none';
@@ -781,12 +791,14 @@ export default function QuotationBuilderWizard({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div className={embedded ? 'w-full' : 'fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto'}>
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white rounded-3xl w-full max-w-7xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden relative"
+        className={embedded
+          ? 'relative flex min-h-[calc(100dvh-9rem)] w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]'
+          : 'bg-white rounded-3xl w-full max-w-7xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden relative'}
       >
         {/* ========================================================================= */}
         {/* TOP MODAL HEADER */}
@@ -845,7 +857,7 @@ export default function QuotationBuilderWizard({
 
             <button
               onClick={handleSaveDraft}
-              disabled={isSaving}
+              disabled={isSaving || isDirectEditLocked}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50"
             >
               <Save size={14} /> {isSaving ? 'Saving...' : 'Save Draft'}
@@ -861,20 +873,20 @@ export default function QuotationBuilderWizard({
         </div>
 
         {/* Locked Snapshot Notice Bar (When Sent) */}
-        {isSentOrViewed && (
+        {isDirectEditLocked && (
           <div className="bg-blue-50 border-b border-blue-200 px-6 py-2.5 flex items-center justify-between text-xs text-blue-900 font-medium">
             <div className="flex items-center gap-2">
               <Lock size={14} className="text-blue-700 shrink-0" />
               <span>
-                <strong>Immutable Price Snapshot Locked (v{quotation.version || 1}):</strong> This quotation was dispatched to traveler. Live catalog changes will not mutate the approved proposal. To modify prices or stay tiers, create a revision.
+                <strong>Quotation is read-only (v{quotation.version || 1}):</strong> Status {quotation.status} does not permit direct editing. {isSentOrViewed ? 'Create a revision to modify the proposal.' : 'Return to the quotation detail for available actions.'}
               </span>
             </div>
-            <button
+            {isSentOrViewed && <button
               onClick={() => setShowRevisionModal(true)}
               className="font-black text-blue-700 hover:text-blue-900 underline ml-3 shrink-0"
             >
               Create Revision
-            </button>
+            </button>}
           </div>
         )}
 
@@ -1130,7 +1142,7 @@ export default function QuotationBuilderWizard({
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    {quotation.status === 'DRAFT' && <button
                       type="button"
                       onClick={handleAutoResolveAllDays}
                       disabled={isResolvingAllDays || !quotation.itinerary?.length}
@@ -1139,7 +1151,7 @@ export default function QuotationBuilderWizard({
                     >
                       <Sparkles size={13} className={isResolvingAllDays ? 'animate-spin' : ''} />
                       {isResolvingAllDays ? 'Resolving Media...' : 'Auto-Resolve All Images'}
-                    </button>
+                    </button>}
                     <button
                       type="button"
                       onClick={handleAddDay}
@@ -2139,13 +2151,13 @@ export default function QuotationBuilderWizard({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
+                    {quotation.publicShare?.token && <button
                       type="button"
                       onClick={() => setShowShareModal(true)}
                       className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                     >
                       <Share2 size={13} /> Share Link & WhatsApp
-                    </button>
+                    </button>}
 
                     <button
                       type="button"
@@ -2163,19 +2175,19 @@ export default function QuotationBuilderWizard({
                       <Printer size={13} /> Print
                     </button>
 
-                    <button
+                    {quotation.status === 'DRAFT' && <button
                       type="button"
                       onClick={handleSendToCustomer}
                       disabled={isSaving}
                       className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
                     >
                       <Send size={14} /> Send to Customer
-                    </button>
+                    </button>}
                   </div>
                 </div>
 
                 {/* Conversion Actions Bar (For Approved Quotations) */}
-                <div className="bg-slate-900 text-white p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-slate-800">
+                {allowConversions && <div className="bg-slate-900 text-white p-5 rounded-3xl flex flex-wrap items-center justify-between gap-4 border border-slate-800">
                   <div className="space-y-1">
                     <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider">
                       Commercial Conversion Engine
@@ -2202,7 +2214,7 @@ export default function QuotationBuilderWizard({
                       </button>
                     )}
                   </div>
-                </div>
+                </div>}
 
                 {/* High-Definition Proposal Document (Captured by PDF Generator) */}
                 <div className="flex justify-center bg-slate-200/70 p-4 sm:p-6 rounded-3xl overflow-x-auto">
@@ -2241,7 +2253,8 @@ export default function QuotationBuilderWizard({
 
               <button
                 type="button"
-                onClick={currentStep === WIZARD_STEPS.length ? handleSaveDraft : handleNextStep}
+                  onClick={currentStep === WIZARD_STEPS.length ? handleSaveDraft : handleNextStep}
+                  disabled={currentStep === WIZARD_STEPS.length && isDirectEditLocked}
                 className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
                 {currentStep === WIZARD_STEPS.length ? (
@@ -2347,7 +2360,7 @@ export default function QuotationBuilderWizard({
                 <button
                   type="button"
                   onClick={handleSaveDraft}
-                  disabled={isSaving}
+                  disabled={isSaving || isDirectEditLocked}
                   className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Save size={13} /> {isSaving ? 'Saving...' : 'Save Draft'}

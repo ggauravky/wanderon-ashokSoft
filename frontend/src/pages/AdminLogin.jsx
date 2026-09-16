@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Headphones, Shield } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Headphones, Megaphone, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const DEFAULT_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+const STAFF_ROLES = ['super_admin', 'admin', 'sales', 'marketing'];
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -16,17 +16,11 @@ const AdminLogin = () => {
   const { user, staffLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  // If already authenticated as Staff, redirect immediately to role-appropriate workspace
+  // Every authenticated employee enters the same Staff Control Center.
   useEffect(() => {
     if (isAuthenticated && user) {
       const role = (user.role || '').toLowerCase();
-      const isAdminEmail = user.email?.toLowerCase() === DEFAULT_ADMIN_EMAIL;
-      
-      if (role === 'sales') {
-        navigate('/staff/sales', { replace: true });
-      } else if (isAdminEmail || role === 'admin' || role === 'super_admin') {
-        navigate('/admin', { replace: true });
-      }
+      if (STAFF_ROLES.includes(role)) navigate('/staff', { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -42,22 +36,12 @@ const AdminLogin = () => {
 
     setLoading(true);
     try {
-      const res = await staffLogin(email, password);
-      const role = (res.role || res.user?.role || '').toLowerCase();
-
-      if (role === 'sales') {
-        setRedirectStatus('Opening Sales Desk...');
-        setTimeout(() => {
-          setLoading(false);
-          navigate('/staff/sales', { replace: true });
-        }, 300);
-      } else {
-        setRedirectStatus('Opening Admin Dashboard...');
-        setTimeout(() => {
-          setLoading(false);
-          navigate('/admin', { replace: true });
-        }, 300);
-      }
+      await staffLogin(email, password);
+      setRedirectStatus('Opening Staff Control Center...');
+      setTimeout(() => {
+        setLoading(false);
+        navigate('/staff', { replace: true });
+      }, 300);
     } catch (err) {
       setLoading(false);
       setRedirectStatus('');
@@ -66,7 +50,7 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-16 flex items-center justify-center bg-brand-navy px-4 relative overflow-hidden">
+    <div className="min-h-[100dvh] py-10 sm:py-12 flex items-center justify-center bg-brand-navy px-4 relative overflow-hidden">
       {/* Background Ambient Orbs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-brand-emerald opacity-10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-brand-teal opacity-10 rounded-full blur-3xl pointer-events-none" />
@@ -82,7 +66,7 @@ const AdminLogin = () => {
               WanderLuxe Staff Portal
             </h2>
             <p className="text-white/70 text-sm leading-relaxed font-medium mb-6">
-              Unified secure gateway for WanderLuxe Administrators and Travel Sales Specialists. Enter your credentials to automatically unlock your assigned workspace.
+              One secure gateway for WanderLuxe Administration, Sales, and Management teams. Your role determines the workspaces available after sign-in.
             </p>
 
             <div className="space-y-2.5 text-xs text-white/80 font-semibold">
@@ -91,6 +75,9 @@ const AdminLogin = () => {
               </div>
               <div className="flex items-center gap-2 text-teal-300">
                 <Headphones size={14} /> Travel Expert Sales Consultation Desk
+              </div>
+              <div className="flex items-center gap-2 text-emerald-200">
+                <Megaphone size={14} /> Management Campaign Workspace
               </div>
             </div>
           </div>
@@ -113,7 +100,7 @@ const AdminLogin = () => {
               Staff Authentication
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-brand-navy">Staff Sign In</h1>
-            <p className="text-gray-500 text-xs mt-1">Admin & Sales specialists secure portal access</p>
+            <p className="text-gray-500 text-xs mt-1">Administration, Sales, and Management access</p>
           </div>
 
           {error && (
@@ -131,12 +118,13 @@ const AdminLogin = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-brand-navy mb-1.5">
+              <label htmlFor="staff-email" className="block text-xs font-extrabold uppercase tracking-wider text-brand-navy mb-1.5">
                 Staff Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id="staff-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -148,12 +136,13 @@ const AdminLogin = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-brand-navy mb-1.5">
+              <label htmlFor="staff-password" className="block text-xs font-extrabold uppercase tracking-wider text-brand-navy mb-1.5">
                 Security Password
               </label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id="staff-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -165,6 +154,7 @@ const AdminLogin = () => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-navy cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>

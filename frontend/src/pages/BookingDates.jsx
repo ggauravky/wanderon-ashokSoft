@@ -8,34 +8,12 @@ import {
 } from 'lucide-react';
 import SEOHead from '../components/SEOHead.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
-import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import * as apiService from '../services/api.js';
-import { UPCOMING_TRIPS } from '../constants/mockData.js';
 
 const calculateBookingPricingApi = async (...args) => {
   const fn = apiService.calculateBookingPricingApi || apiService.default?.calculateBookingPricingApi;
   if (typeof fn === 'function') return fn(...args);
   throw new Error('calculateBookingPricingApi is not available');
-};
-
-const getAllStaticTrips = () => {
-  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
-    return travelKnowledgeService.getAllStaticTrips();
-  }
-  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
-    return travelKnowledgeService.default.getAllStaticTrips();
-  }
-  return UPCOMING_TRIPS || [];
-};
-
-const normalizeTripObject = (t) => {
-  if (typeof travelKnowledgeService.normalizeTripObject === 'function') {
-    return travelKnowledgeService.normalizeTripObject(t);
-  }
-  if (typeof travelKnowledgeService.default?.normalizeTripObject === 'function') {
-    return travelKnowledgeService.default.normalizeTripObject(t);
-  }
-  return t;
 };
 
 const BookingDates = () => {
@@ -46,15 +24,9 @@ const BookingDates = () => {
   // Passed state from TripDetails (if available)
   const navState = location.state || {};
 
-  // 1. Resolve Trip Object
-  const [trip, setTrip] = useState(() => {
-    if (navState.trip) return typeof normalizeTripObject === 'function' ? normalizeTripObject(navState.trip) : navState.trip;
-    const staticList = typeof getAllStaticTrips === 'function' ? getAllStaticTrips() : UPCOMING_TRIPS.map(t => typeof normalizeTripObject === 'function' ? normalizeTripObject(t) : t);
-    const found = (staticList || []).find(
-      (t) => t.slug === tripSlug || String(t.id) === String(tripSlug) || String(t._id) === String(tripSlug)
-    );
-    return found || staticList[0];
-  });
+  const [trip, setTrip] = useState({ title: '', slug: '', batches: [], pickupPoints: [], sharingPricing: {} });
+  const [tripLoading, setTripLoading] = useState(true);
+  const [tripUnavailable, setTripUnavailable] = useState(false);
 
   // Fetch live trip if needed from API
   useEffect(() => {
@@ -62,20 +34,20 @@ const BookingDates = () => {
       if (!tripSlug) return;
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips/${tripSlug}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data) {
-            setTrip(normalizeTripObject(json.data));
-          }
-        }
+        if (!res.ok) throw new Error('Trip unavailable');
+        const json = await res.json();
+        if (!json.data) throw new Error('Trip unavailable');
+        setTrip(json.data);
       } catch (e) {
-        console.warn('Using static trip fallback for booking dates:', e.message);
+        setTripUnavailable(true);
+      } finally {
+        setTripLoading(false);
       }
     };
     fetchLiveTrip();
   }, [tripSlug]);
 
-  const batches = trip.batches || trip.availableBatches || [];
+  const batches = trip.batches || [];
 
   // 2. Month Grouping
   const monthTabs = useMemo(() => {
@@ -86,7 +58,7 @@ const BookingDates = () => {
         unique.push(m);
       }
     });
-    return unique.length > 0 ? unique : ["SEP '26", "OCT '26", "NOV '26"];
+    return unique;
   }, [batches]);
 
   const [selectedMonth, setSelectedMonth] = useState(() => monthTabs[0] || "SEP '26");
@@ -97,6 +69,11 @@ const BookingDates = () => {
       setSelectedMonth(monthTabs[0]);
     }
   }, [monthTabs, selectedMonth]);
+
+  useEffect(() => {
+    const candidate = batches.find((batch) => batch.status !== 'sold_out') || batches[0] || null;
+    setSelectedBatch(candidate);
+  }, [trip._id]);
 
   // Filter batches for active month
   const activeMonthBatches = useMemo(() => {
@@ -126,7 +103,7 @@ const BookingDates = () => {
   const [occupancy, setOccupancy] = useState(navState.initialOccupancy || 'Double Sharing');
   const [travelers, setTravelers] = useState(navState.initialTravelers || 1);
   const [pickupPoint, setPickupPoint] = useState(() => {
-    return trip.pickupPoints?.[0] || 'Airport Arrival Terminal (10:00 AM)';
+    return trip.pickupPoints?.[0] || '';
   });
   const [isCallbackOpen, setIsCallbackOpen] = useState(false);
 
@@ -136,19 +113,15 @@ const BookingDates = () => {
 
   // Dynamic pricing calculation from selected batch / sharing
   const localPriceBreakdown = useMemo(() => {
-    const batchPricing = selectedBatch?.pricing || trip.sharingPricing || {
-      doubleSharing: trip.price,
-      tripleSharing: Math.max(1000, trip.price - 1500),
-      singleSharing: trip.price + 3500
-    };
+    const batchPricing = selectedBatch?.pricing || trip.sharingPricing || {};
 
-    let perPerson = Number(trip.price) || 18500;
+    let perPerson = Number(trip.price) || 0;
     if (occupancy === 'Triple Sharing') {
-      perPerson = Number(batchPricing.tripleSharing) || Math.max(1000, trip.price - 1500);
+      perPerson = Number(batchPricing.tripleSharing) || Number(trip.price) || 0;
     } else if (occupancy === 'Double Sharing') {
       perPerson = Number(batchPricing.doubleSharing) || trip.price;
     } else if (occupancy === 'Single Sharing') {
-      perPerson = Number(batchPricing.singleSharing) || (trip.price + 3500);
+      perPerson = Number(batchPricing.singleSharing) || Number(trip.price) || 0;
     }
 
     const subtotal = perPerson * travelers;
@@ -168,6 +141,7 @@ const BookingDates = () => {
   useEffect(() => {
     let isCurrent = true;
     const fetchServerPricing = async () => {
+      if (!trip.slug || !selectedBatch) { setServerPricing(null); setIsCalculating(false); return; }
       setIsCalculating(true);
       try {
         const payload = {
@@ -182,7 +156,7 @@ const BookingDates = () => {
           setServerPricing(data);
         }
       } catch (e) {
-        // Fallback gracefully to local calculation
+        setServerPricing(null);
       } finally {
         if (isCurrent) setIsCalculating(false);
       }
@@ -230,6 +204,9 @@ const BookingDates = () => {
     // Navigate to Traveler Details (Checkout Step 2)
     navigate('/checkout', { state: bookingDraft });
   };
+
+  if (tripLoading) return <div className="min-h-screen bg-slate-100 pt-32 text-center text-sm text-slate-500">Loading departure inventory…</div>;
+  if (tripUnavailable) return <div className="min-h-screen bg-slate-100 px-4 pt-32 text-center"><h1 className="text-2xl font-black text-slate-900">Trip unavailable</h1><p className="mt-2 text-sm text-slate-600">This trip cannot currently be booked.</p><Link to="/destinations" className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white">Browse available trips</Link></div>;
 
   return (
     <div className="min-h-screen bg-slate-100/70 pt-24 pb-32 lg:pb-24 text-slate-800 font-sans">
@@ -365,6 +342,8 @@ const BookingDates = () => {
                   </button>
                 ))}
               </div>
+
+              {batches.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center"><p className="font-bold text-slate-800">No departures currently available.</p><p className="mt-1 text-xs text-slate-500">Please check back later or ask our team for another trip.</p></div>}
 
               {/* Batches Cards Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">

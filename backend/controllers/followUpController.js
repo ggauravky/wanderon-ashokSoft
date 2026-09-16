@@ -202,10 +202,17 @@ export const createFollowUp = async (req, res) => {
         }
       } catch (dbErr) {
         console.warn('FollowUp DB save warning:', dbErr.message);
+        throw dbErr;
       }
     }
 
     if (!newFollowUp) {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
+        return res.status(503).json({
+          success: false,
+          message: 'Follow-up storage is unavailable while the database is disconnected.'
+        });
+      }
       newFollowUp = {
         _id: 'fu_' + Date.now(),
         ...followUpData,

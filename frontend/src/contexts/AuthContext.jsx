@@ -190,13 +190,13 @@ export const AuthProvider = ({ children }) => {
     return { success: true, user: fullUser };
   };
 
-  // Dedicated Staff Portal Login (Admin & Sales Authentication)
+  // Canonical Staff Control Center login
   const staffLogin = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
     const data = await loginApi({ email: cleanEmail, password });
 
     const returnedRole = (data.role || '').toLowerCase();
-    const allowedStaffRoles = ['admin', 'super_admin', 'sales'];
+    const allowedStaffRoles = ['super_admin', 'admin', 'sales', 'marketing'];
 
     if (!allowedStaffRoles.includes(returnedRole)) {
       throw new Error('This account does not have staff portal access.');
@@ -218,7 +218,7 @@ export const AuthProvider = ({ children }) => {
       success: true,
       user: staffUser,
       role: staffUser.role,
-      destination: staffUser.role === 'sales' ? '/staff/sales' : '/admin'
+      destination: '/staff'
     };
   };
 

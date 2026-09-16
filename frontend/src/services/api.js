@@ -395,6 +395,22 @@ export async function getMyBookingsApi() {
   return data;
 }
 
+export async function getSalesBookingsApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/bookings/staff/sales${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch Sales bookings');
+  }
+  return data;
+}
+
 export async function getBookingByIdApi(bookingId) {
   const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
     method: 'GET',
@@ -860,8 +876,11 @@ export async function regenerateDayApi(payload) {
 // MASTER ADMIN TRIP CMS & MEDIA APIS
 // ==========================================
 
-export async function getAdminTripsApi() {
-  const response = await fetch(`${API_BASE_URL}/trips?includeDrafts=true`, {
+export async function getAdminTripsApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/trips/admin/catalog${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -870,6 +889,16 @@ export async function getAdminTripsApi() {
     throw new Error(data.message || 'Failed to fetch trips');
   }
   return data.data || [];
+}
+
+export async function getAdminTripByIdApi(tripId) {
+  const response = await fetch(`${API_BASE_URL}/trips/admin/catalog/${encodeURIComponent(tripId)}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch trip');
+  return data.data;
 }
 
 export async function createTripApi(tripData) {
@@ -1294,6 +1323,7 @@ export default {
   createBookingOrderApi,
   verifyBookingPaymentApi,
   getMyBookingsApi,
+  getSalesBookingsApi,
   getBookingByIdApi,
   getBoardingPassApi,
   getProvisionalLetterApi,

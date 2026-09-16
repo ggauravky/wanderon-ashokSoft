@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Share2, Copy, Check, MessageSquare, Download, Printer,
-  X, ExternalLink, ShieldCheck, Mail, Sparkles, Send
+  X, ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,17 +17,15 @@ export default function ShareQuotationModal({
   if (!isOpen || !quotation) return null;
 
   const token = quotation.publicShare?.token;
-  const publicUrl = token
-    ? `${window.location.origin}/quotation/${token}`
-    : `${window.location.origin}/quotation/preview`;
+  const publicUrl = token ? `${window.location.origin}/quotation/${token}` : '';
 
-  const customerName = quotation.customerSnapshot?.name || 'Valued Traveler';
-  const tripTitle = quotation.tripRequirements?.title || 'Custom Expedition';
-  const destination = quotation.tripRequirements?.destination || 'Destination';
-  const finalTotal = quotation.pricing?.finalTotal
+  const customerName = quotation.customerSnapshot?.name || 'Traveler';
+  const tripTitle = quotation.tripRequirements?.title || 'your requested journey';
+  const destination = quotation.tripRequirements?.destination || '';
+  const finalTotal = Number(quotation.pricing?.finalTotal) > 0
     ? `₹${Number(quotation.pricing.finalTotal).toLocaleString()}`
-    : 'Custom Rate';
-  const duration = quotation.tripRequirements?.duration || '5D/4N';
+    : 'Price on request';
+  const duration = quotation.tripRequirements?.duration || '';
 
   // Format pre-filled luxury WhatsApp message
   const whatsappMessage = encodeURIComponent(
@@ -35,10 +33,9 @@ export default function ShareQuotationModal({
 
 Dear ${customerName},
 
-Greetings from WanderLuxe! We have prepared your tailored itinerary proposal for *${tripTitle}* (${destination} • ${duration}).
+Greetings from WanderLuxe! We have prepared your travel proposal for *${tripTitle}*${destination ? ` in ${destination}` : ''}${duration ? ` (${duration})` : ''}.
 
-💰 *Package Total:* ${finalTotal} (Incl. 5% Tour GST & 10% Advance Deposit terms)
-🏨 *Selected Accommodation & Dedicated Fleet included.*
+💰 *Proposal Total:* ${finalTotal}
 
 📌 *View Your Interactive Proposal & Day-by-Day Route:*
 ${publicUrl}

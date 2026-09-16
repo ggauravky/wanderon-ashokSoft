@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
 import Home from './pages/Home';
@@ -15,11 +15,8 @@ import Destinations from './pages/Destinations';
 import Contact from './pages/Contact';
 import Blog from './pages/Blog';
 import About from './pages/About';
-import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
-import AdminRoute from './components/AdminRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
-import SalesPortal from './pages/SalesPortal';
 import InfluencerDashboard from './pages/InfluencerDashboard';
 import InfluencerLanding from './pages/InfluencerLanding';
 import InfluencerSignup from './pages/InfluencerSignup';
@@ -30,11 +27,36 @@ import CreatorStorefront from './pages/CreatorStorefront';
 import SharedItinerary from './pages/SharedItinerary';
 import DynamicPage from './pages/DynamicPage';
 import PublicQuotationView from './pages/PublicQuotationView';
-import QuotationDetail from './pages/QuotationDetail';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
 import AIPlannerPage from './pages/AIPlannerPage';
 import ScrollToTop from './components/ScrollToTop';
+import StaffShell from './staff/StaffShell';
+import StaffOverview from './staff/StaffOverview';
+import StaffModuleRoute from './staff/components/StaffModuleRoute';
+import AdminWorkspace from './staff/workspaces/AdminWorkspace';
+import LegacyAdminWorkspace from './staff/workspaces/LegacyAdminWorkspace';
+import ManagementWorkspace from './staff/workspaces/ManagementWorkspace';
+import SalesOverview from './staff/modules/sales/SalesOverview';
+import ExpertRequestsWorkspace from './staff/modules/sales/ExpertRequestsWorkspace';
+import QuotationsWorkspace from './staff/modules/sales/quotations/QuotationsWorkspace';
+import QuotationBuilderPage from './staff/modules/sales/quotations/QuotationBuilderPage';
+import QuotationDetailPage from './staff/modules/sales/quotations/QuotationDetailPage';
+import SalesBookingsWorkspace from './staff/modules/sales/bookings/SalesBookingsWorkspace';
+import SalesBookingDetail from './staff/modules/sales/bookings/SalesBookingDetail';
+import TripsWorkspace from './staff/modules/admin/trips/TripsWorkspace';
+import TripEditor from './staff/modules/admin/trips/TripEditor';
+
+const LegacyQuotationRedirect = ({ edit = false }) => {
+  const { id, quoteId } = useParams();
+  const quotationId = id || quoteId;
+  return <Navigate to={`/staff/sales/quotations/${quotationId}${edit ? '/edit' : ''}`} replace />;
+};
+
+const LegacyAdminBookingRedirect = () => {
+  const { id } = useParams();
+  return <Navigate to={`/staff/admin/legacy?tab=bookings_crm&bookingId=${encodeURIComponent(id)}`} replace />;
+};
 
 function App() {
   return (
@@ -42,6 +64,88 @@ function App() {
       <Router>
         <ScrollToTop />
         <Routes>
+          <Route path="/staff/login" element={<AdminLogin />} />
+          <Route path="/admin/login" element={<Navigate to="/staff/login" replace />} />
+          <Route path="/admin" element={<Navigate to="/staff/admin" replace />} />
+          <Route path="/admin/sales" element={<Navigate to="/staff/sales" replace />} />
+          <Route path="/admin/quotations" element={<Navigate to="/staff/sales/quotations" replace />} />
+          <Route path="/admin/quotations/:id" element={<LegacyQuotationRedirect />} />
+          <Route path="/admin/quotations/:quoteId/edit" element={<LegacyQuotationRedirect edit />} />
+          <Route path="/admin/bookings/:id" element={<LegacyAdminBookingRedirect />} />
+
+          {/* Canonical unified Staff Control Center */}
+          <Route path="/staff" element={
+            <RoleProtectedRoute allowedRoles={['super_admin', 'admin', 'sales', 'marketing']}>
+              <StaffShell />
+            </RoleProtectedRoute>
+          }>
+            <Route index element={<StaffOverview />} />
+            <Route path="admin" element={
+              <StaffModuleRoute moduleId="admin">
+                <AdminWorkspace />
+              </StaffModuleRoute>
+            } />
+            <Route path="admin/legacy" element={
+              <StaffModuleRoute moduleId="admin_legacy">
+                <LegacyAdminWorkspace />
+              </StaffModuleRoute>
+            } />
+            <Route path="admin/trips" element={
+              <StaffModuleRoute moduleId="trips"><TripsWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/trips/new" element={
+              <StaffModuleRoute moduleId="trips"><TripEditor /></StaffModuleRoute>
+            } />
+            <Route path="admin/trips/:id/edit" element={
+              <StaffModuleRoute moduleId="trips"><TripEditor /></StaffModuleRoute>
+            } />
+            <Route path="sales" element={
+              <StaffModuleRoute moduleId="sales">
+                <SalesOverview />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/expert-requests" element={
+              <StaffModuleRoute moduleId="expert_requests">
+                <ExpertRequestsWorkspace />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/quotations" element={
+              <StaffModuleRoute moduleId="quotations">
+                <QuotationsWorkspace />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/quotations/new" element={
+              <StaffModuleRoute moduleId="quotations">
+                <QuotationBuilderPage />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/quotations/:id" element={
+              <StaffModuleRoute moduleId="quotations">
+                <QuotationDetailPage />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/quotations/:id/edit" element={
+              <StaffModuleRoute moduleId="quotations">
+                <QuotationBuilderPage />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/bookings" element={
+              <StaffModuleRoute moduleId="bookings">
+                <SalesBookingsWorkspace />
+              </StaffModuleRoute>
+            } />
+            <Route path="sales/bookings/:id" element={
+              <StaffModuleRoute moduleId="bookings">
+                <SalesBookingDetail />
+              </StaffModuleRoute>
+            } />
+            <Route path="management" element={
+              <StaffModuleRoute moduleId="management">
+                <ManagementWorkspace />
+              </StaffModuleRoute>
+            } />
+          </Route>
+
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
             <Route path="plan" element={<AIPlannerPage />} />
@@ -61,46 +165,7 @@ function App() {
             <Route path="quotations/:token" element={<PublicQuotationView />} />
             <Route path="profile" element={<Profile />} />
             
-            {/* Staff & Admin Routes */}
-            <Route path="admin/login" element={<AdminLogin />} />
-            
-            {/* Dedicated Sales Portal (Canonical: /staff/sales) */}
-            <Route path="staff/sales" element={
-              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
-                <SalesPortal />
-              </RoleProtectedRoute>
-            } />
-
-            {/* Backwards Compatibility Redirect: /admin/sales -> /staff/sales */}
-            <Route path="admin/sales" element={<Navigate to="/staff/sales" replace />} />
-
-            {/* Master Admin Dashboard (Admin & Super Admin ONLY - Sales Strictly Denied) */}
-            <Route path="admin" element={
-              <AdminRoute>
-                <AdminDashboard />
-              </AdminRoute>
-            } />
-            <Route path="admin/quotations" element={
-              <AdminRoute>
-                <AdminDashboard defaultTab="quotations" />
-              </AdminRoute>
-            } />
-            <Route path="admin/quotations/:id" element={
-              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
-                <QuotationDetail />
-              </RoleProtectedRoute>
-            } />
-            <Route path="admin/quotations/:quoteId/edit" element={
-              <AdminRoute>
-                <AdminDashboard defaultTab="quotations" />
-              </AdminRoute>
-            } />
-            <Route path="admin/bookings/:id" element={
-              <AdminRoute>
-                <AdminDashboard defaultTab="bookings_crm" />
-              </AdminRoute>
-            } />
-
+            {/* Legacy deep Admin routes remain compatible until their modules are extracted. */}
             {/* Creator / Influencer Routes */}
             <Route path="influencer/program" element={<InfluencerLanding />} />
             <Route path="influencer/signup" element={<InfluencerSignup />} />

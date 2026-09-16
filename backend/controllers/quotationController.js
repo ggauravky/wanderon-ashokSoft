@@ -270,20 +270,25 @@ export const createQuotation = async (req, res) => {
 
     const userId = req.user ? (req.user._id || req.user.id) : null;
     const userName = req.user?.name || 'Sales Specialist';
+    const actorObjectId = toObjectIdOrNull(userId);
+
+    if (isDbConnected() && !actorObjectId) {
+      return res.status(400).json({ message: 'A valid authenticated staff identity is required to create a quotation.' });
+    }
 
     const quotationPayload = {
       quotationNumber,
       version: 1,
-      leadId: leadId || null,
-      customerId: customerId || null,
-      assignedTo: req.body.assignedTo || userId,
+      leadId: toObjectIdOrNull(leadId),
+      customerId: toObjectIdOrNull(customerId),
+      assignedTo: toObjectIdOrNull(req.body.assignedTo) || actorObjectId,
       assignedToSnapshot: {
         name: userName,
         email: req.user?.email || '',
         phone: req.user?.phone || ''
       },
-      createdBy: userId,
-      updatedBy: userId,
+      createdBy: actorObjectId,
+      updatedBy: actorObjectId,
       customerSnapshot: {
         name: customerSnapshot.name.trim(),
         email: customerSnapshot.email.trim().toLowerCase(),
@@ -308,7 +313,7 @@ export const createQuotation = async (req, res) => {
       statusHistory: [
         {
           status: 'DRAFT',
-          changedBy: userId,
+          changedBy: actorObjectId,
           changedByName: userName,
           changedAt: new Date(),
           reason: 'Initial quotation created'
@@ -324,7 +329,7 @@ export const createQuotation = async (req, res) => {
       auditTrail: [
         {
           action: 'QUOTATION_CREATED',
-          performedBy: userId,
+          performedBy: actorObjectId,
           performedByName: userName,
           details: { quotationNumber, finalTotal: computed.pricing.finalTotal },
           timestamp: new Date()
@@ -346,10 +351,14 @@ export const createQuotation = async (req, res) => {
         }
       } catch (dbErr) {
         console.warn('Quotation DB Create warning:', dbErr.message);
+        throw dbErr;
       }
     }
 
     if (!newQuotation) {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
+        return res.status(503).json({ message: 'Quotation storage is unavailable while the database is disconnected.' });
+      }
       newQuotation = {
         _id: 'quot_' + Date.now(),
         ...quotationPayload,
@@ -378,7 +387,7 @@ export const createQuotation = async (req, res) => {
 // @access  Private (Sales/Admin/Operations/Marketing)
 export const getQuotations = async (req, res) => {
   try {
-    const { status, leadId, assignedTo, destination, search, sortBy = 'updated', page = 1, limit = 50 } = req.query;
+    const { status, leadId, assignedTo, destination, search, dateFrom, dateTo, sortBy = 'updated', page = 1, limit = 50 } = req.query;
 
     const andConditions = [];
 
@@ -390,6 +399,12 @@ export const getQuotations = async (req, res) => {
     }
     if (destination && typeof destination === 'string' && destination !== 'all') {
       andConditions.push({ 'tripRequirements.destination': { $regex: String(destination).trim(), $options: 'i' } });
+    }
+    if (dateFrom || dateTo) {
+      const createdAt = {};
+      if (dateFrom) createdAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) createdAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+      andConditions.push({ createdAt });
     }
 
     // Role-based filtering: Sales users only see quotations assigned to them, created by them, or unassigned
@@ -451,10 +466,14 @@ export const getQuotations = async (req, res) => {
           .lean();
       } catch (dbErr) {
         console.warn('Quotation find warning:', dbErr.message);
+        throw dbErr;
       }
     }
 
-    if (quotations.length === 0) {
+    if (!isDbConnected()) {
+      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
+        return res.status(503).json({ message: 'Quotation data is unavailable while the database is disconnected.' });
+      }
       quotations = memoryQuotations.filter(q => {
         if (userRole === 'sales' && !isSuperOrAdmin) {
           const isAssigned = String(q.assignedTo) === String(userId) || String(q.createdBy) === String(userId) || !q.assignedTo;
@@ -474,6 +493,8 @@ export const getQuotations = async (req, res) => {
                           (q.tripRequirements?.destination || '').toLowerCase().includes(s);
           if (!matches) return false;
         }
+        if (dateFrom && new Date(q.createdAt) < new Date(`${dateFrom}T00:00:00.000Z`)) return false;
+        if (dateTo && new Date(q.createdAt) > new Date(`${dateTo}T23:59:59.999Z`)) return false;
         return true;
       });
 
@@ -546,6 +567,7 @@ export const getQuotationById = async (req, res) => {
             .populate('leadId')
             .populate('assignedTo', 'name email phone')
             .populate('createdBy', 'name email')
+            .populate('updatedBy', 'name email')
             .populate('convertedTripId', 'title slug price')
             .populate('bookingId', 'bookingId bookingStatus paymentStatus');
         }
@@ -1297,13 +1319,13 @@ export const createBookingFromQuotation = async (req, res) => {
   try {
     const { id } = req.params;
 
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Booking creation is unavailable while the database is disconnected.' });
     }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+
+    let quotation = mongoose.Types.ObjectId.isValid(id)
+      ? await Quotation.findById(id)
+      : await Quotation.findOne({ quotationNumber: id });
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -1312,19 +1334,57 @@ export const createBookingFromQuotation = async (req, res) => {
       return res.status(403).json({ message: 'Access denied. You do not have permission to convert this quotation to a booking.' });
     }
 
-    // Idempotency Check: Prevent duplicate bookings
-    if (quotation.status === 'CONVERTED' && (quotation.bookingId || quotation.bookingCode)) {
-      let existingBooking = null;
-      if (isDbConnected() && quotation.bookingId && mongoose.Types.ObjectId.isValid(quotation.bookingId)) {
-        try {
-          existingBooking = await Booking.findById(quotation.bookingId);
-        } catch (e) {}
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const actorObjectId = toObjectIdOrNull(userId);
+    const userName = req.user?.name || 'Sales Concierge';
+
+    const repairConversionLinks = async (booking, addHistory = false) => {
+      quotation.bookingId = booking._id;
+      quotation.bookingCode = booking.bookingId;
+      quotation.status = 'CONVERTED';
+      quotation.updatedBy = actorObjectId;
+      if (addHistory) {
+        quotation.statusHistory.push({
+          status: 'CONVERTED',
+          changedBy: actorObjectId,
+          changedByName: userName,
+          changedAt: new Date(),
+          reason: `Converted to Booking ${booking.bookingId}`
+        });
+        quotation.auditTrail.push({
+          action: 'CONVERT_TO_BOOKING',
+          performedBy: actorObjectId,
+          performedByName: userName,
+          details: { bookingId: booking._id, bookingCode: booking.bookingId },
+          timestamp: new Date()
+        });
       }
+      await quotation.save();
+
+      if (quotation.leadId) {
+        await Lead.findByIdAndUpdate(quotation.leadId, {
+          status: 'CONVERTED',
+          convertedBookingId: booking._id,
+          convertedBookingCode: booking.bookingId
+        });
+      }
+    };
+
+    // Recover either side of a previously interrupted conversion before creating anything new.
+    let existingBooking = await Booking.findOne({ sourceQuotationId: quotation._id });
+    if (!existingBooking && quotation.bookingId) {
+      existingBooking = await Booking.findById(quotation.bookingId);
+    }
+    if (existingBooking) {
+      const needsRepair = quotation.status !== 'CONVERTED' ||
+        String(quotation.bookingId || '') !== String(existingBooking._id) ||
+        quotation.bookingCode !== existingBooking.bookingId;
+      if (needsRepair) await repairConversionLinks(existingBooking, quotation.status !== 'CONVERTED');
       return res.status(200).json({
         success: true,
-        message: `Quotation has already been converted to Booking order ${quotation.bookingCode || 'existing'}.`,
-        booking: existingBooking || { _id: quotation.bookingId, bookingId: quotation.bookingCode },
-        checkoutUrl: `/checkout?bookingId=${quotation.bookingCode || ''}`,
+        message: `Quotation is already linked to Booking ${existingBooking.bookingId}.`,
+        booking: existingBooking,
+        checkoutUrl: `/checkout?bookingId=${existingBooking.bookingId}`,
         quotation,
         isExisting: true
       });
@@ -1335,35 +1395,31 @@ export const createBookingFromQuotation = async (req, res) => {
       return res.status(400).json({ message: `Cannot create booking for quotation in "${quotation.status}" status. Only APPROVED quotations can be converted to a Booking order.` });
     }
 
-    const userId = req.user ? (req.user._id || req.user.id) : null;
-    const userName = req.user?.name || 'Sales Concierge';
-
-    const bookingId = 'WLX-2026-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const bookingId = `WLX-${new Date().getFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const verificationToken = crypto.randomBytes(16).toString('hex');
     const isPartial = quotation.paymentTerms?.paymentMode === 'PARTIAL';
     const depositAmount = quotation.pricing?.depositRequired || Math.round((quotation.pricing?.finalTotal || 0) * 0.10);
-    const balanceAmount = quotation.pricing?.balanceAmount || ((quotation.pricing?.finalTotal || 0) - depositAmount);
-
-    const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
-
-    const candidateBookingUserId = quotation.customerId || userId;
-    const safeBookingUserId = (candidateBookingUserId && isValidMongoObjectId(candidateBookingUserId))
-      ? toObjectIdOrNull(candidateBookingUserId)
-      : new mongoose.Types.ObjectId('64f000000000000000000001');
+    const safeQuotation = sanitizeForCustomer(quotation);
+    const selectedHotel = safeQuotation.hotelOptions?.find(h => h.selected) || null;
+    const selectedTransport = (safeQuotation.transportOptions || []).filter(option => option.selected);
+    const safeBookingUserId = isValidMongoObjectId(quotation.customerId)
+      ? toObjectIdOrNull(quotation.customerId)
+      : null;
+    const finalAmount = Number(quotation.pricing?.finalTotal || 0);
 
     const bookingData = {
       bookingId,
       userId: safeBookingUserId,
-      tripId: quotation.sourceTripId || ('custom-quotation-' + quotation.quotationNumber),
+      tripId: String(quotation.sourceTripId || `custom-quotation-${quotation.quotationNumber}`),
       tripSnapshot: {
         title: quotation.tripRequirements.title,
         location: quotation.tripRequirements.destination,
         destination: quotation.tripRequirements.destination,
-        image: quotation.itinerary?.find(d => d.coverMedia?.url)?.coverMedia?.url || selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
+        image: quotation.itinerary?.find(d => d.coverMedia?.url)?.coverMedia?.url || selectedHotel?.imageUrl || '',
         duration: quotation.tripRequirements.duration || `${quotation.tripRequirements.days}D/${quotation.tripRequirements.nights}N`,
         batchDate: quotation.tripRequirements.startDate 
           ? new Date(quotation.tripRequirements.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-          : 'Bespoke Private Expedition'
+          : ''
       },
       customer: {
         name: quotation.customerSnapshot.name,
@@ -1378,88 +1434,71 @@ export const createBookingFromQuotation = async (req, res) => {
           email: quotation.customerSnapshot.email
         }
       ],
-      numberOfTravelers: quotation.tripRequirements.totalTravelers || 2,
-      occupancy: selectedHotel?.tier || 'Double Sharing',
+      numberOfTravelers: quotation.tripRequirements.totalTravelers || 1,
+      occupancy: selectedHotel?.roomType || selectedHotel?.tier || 'Not specified',
       paymentPlan: {
         type: isPartial ? 'PARTIAL' : 'FULL',
         depositPercent: quotation.paymentTerms?.depositPercent || 10,
         balanceDueDays: quotation.paymentTerms?.balanceDueDays || 6
       },
       pricing: {
-        basePricePerPerson: quotation.pricing?.perPersonPrice || Math.round((quotation.pricing?.finalTotal || 0) / (quotation.tripRequirements.totalTravelers || 2)),
+        basePricePerPerson: quotation.pricing?.perPersonPrice || Math.round(finalAmount / (quotation.tripRequirements.totalTravelers || 1)),
         subtotal: quotation.pricing?.subtotal || 0,
         discount: quotation.pricing?.discountAmount || 0,
         taxes: quotation.pricing?.gstAmount || 0,
-        finalAmount: quotation.pricing?.finalTotal || 0,
+        finalAmount,
         amountPaid: 0,
-        amountOutstanding: isPartial ? balanceAmount : (quotation.pricing?.finalTotal || 0),
+        amountOutstanding: finalAmount,
         balanceDueDate: new Date(Date.now() + (quotation.paymentTerms?.balanceDueDays || 6) * 24 * 60 * 60 * 1000),
         currency: 'INR'
       },
       bookingStatus: 'PENDING_PAYMENT',
       paymentStatus: 'UNPAID',
+      payment: { provider: 'razorpay', status: 'PENDING' },
       sourceQuotationId: quotation._id,
       leadId: quotation.leadId || null,
       isCustomQuotationBooking: true,
+      quotationSnapshot: {
+        quotationNumber: quotation.quotationNumber,
+        statusAtConversion: quotation.status,
+        selectedHotel,
+        selectedTransport,
+        activities: (safeQuotation.activities || []).filter(item => item.selected !== false),
+        addOns: (safeQuotation.addOns || []).filter(item => item.selected !== false),
+        paymentTerms: safeQuotation.paymentTerms || null,
+        depositRequired: depositAmount,
+        convertedAt: new Date()
+      },
+      createdBy: actorObjectId,
+      updatedBy: actorObjectId,
       qrCode: {
         verificationToken,
         verificationUrl: `https://wanderluxe.in/booking/verify/${verificationToken}`
       }
     };
 
-    let createdBooking = null;
-    if (isDbConnected()) {
-      try {
-        createdBooking = await Booking.create(bookingData);
-        quotation.bookingId = createdBooking._id;
-        quotation.bookingCode = bookingId;
-        quotation.status = 'CONVERTED';
-        quotation.statusHistory.push({
-          status: 'CONVERTED',
-          changedBy: userId,
-          changedByName: userName,
-          changedAt: new Date(),
-          reason: `Converted to Live Private Booking Order ${bookingId} (10% Deposit: ₹${depositAmount.toLocaleString()})`
-        });
-        quotation.auditTrail.push({
-          action: 'CONVERT_TO_BOOKING',
-          performedBy: userId,
-          performedByName: userName,
-          details: { bookingId: createdBooking._id, bookingCode: bookingId, depositDue: depositAmount },
-          timestamp: new Date()
-        });
-        await quotation.save();
-
-        if (quotation.leadId) {
-          await Lead.findByIdAndUpdate(quotation.leadId, { 
-            status: 'CONVERTED',
-            convertedBookingId: createdBooking._id,
-            convertedBookingCode: bookingId,
-            notes: `Lead successfully converted to Booking ${bookingId} from Quote ${quotation.quotationNumber}`
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Booking Create DB error:', dbErr.message);
-      }
+    let createdBooking;
+    let isExisting = false;
+    try {
+      createdBooking = await Booking.create(bookingData);
+    } catch (dbErr) {
+      if (dbErr?.code !== 11000) throw dbErr;
+      createdBooking = await Booking.findOne({ sourceQuotationId: quotation._id });
+      if (!createdBooking) throw dbErr;
+      isExisting = true;
     }
 
-    if (!createdBooking) {
-      createdBooking = {
-        _id: 'book_' + Date.now(),
-        ...bookingData,
-        createdAt: new Date()
-      };
-      quotation.bookingId = createdBooking._id;
-      quotation.bookingCode = bookingId;
-      quotation.status = 'CONVERTED';
-    }
+    await repairConversionLinks(createdBooking, !isExisting);
 
-    res.status(201).json({
+    res.status(isExisting ? 200 : 201).json({
       success: true,
-      message: `Booking order ${bookingId} created from Quotation ${quotation.quotationNumber}. Deposit due: ₹${depositAmount.toLocaleString()}.`,
+      message: isExisting
+        ? `Quotation is already linked to Booking ${createdBooking.bookingId}.`
+        : `Booking ${createdBooking.bookingId} created from Quotation ${quotation.quotationNumber}.`,
       booking: createdBooking,
-      checkoutUrl: `/checkout?bookingId=${bookingId}`,
-      quotation
+      checkoutUrl: `/checkout?bookingId=${createdBooking.bookingId}`,
+      quotation,
+      isExisting
     });
   } catch (error) {
     console.error('Convert to Booking Error:', error);

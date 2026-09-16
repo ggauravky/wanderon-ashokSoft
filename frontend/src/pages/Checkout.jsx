@@ -8,7 +8,6 @@ import {
   User, Phone, Mail, HelpCircle, QrCode, Smartphone, Clock, AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import * as apiService from '../services/api.js';
 import { loadRazorpayScript } from '../utils/razorpay.js';
 import SEOHead from '../components/SEOHead.jsx';
@@ -109,23 +108,7 @@ const Checkout = () => {
       }
     } catch (e) {}
 
-    return {
-      tripId: UPCOMING_TRIPS[0].id,
-      tripSlug: UPCOMING_TRIPS[0].slug,
-      tripTitle: UPCOMING_TRIPS[0].title,
-      tripImage: UPCOMING_TRIPS[0].image,
-      location: UPCOMING_TRIPS[0].location,
-      destination: UPCOMING_TRIPS[0].destination,
-      duration: UPCOMING_TRIPS[0].duration,
-      batchId: UPCOMING_TRIPS[0].availableBatches[0].id,
-      batchDate: UPCOMING_TRIPS[0].availableBatches[0].dates,
-      occupancy: 'Double Sharing',
-      travelersCount: 1,
-      perPersonPrice: UPCOMING_TRIPS[0].price,
-      subtotal: UPCOMING_TRIPS[0].price,
-      totalAmount: UPCOMING_TRIPS[0].price,
-      pickupPoint: 'Airport Arrival Terminal (10:00 AM)'
-    };
+    return {};
   }, [location.state]);
 
   const travelersCount = Math.max(1, parseInt(initialData.travelersCount, 10) || 1);
@@ -136,7 +119,7 @@ const Checkout = () => {
   const [leadPhone, setLeadPhone] = useState(user?.phone || '');
   const [leadAge, setLeadAge] = useState('24');
   const [leadGender, setLeadGender] = useState('Male');
-  const [pickup, setPickup] = useState(initialData.pickupPoint || 'Airport Arrival Terminal (10:00 AM)');
+  const [pickup, setPickup] = useState(initialData.pickupPoint || '');
   
   // 3. TRAVELER DETAILS (Co-Travelers: Traveler 2..N)
   const [coTravelers, setCoTravelers] = useState(() => {
@@ -193,9 +176,9 @@ const Checkout = () => {
     }
   }, [refCodeFromUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const perPerson = Number(initialData.perPersonPrice) || 18500;
-  const subtotal = initialData.subtotal || (perPerson * travelersCount);
-  const finalPayable = Math.max(1, subtotal - discount);
+  const perPerson = Number(initialData.perPersonPrice) || 0;
+  const subtotal = Number(initialData.subtotal) || (perPerson * travelersCount);
+  const finalPayable = Math.max(0, subtotal - discount);
 
   // Partial Payment Eligibility Calculation
   const partialEligibility = useMemo(() => {
@@ -439,6 +422,10 @@ const Checkout = () => {
     : '6 days from booking';
 
   const amountToChargeToday = paymentPlanType === 'PARTIAL' ? depositAmount : finalPayable;
+
+  if (!initialData.tripId || !initialData.tripTitle || !initialData.batchDate || !perPerson) {
+    return <div className="min-h-screen bg-slate-100 px-4 pt-32 text-center"><h1 className="text-2xl font-black text-slate-900">Booking details unavailable</h1><p className="mt-2 text-sm text-slate-600">Choose a live trip and a real departure before checkout.</p><Link to="/destinations" className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white">Browse available trips</Link></div>;
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-28 bg-slate-100/70 text-slate-800 font-sans">

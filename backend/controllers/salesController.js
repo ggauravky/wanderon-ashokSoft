@@ -3,8 +3,6 @@ import Lead from '../models/Lead.js';
 import Quotation from '../models/Quotation.js';
 import FollowUp from '../models/FollowUp.js';
 import Booking from '../models/Booking.js';
-import { memoryQuotations } from './quotationController.js';
-import { memoryFollowUps } from './followUpController.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -22,12 +20,26 @@ export const getSalesDashboard = async (req, res) => {
     let quotationFilter = {};
     let followUpFilter = {};
     const todayStr = new Date().toISOString().split('T')[0];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+    if (!isDbConnected()) {
+      return res.status(503).json({
+        success: false,
+        message: 'Sales dashboard data is unavailable while the database is disconnected.'
+      });
+    }
 
     if (userRole === 'sales' && userId) {
+      const ownedQuotationConditions = mongoose.Types.ObjectId.isValid(userId)
+        ? [{ assignedTo: userId }, { createdBy: userId }]
+        : [];
       quotationFilter = {
         $or: [
-          ...(mongoose.Types.ObjectId.isValid(userId) ? [{ assignedTo: userId }] : []),
-          { createdBy: userId }
+          ...ownedQuotationConditions,
+          { assignedTo: null }
         ]
       };
       followUpFilter = { salesUserId: userId };
@@ -45,6 +57,9 @@ export const getSalesDashboard = async (req, res) => {
     let pendingFollowUpsCount = 0;
     let totalClosedRevenue = 0;
     let totalConverted = 0;
+    let totalBookings = 0;
+    let pendingPaymentBookings = 0;
+    let paidBookings = 0;
 
     if (isDbConnected()) {
       try {
@@ -67,14 +82,20 @@ export const getSalesDashboard = async (req, res) => {
         // Due today for shared queue
         dueTodayCount = await Lead.countDocuments({
           ...expertLeadFilter,
-          preferredCallDate: todayStr,
+          $or: [
+            { preferredCallDate: todayStr },
+            { nextFollowUpAt: { $gte: todayStart, $lt: tomorrowStart } }
+          ],
           status: { $nin: ['CONVERTED', 'LOST'] }
         });
 
         // Overdue for shared queue
         overdueCount = await Lead.countDocuments({
           ...expertLeadFilter,
-          preferredCallDate: { $ne: '', $lt: todayStr },
+          $or: [
+            { preferredCallDate: { $ne: '', $lt: todayStr } },
+            { nextFollowUpAt: { $lt: todayStart } }
+          ],
           status: { $nin: ['CONVERTED', 'LOST'] }
         });
 
@@ -95,10 +116,27 @@ export const getSalesDashboard = async (req, res) => {
           status: 'pending'
         });
 
-        // 4. Closed Revenue
+        // 4. Quotation-originated Sales bookings use the same quotation visibility scope.
+        const visibleQuotationIds = await Quotation.find(quotationFilter).distinct('_id');
+        const bookingFilter = {
+          isCustomQuotationBooking: true,
+          sourceQuotationId: { $in: visibleQuotationIds }
+        };
+        totalBookings = await Booking.countDocuments(bookingFilter);
+        pendingPaymentBookings = await Booking.countDocuments({
+          ...bookingFilter,
+          bookingStatus: 'PENDING_PAYMENT'
+        });
+        paidBookings = await Booking.countDocuments({
+          ...bookingFilter,
+          paymentStatus: 'PAID'
+        });
+
+        // 5. Closed Revenue from bookings visible through the current quotation scope.
         const revAgg = await Booking.aggregate([
           {
             $match: {
+              ...bookingFilter,
               $or: [
                 { bookingStatus: { $in: ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'] } },
                 { paymentStatus: { $in: ['PAID', 'PARTIALLY_PAID'] } }
@@ -115,24 +153,7 @@ export const getSalesDashboard = async (req, res) => {
         totalClosedRevenue = revAgg[0]?.total || 0;
       } catch (dbErr) {
         console.warn('Sales dashboard DB aggregate warning:', dbErr.message);
-      }
-    }
-
-    // Fallback counts ONLY for offline local development when database is disconnected
-    if (!isDbConnected() && process.env.NODE_ENV !== 'production' && process.env.ALLOW_IN_MEMORY_FALLBACK === 'true') {
-      if (totalExpertRequests === 0 && totalQuotations === 0) {
-        totalExpertRequests = 12;
-        newRequests = 4;
-        dueTodayCount = 2;
-        overdueCount = 1;
-        inProgressCount = 5;
-        qualifiedCount = 1;
-        leadsByStage = { NEW: 4, CONTACTED: 3, IN_PROGRESS: 2, QUALIFIED: 1, CONVERTED: 2, LOST: 0 };
-        totalConverted = 2;
-        totalQuotations = memoryQuotations.length || 5;
-        quotationsByStatus = { DRAFT: 1, SENT: 2, VIEWED: 1, APPROVED: 1, REJECTED: 0, CONVERTED: 1 };
-        pendingFollowUpsCount = memoryFollowUps.filter(f => f.status === 'pending').length || 2;
-        totalClosedRevenue = 145000;
+        throw dbErr;
       }
     }
 
@@ -161,6 +182,9 @@ export const getSalesDashboard = async (req, res) => {
         quotationsByStatus,
         pendingFollowUpsCount,
         totalClosedRevenue,
+        totalBookings,
+        pendingPaymentBookings,
+        paidBookings,
         conversionRate: `${conversionRate}%`
       }
     });

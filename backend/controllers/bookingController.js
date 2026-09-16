@@ -3,6 +3,7 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import QRCode from 'qrcode';
 import Booking from '../models/Booking.js';
+import Quotation from '../models/Quotation.js';
 import Trip from '../models/Trip.js';
 import User from '../models/User.js';
 import Coupon from '../models/Coupon.js';
@@ -16,40 +17,49 @@ const memoryBookings = [];
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
-// Static Catalog fallback for predefined numerical IDs or static trips
-const STATIC_TRIPS_CATALOG = {
-  '1': {
-    title: 'Meghalaya Backpacking Living Root Bridges',
-    location: 'Meghalaya',
-    destination: 'Northeast India',
-    duration: '5D/4N',
-    price: 18500,
-    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-  },
-  '2': {
-    title: 'Spiti Valley Circuit High Altitude Roadtrip',
-    location: 'Spiti Valley',
-    destination: 'Himachal Pradesh',
-    duration: '7D/6N',
-    price: 22000,
-    image: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800'
-  },
-  '3': {
-    title: 'Goa Sun Beach and Party Getaway',
-    location: 'Goa',
-    destination: 'Goa Coast',
-    duration: '4D/3N',
-    price: 14500,
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e'
-  },
-  '4': {
-    title: 'Bali Island Escape Beaches and Culture',
-    location: 'Bali',
-    destination: 'Indonesia',
-    duration: '6D/5N',
-    price: 45000,
-    image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4'
+const getBookingRole = (user) => String(user?.role || 'user').toLowerCase();
+const isBroadBookingStaff = (user) => (
+  ['super_admin', 'admin', 'operations'].includes(getBookingRole(user)) ||
+  user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase()
+);
+
+const getSalesQuotationScope = (user) => {
+  const userId = user?._id || user?.id;
+  const owned = mongoose.Types.ObjectId.isValid(userId)
+    ? [{ assignedTo: userId }, { createdBy: userId }]
+    : [];
+  return { $or: [...owned, { assignedTo: null }] };
+};
+
+const canAccessBooking = async (user, booking) => {
+  if (!user || !booking) return false;
+  if (isBroadBookingStaff(user)) return true;
+
+  const role = getBookingRole(user);
+  if (role === 'marketing') return false;
+  if (role === 'sales') {
+    const sourceQuotationId = booking.sourceQuotationId?._id || booking.sourceQuotationId;
+    if (!booking.isCustomQuotationBooking || !sourceQuotationId) return false;
+    return Boolean(await Quotation.exists({ _id: sourceQuotationId, ...getSalesQuotationScope(user) }));
   }
+
+  const userId = user._id || user.id;
+  return Boolean(booking.userId && userId && String(booking.userId?._id || booking.userId) === String(userId));
+};
+
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const findBookableTrip = async (tripId) => {
+  if (!isDbConnected()) return null;
+  const identity = mongoose.Types.ObjectId.isValid(tripId)
+    ? { $or: [{ _id: tripId }, { slug: String(tripId).toLowerCase() }] }
+    : { slug: String(tripId).toLowerCase() };
+  return Trip.findOne({
+    ...identity,
+    status: 'published',
+    isActive: true,
+    isCustom: { $ne: true }
+  });
 };
 
 const getRazorpayInstance = () => {
@@ -129,7 +139,10 @@ export const evaluatePartialPaymentEligibility = (batchDateStr, balanceDueDays =
 // Helper: Authoritative Server-Side Price Calculation
 export const calculateServerPrice = async (trip, travelersCount, occupancy, couponCode, batchId, batchDate) => {
   const count = Math.max(1, parseInt(travelersCount, 10) || 1);
-  const basePrice = Number(trip.price) || 18500;
+  const basePrice = Number(trip.price);
+  if (!Number.isFinite(basePrice) || basePrice < 0) {
+    throw new Error('This trip does not have valid bookable pricing.');
+  }
   
   // 1. Resolve matching batch if provided
   let matchedBatch = null;
@@ -160,9 +173,6 @@ export const calculateServerPrice = async (trip, travelersCount, occupancy, coup
     } else if (trip.sharingPricing.doubleSharing) {
       effectivePerPerson = Number(trip.sharingPricing.doubleSharing);
     }
-  } else {
-    if (occ === 'Triple Sharing') effectivePerPerson = Math.round(basePrice * 0.92);
-    else if (occ === 'Single Sharing') effectivePerPerson = Math.round(basePrice * 1.25);
   }
 
   const subtotal = effectivePerPerson * count;
@@ -206,7 +216,7 @@ export const calculateServerPrice = async (trip, travelersCount, occupancy, coup
     finalAmount,
     currency: 'INR',
     occupancy: occ,
-    batchDate: matchedBatch ? matchedBatch.dates : (batchDate || trip.nextBatch || 'Upcoming Batch'),
+    batchDate: matchedBatch ? matchedBatch.dates : (batchDate || ''),
     validatedCoupon
   };
 };
@@ -221,28 +231,24 @@ export const calculatePricingEndpoint = async (req, res) => {
     if (!tripId) {
       return res.status(400).json({ message: 'Trip ID or slug is required.' });
     }
-
-    let trip = null;
-    if (isDbConnected()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(tripId)) {
-          trip = await Trip.findById(tripId);
-        }
-        if (!trip) {
-          trip = await Trip.findOne({ slug: String(tripId).toLowerCase() });
-        }
-      } catch (e) {}
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking inventory is temporarily unavailable.' });
+    const trip = await findBookableTrip(tripId);
+    if (!trip) return res.status(404).json({ message: 'This trip is unavailable for booking.' });
+    if (!Array.isArray(trip.batches) || trip.batches.length === 0) {
+      return res.status(409).json({ message: 'No departures are currently available for this trip.' });
     }
-
-    if (!trip && STATIC_TRIPS_CATALOG[String(tripId)]) {
-      trip = STATIC_TRIPS_CATALOG[String(tripId)];
+    const selectedBatch = trip.batches.find((batch) =>
+      (batchId && (batch.batchId === batchId || String(batch._id) === String(batchId)))
+      || (batchDate && batch.dates === batchDate)
+    );
+    if (!selectedBatch) return res.status(409).json({ message: 'Select a valid departure before continuing.' });
+    if (selectedBatch.status === 'sold_out' || Number(selectedBatch.bookedSeats || 0) >= Number(selectedBatch.capacity || 0)) {
+      return res.status(409).json({ message: 'The selected departure is sold out.' });
     }
-
-    if (!trip) {
-      trip = {
-        title: 'Curated Expedition',
-        price: 18500
-      };
+    const requestedSeats = Math.max(1, parseInt(travelersCount, 10) || 1);
+    const availableSeats = Math.max(0, Number(selectedBatch.capacity || 0) - Number(selectedBatch.bookedSeats || 0));
+    if (requestedSeats > availableSeats) {
+      return res.status(409).json({ message: `The selected departure only has ${availableSeats} seat${availableSeats === 1 ? '' : 's'} available.` });
     }
 
     const pricing = await calculateServerPrice(
@@ -340,30 +346,11 @@ export const createBookingOrder = async (req, res) => {
       }
     }
 
-    let trip = null;
-    if (isDbConnected()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(tripId)) {
-          trip = await Trip.findById(tripId);
-        }
-        if (!trip) {
-          trip = await Trip.findOne({ slug: String(tripId).toLowerCase() });
-        }
-      } catch (e) {}
-    }
-
-    if (!trip && STATIC_TRIPS_CATALOG[String(tripId)]) {
-      trip = STATIC_TRIPS_CATALOG[String(tripId)];
-    }
-
-    if (!trip) {
-      trip = {
-        title: 'Himalayan Adventure Departure',
-        location: 'Himachal Pradesh',
-        destination: 'India',
-        price: 18500,
-        image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
-      };
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking inventory is temporarily unavailable.' });
+    const trip = await findBookableTrip(tripId);
+    if (!trip) return res.status(404).json({ message: 'This trip is unavailable for booking.' });
+    if (!Array.isArray(trip.batches) || trip.batches.length === 0) {
+      return res.status(409).json({ message: 'No departures are currently available for this trip.' });
     }
 
     // Capacity Validation against remaining batch seats
@@ -373,6 +360,13 @@ export const createBookingOrder = async (req, res) => {
         (batchId && (b.batchId === batchId || String(b._id) === String(batchId))) ||
         (batchDate && b.dates === batchDate)
       );
+
+      if (!matchedBatch) {
+        return res.status(409).json({ message: 'Select a valid departure before continuing.' });
+      }
+      if (matchedBatch.status === 'sold_out') {
+        return res.status(409).json({ message: 'The selected departure is sold out.' });
+      }
 
       if (matchedBatch && matchedBatch.capacity !== undefined && matchedBatch.capacity !== null) {
         const availableSeats = Math.max(0, Number(matchedBatch.capacity) - Number(matchedBatch.bookedSeats || 0));
@@ -455,14 +449,15 @@ export const createBookingOrder = async (req, res) => {
       bookingId,
       userId: safeUserId,
       tripId: String(tripId),
+      batchId: matchedBatch?.batchId || String(matchedBatch?._id || ''),
       tripSnapshot: {
         title: trip.title,
-        location: trip.location || 'India',
-        destination: trip.destination || trip.location || 'India',
+        location: trip.location || '',
+        destination: trip.destination || trip.location || '',
         image: trip.image,
-        duration: trip.duration || '5D/4N',
-        batchDate: pricing.batchDate || batchDate || '15 Sep - 20 Sep 2026',
-        pickupPoint: pickupPoint || 'Main Arrival Meeting Hub'
+        duration: trip.duration || '',
+        batchDate: pricing.batchDate || batchDate || '',
+        pickupPoint: pickupPoint || ''
       },
       customer: {
         name: customerName,
@@ -524,6 +519,7 @@ export const createBookingOrder = async (req, res) => {
         });
 
         if (existingPending) {
+          existingPending.batchId = bookingData.batchId;
           existingPending.tripSnapshot = bookingData.tripSnapshot;
           existingPending.customer = bookingData.customer;
           existingPending.travelers = bookingData.travelers;
@@ -627,7 +623,10 @@ export const verifyBookingPayment = async (req, res) => {
 
     const isPartial = booking.paymentPlan?.type === 'PARTIAL';
     const depositPercent = booking.paymentPlan?.depositPercent || 10;
-    const finalAmount = booking.pricing?.finalAmount || 18500;
+    const finalAmount = Number(booking.pricing?.finalAmount);
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+      return res.status(409).json({ message: 'Booking pricing is unavailable. Contact support before payment.' });
+    }
     const depositPaid = Math.round(finalAmount * (depositPercent / 100));
 
     if (isPartial) {
@@ -724,7 +723,7 @@ export const verifyBookingPayment = async (req, res) => {
           if (batchIndex !== -1) {
             const addedPax = Number(booking.numberOfTravelers) || 1;
             tripDoc.batches[batchIndex].bookedSeats = (tripDoc.batches[batchIndex].bookedSeats || 0) + addedPax;
-            const cap = Number(tripDoc.batches[batchIndex].capacity) || 20;
+            const cap = Number(tripDoc.batches[batchIndex].capacity) || 0;
             const booked = tripDoc.batches[batchIndex].bookedSeats;
 
             if (booked >= cap) {
@@ -818,7 +817,7 @@ export const cancelBooking = async (req, res) => {
           if (batchIndex !== -1) {
             const removedPax = Number(booking.numberOfTravelers) || 1;
             tripDoc.batches[batchIndex].bookedSeats = Math.max(0, (tripDoc.batches[batchIndex].bookedSeats || 0) - removedPax);
-            const cap = Number(tripDoc.batches[batchIndex].capacity) || 20;
+            const cap = Number(tripDoc.batches[batchIndex].capacity) || 0;
             const booked = tripDoc.batches[batchIndex].bookedSeats;
 
             if (booked >= cap) {
@@ -876,7 +875,10 @@ export const payRemainingBalance = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to pay for this booking.' });
     }
 
-    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const finalAmount = Number(booking.pricing?.finalAmount);
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+      return res.status(409).json({ message: 'Booking pricing is unavailable. Contact support before payment.' });
+    }
     const amountPaid = Number(booking.pricing?.amountPaid) || 0;
     const outstanding = booking.pricing?.amountOutstanding !== undefined && booking.pricing?.amountOutstanding !== null
       ? Number(booking.pricing.amountOutstanding)
@@ -967,7 +969,10 @@ export const verifyRemainingBalance = async (req, res) => {
       return res.status(404).json({ message: 'Booking not found.' });
     }
 
-    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const finalAmount = Number(booking.pricing?.finalAmount);
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+      return res.status(409).json({ message: 'Booking pricing is unavailable. Contact support before payment.' });
+    }
     const outstandingPaid = Number(booking.pricing?.amountOutstanding) || (finalAmount - Number(booking.pricing?.amountPaid || 0));
 
     booking.pricing.amountPaid = finalAmount;
@@ -1055,6 +1060,77 @@ export const getMyBookings = async (req, res) => {
   }
 };
 
+// @desc    List quotation-originated bookings visible to Sales staff
+// @route   GET /api/bookings/staff/sales
+// @access  Private (Sales/Admin)
+export const getSalesBookings = async (req, res) => {
+  try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Sales booking data is unavailable while the database is disconnected.' });
+    }
+
+    const role = getBookingRole(req.user);
+    const { search, paymentStatus, bookingStatus, dateFrom, dateTo, page = 1, limit = 100 } = req.query;
+    const andConditions = [
+      { isCustomQuotationBooking: true },
+      { sourceQuotationId: { $ne: null } }
+    ];
+
+    if (role === 'sales' && !isBroadBookingStaff(req.user)) {
+      const quotationIds = await Quotation.find(getSalesQuotationScope(req.user)).distinct('_id');
+      andConditions.push({ sourceQuotationId: { $in: quotationIds } });
+    }
+    if (paymentStatus && paymentStatus !== 'all') andConditions.push({ paymentStatus });
+    if (bookingStatus && bookingStatus !== 'all') andConditions.push({ bookingStatus });
+    if (dateFrom || dateTo) {
+      const createdAt = {};
+      if (dateFrom) createdAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+      if (dateTo) createdAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+      andConditions.push({ createdAt });
+    }
+    if (search) {
+      const pattern = new RegExp(escapeRegex(search.trim()), 'i');
+      andConditions.push({
+        $or: [
+          { bookingId: pattern },
+          { 'customer.name': pattern },
+          { 'customer.email': pattern },
+          { 'customer.phone': pattern },
+          { 'tripSnapshot.title': pattern },
+          { 'tripSnapshot.destination': pattern },
+          { 'quotationSnapshot.quotationNumber': pattern }
+        ]
+      });
+    }
+
+    const filter = { $and: andConditions };
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(limit) || 100));
+    const [total, bookings] = await Promise.all([
+      Booking.countDocuments(filter),
+      Booking.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
+        .populate('sourceQuotationId', 'quotationNumber status bookingCode leadId')
+        .populate('leadId', 'referenceId name email phone status')
+        .lean()
+    ]);
+
+    return res.json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: pageNumber,
+      pages: Math.ceil(total / pageSize),
+      bookings
+    });
+  } catch (error) {
+    console.error('Get Sales Bookings Error:', error);
+    return res.status(500).json({ message: error.message || 'Server Error fetching Sales bookings' });
+  }
+};
+
 // @desc    Get Single Booking by Booking ID
 // @route   GET /api/bookings/:bookingId
 // @access  Private
@@ -1065,7 +1141,14 @@ export const getBookingById = async (req, res) => {
     let booking = null;
     if (isDbConnected()) {
       try {
-        booking = await Booking.findOne({ bookingId });
+        const lookup = mongoose.Types.ObjectId.isValid(bookingId)
+          ? { $or: [{ _id: bookingId }, { bookingId }] }
+          : { bookingId };
+        booking = await Booking.findOne(lookup)
+          .populate('sourceQuotationId', 'quotationNumber status bookingCode leadId assignedTo createdBy')
+          .populate('leadId', 'referenceId name email phone status')
+          .populate('createdBy', 'name email')
+          .populate('updatedBy', 'name email');
       } catch (e) {}
     }
 
@@ -1075,6 +1158,10 @@ export const getBookingById = async (req, res) => {
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    if (!await canAccessBooking(req.user, booking)) {
+      return res.status(403).json({ message: 'Access denied. You do not have permission to view this booking.' });
     }
 
     res.json(booking);
@@ -1235,8 +1322,8 @@ export const getBoardingPassData = async (req, res) => {
       numberOfTravelers: booking.numberOfTravelers || 1,
       occupancy: booking.occupancy || 'Double Sharing',
       pricing: {
-        totalAmount: booking.pricing?.finalAmount || 18500,
-        amountPaid: booking.pricing?.amountPaid || booking.pricing?.finalAmount || 18500,
+        totalAmount: Number(booking.pricing?.finalAmount) || 0,
+        amountPaid: Number(booking.pricing?.amountPaid ?? booking.pricing?.finalAmount) || 0,
         amountOutstanding: 0,
         discountAmount: booking.pricing?.discount || 0,
         couponCode: booking.pricing?.couponCode || ''
@@ -1294,7 +1381,10 @@ export const getProvisionalLetterData = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to access this booking document.' });
     }
 
-    const finalAmount = Number(booking.pricing?.finalAmount) || 18500;
+    const finalAmount = Number(booking.pricing?.finalAmount);
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+      return res.status(409).json({ message: 'Booking pricing is unavailable. Contact support.' });
+    }
     const amountPaid = Number(booking.pricing?.amountPaid) || 0;
     const amountOutstanding = booking.pricing?.amountOutstanding !== undefined 
       ? Number(booking.pricing.amountOutstanding) 

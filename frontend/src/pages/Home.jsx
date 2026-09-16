@@ -16,7 +16,7 @@ import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import HomeTripSection from '../components/HomeTripSection.jsx';
 import { HOME_SECTION_LIMITS, HOME_SECTIONS_META } from '../config/homeConfig.js';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas.js';
-import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
+import { DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 
@@ -72,9 +72,9 @@ const Home = () => {
   const { 
     timeContext = { greeting: 'Welcome Explorer', period: 'Day', heroTitle: 'Explore India & The World In Community.', heroSubtitle: 'Curated social group trips, high-altitude backpacking circuits & boutique mountain stays with certified captains.' }, 
     season = { name: 'Autumn Expeditions', heroTag: 'Ideal Mountain Weather' }, 
-    recommendedTrips = UPCOMING_TRIPS || [], 
-    tripsPool = UPCOMING_TRIPS || [],
-    allTrips = UPCOMING_TRIPS || [],
+    recommendedTrips = [], 
+    tripsPool = [],
+    allTrips = [],
     getWeatherFor = () => null
   } = useTravelContext() || {};
 
@@ -87,7 +87,7 @@ const Home = () => {
 
   // Dynamic active catalog (excludes inactive/draft trips, merges live with knowledge base)
   const activeCatalog = useMemo(() => {
-    const pool = (tripsPool && tripsPool.length > 0) ? tripsPool : (allTrips && allTrips.length > 0 ? allTrips : UPCOMING_TRIPS);
+    const pool = (tripsPool && tripsPool.length > 0) ? tripsPool : allTrips;
     return (pool || []).filter(t => t && t.isActive !== false && t.status !== 'inactive');
   }, [tripsPool, allTrips]);
 
@@ -106,7 +106,7 @@ const Home = () => {
       }
     });
     const months = Array.from(monthSet);
-    return months.length > 0 ? months.slice(0, 5) : ["SEP '26", "OCT '26", "NOV '26", "DEC '26"];
+    return months.slice(0, 5);
   }, [activeCatalog]);
 
   // Trips Filtered for Upcoming Community Trips Section by Month (Enforcing Limit <= 6)
@@ -333,7 +333,7 @@ const Home = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const pool = activeCatalog.length > 0 ? activeCatalog : UPCOMING_TRIPS;
+                      const pool = activeCatalog;
                       const pick = pool[Math.floor(Math.random() * pool.length)];
                       if (pick) navigate(`/trip/${pick.slug || pick.id}`);
                     }}

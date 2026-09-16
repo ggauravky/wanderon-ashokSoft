@@ -1,9 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation, Link } from 'react-router-dom';
-import { ShieldAlert, ArrowLeft, Headphones } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-
-const DEFAULT_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
 
 /**
  * Reusable role-based protected route guard.
@@ -27,12 +25,11 @@ const RoleProtectedRoute = ({ allowedRoles = ['admin', 'super_admin'], children 
 
   // 1. Not logged in -> Redirect to Staff Login
   if (!isAuthenticated || !user) {
-    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+    return <Navigate to="/staff/login" state={{ from: location }} replace />;
   }
 
   const userRole = (user.role || 'user').toLowerCase();
-  const isSuperAdminEmail = user.email?.toLowerCase() === DEFAULT_ADMIN_EMAIL;
-  const isAllowed = isSuperAdminEmail || userRole === 'super_admin' || allowedRoles.map(r => r.toLowerCase()).includes(userRole);
+  const isAllowed = userRole === 'super_admin' || allowedRoles.map(r => r.toLowerCase()).includes(userRole);
 
   // 2. Role is Allowed -> Render Protected Screen
   if (isAllowed) {
@@ -40,9 +37,9 @@ const RoleProtectedRoute = ({ allowedRoles = ['admin', 'super_admin'], children 
   }
 
   // 3. Role is NOT Allowed -> Direct Role-Appropriate Handling
-  // If Sales employee tries to access full /admin, redirect immediately to their dedicated portal /staff/sales
+  // Keep Sales inside the canonical Staff application when legacy Admin guards deny access.
   if (userRole === 'sales') {
-    return <Navigate to="/staff/sales" replace />;
+    return <Navigate to="/staff" replace />;
   }
 
   // If normal customer or creator tries to access staff portals, show clean Access Denied page
@@ -62,7 +59,7 @@ const RoleProtectedRoute = ({ allowedRoles = ['admin', 'super_admin'], children 
 
         <div className="pt-2 flex flex-col gap-2.5">
           <Link
-            to="/admin/login"
+            to="/staff/login"
             className="w-full py-3 bg-white/10 hover:bg-white/20 text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2"
           >
             <ArrowLeft size={16} /> Switch to Staff Login

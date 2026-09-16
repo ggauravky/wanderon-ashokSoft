@@ -22,13 +22,13 @@ const tripSchema = new mongoose.Schema(
     },
     destination: {
       type: String,
-      default: 'India',
+      default: '',
       trim: true,
       index: true
     },
     region: {
       type: String,
-      default: 'North India',
+      default: '',
       trim: true
     },
     duration: {
@@ -72,34 +72,34 @@ const tripSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 4.8,
-      min: 1,
+      default: 0,
+      min: 0,
       max: 5
     },
     reviews: {
       type: Number,
-      default: 12
+      default: 0
     },
     tags: {
       type: [String],
-      default: ['Backpacking', 'Adventure']
+      default: []
     },
     category: {
       type: String,
-      default: 'Backpacking',
+      default: '',
       index: true
     },
     mood: {
       type: String,
-      default: 'Adventure'
+      default: ''
     },
     difficulty: {
       type: String,
-      default: 'Moderate'
+      default: ''
     },
     groupType: {
       type: String,
-      default: 'Mixed Group'
+      default: ''
     },
     bestMonths: {
       type: [String],
@@ -107,7 +107,7 @@ const tripSchema = new mongoose.Schema(
     },
     nextBatch: {
       type: String,
-      default: '15 Sep'
+      default: ''
     },
     availableDates: {
       type: Array,
@@ -119,7 +119,7 @@ const tripSchema = new mongoose.Schema(
         startDate: { type: Date },
         endDate: { type: Date },
         dates: { type: String, required: true },
-        capacity: { type: Number, default: 20 },
+        capacity: { type: Number, default: 0 },
         bookedSeats: { type: Number, default: 0 },
         status: {
           type: String,
@@ -142,11 +142,11 @@ const tripSchema = new mongoose.Schema(
     },
     pickupPoints: {
       type: [String],
-      default: ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)']
+      default: []
     },
     capacity: {
       type: Number,
-      default: 20
+      default: 0
     },
     shortDescription: {
       type: String,
@@ -175,12 +175,12 @@ const tripSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['published', 'draft', 'inactive'],
-      default: 'published',
+      default: 'draft',
       index: true
     },
     isActive: {
       type: Boolean,
-      default: true,
+      default: false,
       index: true
     },
     // Trip-Level SEO Configuration Schema

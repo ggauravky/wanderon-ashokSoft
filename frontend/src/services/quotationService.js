@@ -595,6 +595,60 @@ export function getInitialQuotationState() {
   };
 }
 
+/**
+ * Empty commercial draft used by the Staff quotation workspace.
+ * Unlike the legacy showcase template, it contains no invented traveler,
+ * supplier, itinerary, or price data.
+ */
+export function getBlankQuotationState() {
+  return {
+    quotationNumber: '',
+    version: 1,
+    leadId: null,
+    customerId: null,
+    assignedTo: null,
+    customerSnapshot: { name: '', email: '', phone: '', city: '', notes: '' },
+    tripRequirements: {
+      title: '', destination: '', startDate: '', endDate: '', duration: '1D/0N',
+      days: 1, nights: 0, adults: 1, children: 0, infants: 0, totalTravelers: 1,
+      travelStyle: 'Custom', budgetPerPerson: '', specialRequests: ''
+    },
+    pricingRules: {
+      adultMultiplier: 1,
+      childMultiplier: 0.7,
+      infantMultiplier: 0,
+      maxSalesDiscount: 10,
+      maxSalesMarkup: 30
+    },
+    itinerary: [getEmptyItineraryDay(1)],
+    hotelOptions: [{ ...getEmptyHotelOption(1), selected: true }],
+    transportOptions: [getEmptyTransportOption(1)],
+    activities: [],
+    addOns: [],
+    inclusions: [],
+    exclusions: [],
+    termsAndConditions: [],
+    cancellationPolicy: [],
+    paymentTerms: { depositPercent: 10, balanceDueDays: 6, paymentMode: 'PARTIAL', currency: 'INR' },
+    pricing: {
+      internalBaseCost: 0, internalHotelCost: 0, internalTransportCost: 0,
+      internalActivityCost: 0, internalAddOnCost: 0, totalInternalCost: 0,
+      customerBasePrice: 0, customerHotelPrice: 0, customerTransportPrice: 0,
+      customerActivityPrice: 0, customerAddOnPrice: 0, subtotal: 0,
+      markupType: 'percentage', markupPercent: 0, markupValue: 0, markupAmount: 0,
+      discountType: 'none', discountValue: 0, discountAmount: 0,
+      taxableAmount: 0, gstPercent: 5, gstAmount: 0, tcsPercent: 0, tcsAmount: 0,
+      finalTotal: 0, perPersonPrice: 0, adultPrice: 0, childPrice: 0, infantPrice: 0,
+      adultTotal: 0, childTotal: 0, infantTotal: 0, depositRequired: 0,
+      balanceAmount: 0, projectedMargin: 0, projectedMarginPercent: 0
+    },
+    priceSnapshot: null,
+    revisions: [],
+    status: 'DRAFT',
+    validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  };
+}
+
 export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName = 'Primary Stay') {
   return {
     optionId: `hotel_opt_${Date.now()}_${index}`,
@@ -723,7 +777,7 @@ export function getEmptyAddOn(index = 1) {
 export function getEmptyItineraryDay(dayNumber = 1) {
   return {
     day: dayNumber,
-    title: `Day ${dayNumber}: Exploration & Local Experience`,
+    title: `Day ${dayNumber}`,
     locationName: '',
     locationId: '',
     destination: '',
@@ -732,7 +786,7 @@ export function getEmptyItineraryDay(dayNumber = 1) {
     afternoon: '',
     evening: '',
     stay: '',
-    mealsIncluded: ['Breakfast'],
+    mealsIncluded: [],
     transferDetails: '',
     activityHighlights: [],
     coverMedia: {
@@ -754,6 +808,7 @@ export default {
   ADDON_PRESETS,
   calculateDuration,
   getInitialQuotationState,
+  getBlankQuotationState,
   getEmptyHotelOption,
   getEmptyTransportOption,
   getEmptyActivity,

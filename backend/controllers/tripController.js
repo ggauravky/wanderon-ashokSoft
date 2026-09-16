@@ -1,463 +1,328 @@
 import mongoose from 'mongoose';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import Trip from '../models/Trip.js';
 import Booking from '../models/Booking.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isDbConnected = () => mongoose.connection?.readyState === 1;
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeSlug = (value) => String(value || '').toLowerCase().trim()
+  .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
 
-// Helper to load travel knowledge base fallback packages
 const getStaticKnowledgeTrips = () => {
-  try {
-    const tripsPath = path.join(__dirname, '../data/trips.json');
-    if (fs.existsSync(tripsPath)) {
-      const raw = fs.readFileSync(tripsPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+  for (const filename of ['trips.json', 'travelKnowledge.json']) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(path.join(__dirname, `../data/${filename}`), 'utf8'));
+      const trips = Array.isArray(parsed) ? parsed : parsed?.trips;
+      if (Array.isArray(trips)) return trips;
+    } catch {
+      // Explicit seeding can legitimately have no source file.
     }
-
-    const filePath = path.join(__dirname, '../data/travelKnowledge.json');
-    if (fs.existsSync(filePath)) {
-      const raw = fs.readFileSync(filePath, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.trips)) {
-        return parsed.trips;
-      }
-    }
-  } catch (err) {
-    console.warn('Could not read static trips data:', err.message);
   }
   return [];
 };
 
-const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
+const databaseUnavailable = (res) => res.status(503).json({
+  success: false,
+  message: 'Trip catalog is temporarily unavailable.'
+});
 
-// @desc    Get all trip packages with filtering, search, and pagination
-// @route   GET /api/trips
-// @access  Public (or Admin if includeDrafts=true)
-export const getTrips = async (req, res) => {
-  try {
-    const { 
-      search, destination, category, mood, 
-      minPrice, maxPrice, sort, includeDrafts,
-      country, tag, duration, preset 
-    } = req.query;
+const numberOrUndefined = (value) => {
+  if (value === '' || value === null || value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+};
 
-    const filter = {};
+const stringArray = (value) => Array.isArray(value)
+  ? value.map((item) => String(item || '').trim()).filter(Boolean)
+  : [];
 
-    // Only exclude drafts and inactive trips for public storefront queries
-    if (includeDrafts !== 'true') {
-      filter.status = { $ne: 'draft' };
-      filter.isActive = { $ne: false };
+const normalizeBatches = (incoming, current = []) => {
+  const currentByIdentity = new Map();
+  current.forEach((batch) => {
+    if (batch?._id) currentByIdentity.set(String(batch._id), batch);
+    if (batch?.batchId) currentByIdentity.set(String(batch.batchId), batch);
+  });
+  const retained = new Set();
+
+  const batches = (Array.isArray(incoming) ? incoming : []).map((batch, index) => {
+    const existing = currentByIdentity.get(String(batch?._id || ''))
+      || currentByIdentity.get(String(batch?.batchId || ''));
+    if (existing?._id) retained.add(String(existing._id));
+    if (existing?.batchId) retained.add(String(existing.batchId));
+
+    const capacity = numberOrUndefined(batch?.capacity);
+    if (!Number.isFinite(capacity) || capacity < 0) {
+      throw new Error(`Departure ${index + 1}: capacity must be a non-negative number.`);
     }
-
-    if (destination && destination !== 'All' && destination !== 'all') {
-      filter.destination = new RegExp(destination, 'i');
+    const bookedSeats = Number(existing?.bookedSeats || 0);
+    if (capacity < bookedSeats) {
+      throw new Error(`Departure ${index + 1}: capacity cannot be lower than ${bookedSeats} booked seats.`);
     }
+    const dates = String(batch?.dates || '').trim();
+    if (!dates) throw new Error(`Departure ${index + 1}: date label is required.`);
 
-    if (country && country !== 'All') {
-      if (country.toLowerCase() === 'india' || country.toLowerCase() === 'domestic') {
-        filter.destination = { $nin: [/bali/i, /indonesia/i] };
-      } else if (country.toLowerCase() === 'international') {
-        filter.$or = [{ destination: /bali/i }, { category: /international/i }];
+    const pricing = {};
+    for (const key of ['tripleSharing', 'doubleSharing', 'singleSharing']) {
+      const value = numberOrUndefined(batch?.pricing?.[key]);
+      if (Number.isNaN(value) || (value !== undefined && value < 0)) {
+        throw new Error(`Departure ${index + 1}: ${key} price must be non-negative.`);
       }
+      if (value !== undefined) pricing[key] = value;
     }
 
-    if (category && category !== 'All') {
-      filter.category = new RegExp(category, 'i');
-    }
+    return {
+      ...(existing?._id ? { _id: existing._id } : {}),
+      batchId: existing?.batchId || String(batch?.batchId || '').trim() || `DEP-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+      startDate: batch?.startDate || undefined,
+      endDate: batch?.endDate || undefined,
+      dates,
+      capacity,
+      bookedSeats,
+      status: bookedSeats >= capacity
+        ? 'sold_out'
+        : (['available', 'filling_fast'].includes(batch?.status) ? batch.status : 'available'),
+      pricing,
+      bookingAmount: numberOrUndefined(batch?.bookingAmount),
+      totalAmount: numberOrUndefined(batch?.totalAmount)
+    };
+  });
 
-    if (tag) {
-      filter.tags = new RegExp(tag, 'i');
-    }
+  const protectedRemoval = current.find((batch) => Number(batch?.bookedSeats || 0) > 0
+    && !retained.has(String(batch?._id)) && !retained.has(String(batch?.batchId)));
+  if (protectedRemoval) {
+    throw new Error(`Departure ${protectedRemoval.dates || protectedRemoval.batchId} has booked seats and cannot be removed.`);
+  }
+  return batches;
+};
 
-    if (duration === 'weekend') {
-      filter.duration = new RegExp('2N|3D|3N/4D', 'i');
-    }
+const buildTripPayload = (body, currentTrip = null) => {
+  const payload = {};
+  const stringFields = [
+    'title', 'location', 'destination', 'region', 'duration', 'currency', 'image', 'heroImage',
+    'category', 'mood', 'difficulty', 'groupType', 'nextBatch', 'shortDescription', 'overview'
+  ];
+  stringFields.forEach((field) => {
+    if (body[field] !== undefined) payload[field] = String(body[field] || '').trim();
+  });
+  if (body.slug !== undefined || body.title !== undefined) payload.slug = normalizeSlug(body.slug || body.title);
 
-    if (mood && mood !== 'All') {
-      filter.mood = new RegExp(mood, 'i');
-    }
+  for (const field of ['days', 'nights', 'price', 'originalPrice', 'discount', 'capacity']) {
+    if (body[field] === undefined) continue;
+    const value = numberOrUndefined(body[field]);
+    if (Number.isNaN(value) || (value !== undefined && value < 0)) throw new Error(`${field} must be a non-negative number.`);
+    payload[field] = value;
+  }
+  const price = payload.price ?? currentTrip?.price;
+  const originalPrice = payload.originalPrice ?? currentTrip?.originalPrice;
+  if (originalPrice !== undefined && originalPrice !== null && Number(originalPrice) < Number(price || 0)) {
+    throw new Error('Original price cannot be lower than the base price.');
+  }
 
+  for (const field of ['gallery', 'tags', 'bestMonths', 'pickupPoints', 'inclusions', 'exclusions']) {
+    if (body[field] !== undefined) payload[field] = stringArray(body[field]);
+  }
+  for (const field of ['itinerary', 'faqs']) {
+    if (body[field] !== undefined) payload[field] = Array.isArray(body[field]) ? body[field] : [];
+  }
+
+  if (body.sharingPricing !== undefined) {
+    payload.sharingPricing = {};
+    for (const key of ['tripleSharing', 'doubleSharing', 'singleSharing']) {
+      const value = numberOrUndefined(body.sharingPricing?.[key]);
+      if (Number.isNaN(value) || (value !== undefined && value < 0)) throw new Error(`${key} price must be non-negative.`);
+      if (value !== undefined) payload.sharingPricing[key] = value;
+    }
+  }
+  if (body.seo !== undefined) {
+    payload.seo = {
+      seoTitle: String(body.seo?.seoTitle || '').trim(),
+      metaDescription: String(body.seo?.metaDescription || '').trim(),
+      canonicalUrl: String(body.seo?.canonicalUrl || '').trim(),
+      indexingDirective: body.seo?.indexingDirective === 'noindex, nofollow' ? 'noindex, nofollow' : 'index, follow',
+      ogTitle: String(body.seo?.ogTitle || '').trim(),
+      ogDescription: String(body.seo?.ogDescription || '').trim(),
+      ogImage: String(body.seo?.ogImage || '').trim(),
+      structuredSchemaType: String(body.seo?.structuredSchemaType || '').trim()
+    };
+  }
+  if (body.batches !== undefined) payload.batches = normalizeBatches(body.batches, currentTrip?.batches || []);
+
+  const status = body.status || currentTrip?.status || 'draft';
+  if (!['published', 'draft', 'inactive'].includes(status)) throw new Error('Invalid publishing status.');
+  if ((body.isCustom ?? currentTrip?.isCustom) && status === 'published') {
+    throw new Error('Quotation-created custom trips cannot be published to the public catalog.');
+  }
+  payload.status = status;
+  payload.isActive = status === 'published';
+  return payload;
+};
+
+const mutationError = (error, res, fallbackMessage) => {
+  if (error?.code === 11000 && error?.keyPattern?.slug) {
+    return res.status(409).json({ success: false, message: 'That trip slug is already in use. Choose a unique slug.' });
+  }
+  if (error?.name === 'ValidationError' || /Departure|price|capacity|status|custom trips/i.test(error?.message || '')) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+  console.error(fallbackMessage, error);
+  return res.status(500).json({ success: false, message: fallbackMessage });
+};
+
+export const getTrips = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
+  try {
+    const { search, destination, category, mood, minPrice, maxPrice, sort, country, tag, duration } = req.query;
+    const filter = { status: 'published', isActive: true, isCustom: { $ne: true } };
+    if (destination && !/^all$/i.test(destination)) filter.destination = new RegExp(escapeRegex(destination), 'i');
+    if (category && !/^all$/i.test(category)) filter.category = new RegExp(escapeRegex(category), 'i');
+    if (mood && !/^all$/i.test(mood)) filter.mood = new RegExp(escapeRegex(mood), 'i');
+    if (tag) filter.tags = new RegExp(escapeRegex(tag), 'i');
+    if (duration === 'weekend') filter.duration = /2N|3D|3N\/4D/i;
+    if (country && !/^all$/i.test(country)) {
+      if (/^(india|domestic)$/i.test(country)) filter.destination = { $nin: [/bali/i, /indonesia/i] };
+      if (/^international$/i.test(country)) filter.$or = [{ destination: /bali|indonesia/i }, { category: /international/i }];
+    }
     if (search) {
-      filter.$or = [
-        { title: new RegExp(search, 'i') },
-        { location: new RegExp(search, 'i') },
-        { destination: new RegExp(search, 'i') },
-        { overview: new RegExp(search, 'i') },
-        { tags: new RegExp(search, 'i') }
-      ];
+      const rx = new RegExp(escapeRegex(search), 'i');
+      filter.$or = [{ title: rx }, { slug: rx }, { location: rx }, { destination: rx }];
     }
-
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = Number(minPrice);
       if (maxPrice) filter.price.$lte = Number(maxPrice);
     }
-
-    let trips = [];
-
-    if (isDbConnected()) {
-      try {
-        const totalCount = await Trip.countDocuments();
-        if (totalCount === 0) {
-          const staticList = getStaticKnowledgeTrips();
-          if (staticList.length > 0) {
-            console.log(`🌱 Auto-seeding ${staticList.length} trip packages to MongoDB...`);
-            const normalizedToInsert = staticList.map(t => ({
-              title: t.title,
-              slug: t.slug || t.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
-              location: t.location || t.state || 'India',
-              destination: t.destination || 'India',
-              duration: t.duration || `${t.days || 5}D/${t.nights || 4}N`,
-              days: t.days || 5,
-              nights: t.nights || 4,
-              price: Number(t.price || 18500),
-              originalPrice: Number(t.originalPrice || Math.round(Number(t.price || 18500) * 1.2)),
-              image: t.image || t.heroImage || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-              heroImage: t.heroImage || t.image || '',
-              gallery: t.gallery || [],
-              rating: Number(t.rating || 4.8),
-              reviews: Number(t.reviews || 12),
-              tags: t.tags || ['Backpacking', 'Adventure'],
-              category: t.category || 'Backpacking',
-              mood: t.mood || 'Adventure',
-              overview: t.overview || t.shortDescription || '',
-              itinerary: t.itinerary || [],
-              inclusions: t.inclusions || [],
-              exclusions: t.exclusions || [],
-              faqs: t.faqs || [],
-              status: 'published',
-              isActive: true,
-              seo: {
-                seoTitle: `${t.title} | WanderLuxe Expeditions`,
-                metaDescription: t.overview || `Book ${t.title} with WanderLuxe.`,
-                canonicalUrl: `https://wanderluxe.in/trip/${t.slug || t.id}`,
-                indexingDirective: 'index, follow'
-              }
-            }));
-            await Trip.insertMany(normalizedToInsert, { ordered: false }).catch(() => {});
-          }
-        }
-
-        let sortOption = { createdAt: -1 };
-        if (sort === 'price_low') sortOption = { price: 1 };
-        if (sort === 'price_high') sortOption = { price: -1 };
-        if (sort === 'rating') sortOption = { rating: -1 };
-
-        trips = await Trip.find(filter).sort(sortOption);
-      } catch (dbErr) {
-        console.warn('Trips DB query warning:', dbErr.message);
-      }
-    }
-
-    // Static fallback if DB is offline or returned empty
-    if (trips.length === 0) {
-      const staticList = getStaticKnowledgeTrips();
-      trips = staticList.filter(t => {
-        const dest = (t.destination || t.location || '').toLowerCase();
-        if (destination && destination !== 'All' && destination !== 'all' && !new RegExp(destination, 'i').test(t.destination || t.location)) return false;
-        if (country && country !== 'All') {
-          if (country.toLowerCase() === 'india' || country.toLowerCase() === 'domestic') {
-            if (dest.includes('bali') || dest.includes('indonesia')) return false;
-          } else if (country.toLowerCase() === 'international') {
-            if (!dest.includes('bali') && !dest.includes('indonesia') && !/international/i.test(t.category)) return false;
-          }
-        }
-        if (category && category !== 'All' && !new RegExp(category, 'i').test(t.category)) return false;
-        if (tag && !new RegExp(tag, 'i').test(Array.isArray(t.tags) ? t.tags.join(' ') : '')) return false;
-        if (duration === 'weekend' && !/2N|3D|3N\/4D/i.test(t.duration || '')) return false;
-        if (search && !new RegExp(search, 'i').test(`${t.title} ${t.location} ${t.destination} ${t.overview}`)) return false;
-        return true;
-      });
-    }
-
-    res.json({
-      success: true,
-      count: trips.length,
-      data: trips
-    });
+    let sortOption = { updatedAt: -1 };
+    if (sort === 'price_low') sortOption = { price: 1 };
+    if (sort === 'price_high') sortOption = { price: -1 };
+    if (sort === 'rating') sortOption = { rating: -1 };
+    const trips = await Trip.find(filter).sort(sortOption).lean();
+    return res.json({ success: true, count: trips.length, data: trips });
   } catch (error) {
     console.error('getTrips Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching trips' });
+    return res.status(500).json({ success: false, message: 'Unable to load the trip catalog.' });
   }
 };
 
-// @desc    Get single trip package details by ID or Slug
-// @route   GET /api/trips/:idOrSlug
-// @access  Public
-export const getTripByIdOrSlug = async (req, res) => {
+export const getAdminTrips = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
   try {
-    const { idOrSlug } = req.params;
-    const cleanId = String(idOrSlug).trim().toLowerCase();
-
-    let trip = null;
-
-    if (isDbConnected()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(idOrSlug)) {
-          trip = await Trip.findById(idOrSlug);
-        }
-        if (!trip) {
-          trip = await Trip.findOne({ slug: cleanId });
-        }
-      } catch (dbErr) {
-        console.warn('Trip query warning:', dbErr.message);
-      }
+    const { search, status, destination, category } = req.query;
+    const filter = {};
+    if (status && !/^all$/i.test(status)) filter.status = status;
+    if (destination && !/^all$/i.test(destination)) filter.destination = new RegExp(escapeRegex(destination), 'i');
+    if (category && !/^all$/i.test(category)) filter.category = new RegExp(escapeRegex(category), 'i');
+    if (search) {
+      const rx = new RegExp(escapeRegex(search), 'i');
+      filter.$or = [{ title: rx }, { slug: rx }, { location: rx }, { destination: rx }];
     }
+    const trips = await Trip.find(filter).sort({ updatedAt: -1 }).lean();
+    return res.json({ success: true, count: trips.length, data: trips });
+  } catch (error) {
+    console.error('getAdminTrips Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load Admin trips.' });
+  }
+};
 
-    if (!trip) {
-      const staticList = getStaticKnowledgeTrips();
-      trip = staticList.find(
-        (t, idx) =>
-          t.slug === cleanId ||
-          String(t.id || '') === cleanId ||
-          String(t._id || '') === cleanId ||
-          String(idx + 1) === cleanId
-      );
-    }
-
-    if (!trip) {
-      return res.status(404).json({ success: false, message: 'Trip package not found.' });
-    }
-
-    res.json({
-      success: true,
-      data: trip
-    });
+export const getTripByIdOrSlug = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
+  try {
+    const key = String(req.params.idOrSlug || '').trim();
+    const identity = mongoose.Types.ObjectId.isValid(key)
+      ? { $or: [{ _id: key }, { slug: normalizeSlug(key) }] }
+      : { slug: normalizeSlug(key) };
+    const trip = await Trip.findOne({ ...identity, status: 'published', isActive: true, isCustom: { $ne: true } }).lean();
+    if (!trip) return res.status(404).json({ success: false, message: 'Trip is unavailable.' });
+    return res.json({ success: true, data: trip });
   } catch (error) {
     console.error('getTripByIdOrSlug Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching trip details' });
+    return res.status(500).json({ success: false, message: 'Unable to load trip details.' });
   }
 };
 
-// @desc    Create a new trip package
-// @route   POST /api/trips
-// @access  Private/Admin
+export const getAdminTripById = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid trip ID.' });
+    const trip = await Trip.findById(req.params.id).lean();
+    if (!trip) return res.status(404).json({ success: false, message: 'Trip package not found.' });
+    return res.json({ success: true, data: trip });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Unable to load Admin trip.' });
+  }
+};
+
 export const createTrip = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
   try {
-    const { 
-      title, slug, location, destination, duration, price, 
-      image, heroImage, gallery, overview, itinerary, 
-      inclusions, exclusions, faqs, seo, status, category, mood, difficulty, groupType
-    } = req.body;
-
-    if (!title || !location || !duration || !price || !image) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Title, location, duration, price, and image are required.' 
-      });
+    const payload = buildTripPayload({ ...req.body, status: req.body.status || 'draft' });
+    if (!payload.title || !payload.location || !payload.duration || !Number.isFinite(payload.price) || !payload.image || !payload.slug) {
+      return res.status(400).json({ success: false, message: 'Title, slug, location, duration, base price, and main image are required.' });
     }
-
-    // Auto-generate clean slug
-    let cleanSlug = (slug || title)
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-
-    // Check slug uniqueness
-    if (isDbConnected()) {
-      const existingSlug = await Trip.findOne({ slug: cleanSlug });
-      if (existingSlug) {
-        cleanSlug = `${cleanSlug}-${Date.now().toString().slice(-4)}`;
-      }
-    }
-
-    const newTrip = await Trip.create({
-      title: title.trim(),
-      slug: cleanSlug,
-      location: location.trim(),
-      destination: destination || 'India',
-      region: req.body.region || 'North India',
-      duration: duration.trim(),
-      days: req.body.days || parseInt(duration) || 5,
-      nights: req.body.nights || (parseInt(duration) ? parseInt(duration) - 1 : 4),
-      price: Number(price),
-      originalPrice: req.body.originalPrice ? Number(req.body.originalPrice) : Math.round(Number(price) * 1.2),
-      discount: req.body.discount || 0,
-      currency: req.body.currency || 'INR',
-      image: image.trim(),
-      heroImage: heroImage ? heroImage.trim() : image.trim(),
-      gallery: Array.isArray(gallery) ? gallery : [],
-      rating: req.body.rating ? Number(req.body.rating) : 4.8,
-      reviews: req.body.reviews ? Number(req.body.reviews) : 12,
-      tags: Array.isArray(req.body.tags) ? req.body.tags : (req.body.tags ? String(req.body.tags).split(',').map(s => s.trim()) : ['Backpacking', 'Adventure']),
-      category: category || 'Backpacking',
-      mood: mood || 'Adventure',
-      difficulty: difficulty || 'Moderate',
-      groupType: groupType || 'Mixed Group',
-      bestMonths: Array.isArray(req.body.bestMonths) ? req.body.bestMonths : [],
-      nextBatch: req.body.nextBatch || '15 Sep',
-      availableDates: Array.isArray(req.body.availableDates) ? req.body.availableDates : [],
-      batches: Array.isArray(req.body.batches) ? req.body.batches : [],
-      sharingPricing: req.body.sharingPricing || {
-        doubleSharing: Number(price),
-        tripleSharing: Math.max(1000, Number(price) - 1500),
-        singleSharing: Number(price) + 3500
-      },
-      pickupPoints: Array.isArray(req.body.pickupPoints) ? req.body.pickupPoints : ['Airport Arrival Terminal (10:00 AM)', 'Central Railway Station (11:30 AM)'],
-      capacity: req.body.capacity ? Number(req.body.capacity) : 20,
-      shortDescription: req.body.shortDescription || overview || '',
-      overview: overview || req.body.shortDescription || '',
-      itinerary: Array.isArray(itinerary) ? itinerary : [],
-      inclusions: Array.isArray(inclusions) ? inclusions : [],
-      exclusions: Array.isArray(exclusions) ? exclusions : [],
-      faqs: Array.isArray(faqs) ? faqs : [],
-      status: status || 'published',
-      isActive: status !== 'inactive',
-      seo: {
-        seoTitle: seo?.seoTitle || `${title} | WanderLuxe Expeditions`,
-        metaDescription: seo?.metaDescription || overview || `Book ${title} with WanderLuxe.`,
-        canonicalUrl: seo?.canonicalUrl || `https://wanderluxe.in/trip/${cleanSlug}`,
-        indexingDirective: seo?.indexingDirective || 'index, follow',
-        ogTitle: seo?.ogTitle || title,
-        ogDescription: seo?.ogDescription || overview || '',
-        ogImage: seo?.ogImage || heroImage || image,
-        structuredSchemaType: seo?.structuredSchemaType || 'Product'
-      }
-    });
-
-    console.log(`✅ Admin created new trip: ${newTrip.title} (${newTrip.slug})`);
-
-    res.status(201).json({ success: true, data: newTrip });
+    if (await Trip.exists({ slug: payload.slug })) return res.status(409).json({ success: false, message: 'That trip slug is already in use. Choose a unique slug.' });
+    const trip = await Trip.create(payload);
+    return res.status(201).json({ success: true, data: trip });
   } catch (error) {
-    console.error('createTrip Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error creating trip.' });
+    return mutationError(error, res, 'Unable to create trip.');
   }
 };
 
-// @desc    Update trip package
-// @route   PUT /api/trips/:id
-// @access  Private/Admin
 export const updateTrip = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
   try {
-    const { id } = req.params;
-
-    const trip = await Trip.findById(id);
-    if (!trip) {
-      return res.status(404).json({ success: false, message: 'Trip package not found.' });
+    const trip = await Trip.findById(req.params.id);
+    if (!trip) return res.status(404).json({ success: false, message: 'Trip package not found.' });
+    const payload = buildTripPayload(req.body, trip);
+    if (payload.slug && payload.slug !== trip.slug && await Trip.exists({ slug: payload.slug, _id: { $ne: trip._id } })) {
+      return res.status(409).json({ success: false, message: 'That trip slug is already in use. Choose a unique slug.' });
     }
-
-    if (req.body.price !== undefined) {
-      if (isNaN(Number(req.body.price)) || Number(req.body.price) < 0) {
-        return res.status(400).json({ success: false, message: 'Price must be a valid positive number.' });
-      }
-      req.body.price = Number(req.body.price);
-    }
-
-    if (req.body.originalPrice !== undefined) {
-      req.body.originalPrice = Number(req.body.originalPrice);
-    }
-
-    if (req.body.status) {
-      req.body.isActive = req.body.status !== 'inactive';
-    }
-
-    // Assign sanitized updates
-    Object.assign(trip, req.body);
+    Object.assign(trip, payload);
     await trip.save();
-
-    console.log(`✅ Admin updated trip: ${trip.title} (ID: ${trip._id})`);
-
-    res.json({ success: true, data: trip });
+    return res.json({ success: true, data: trip });
   } catch (error) {
-    console.error('updateTrip Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error updating trip.' });
+    return mutationError(error, res, 'Unable to update trip.');
   }
 };
 
-// @desc    Delete or deactivate trip package
-// @route   DELETE /api/trips/:id
-// @access  Private/Admin
 export const deleteTrip = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
   try {
-    const { id } = req.params;
-
-    const trip = await Trip.findById(id);
-    if (!trip) {
-      return res.status(404).json({ success: false, message: 'Trip package not found.' });
+    const trip = await Trip.findById(req.params.id);
+    if (!trip) return res.status(404).json({ success: false, message: 'Trip package not found.' });
+    const bookings = await Booking.countDocuments({ $or: [{ tripId: String(trip._id) }, { 'tripSnapshot.title': trip.title }] });
+    if (bookings > 0 || trip.sourceQuotationId) {
+      trip.status = 'inactive';
+      trip.isActive = false;
+      await trip.save();
+      return res.json({ success: true, deactivated: true, message: 'Trip has linked commercial history and was deactivated instead of deleted.' });
     }
-
-    // Check if bookings exist for this trip before hard delete
-    if (isDbConnected()) {
-      const activeBookingsCount = await Booking.countDocuments({ 
-        $or: [{ tripId: String(id) }, { 'tripSnapshot.title': trip.title }] 
-      });
-
-      if (activeBookingsCount > 0) {
-        trip.status = 'inactive';
-        trip.isActive = false;
-        await trip.save();
-        return res.json({ 
-          success: true, 
-          message: `Trip has ${activeBookingsCount} linked bookings. Safely deactivated from catalog without breaking booking records.`, 
-          id,
-          deactivated: true 
-        });
-      }
-    }
-
     await trip.deleteOne();
-    console.log(`🗑️ Admin deleted trip: ${trip.title} (ID: ${id})`);
-    res.json({ success: true, message: 'Trip package deleted successfully.', id });
-  } catch (error) {
-    console.error('deleteTrip Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error deleting trip.' });
+    return res.json({ success: true, deleted: true, message: 'Unused trip deleted.' });
+  } catch {
+    return res.status(500).json({ success: false, message: 'Unable to delete or deactivate trip.' });
   }
 };
 
-// @desc    Seed initial catalog into database
-// @route   POST /api/trips/seed
-// @access  Private/Admin
 export const seedTrips = async (req, res) => {
+  if (!isDbConnected()) return databaseUnavailable(res);
   try {
     const staticList = getStaticKnowledgeTrips();
     const count = await Trip.countDocuments();
-    if (count > 0 && req.query.force !== 'true') {
-      return res.json({ message: `Database already has ${count} trips. Pass ?force=true to reseed.`, count });
-    }
-
-    const normalizedToInsert = staticList.map(t => ({
-      title: t.title,
-      slug: t.slug || t.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
-      location: t.location || t.state || 'India',
-      destination: t.destination || 'India',
-      duration: t.duration || `${t.days || 5}D/${t.nights || 4}N`,
-      days: t.days || 5,
-      nights: t.nights || 4,
-      price: Number(t.price || 18500),
-      originalPrice: Number(t.originalPrice || Math.round(Number(t.price || 18500) * 1.2)),
-      image: t.image || t.heroImage || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-      heroImage: t.heroImage || t.image || '',
-      gallery: t.gallery || [],
-      rating: Number(t.rating || 4.8),
-      reviews: Number(t.reviews || 12),
-      tags: t.tags || ['Backpacking', 'Adventure'],
-      category: t.category || 'Backpacking',
-      mood: t.mood || 'Adventure',
-      overview: t.overview || t.shortDescription || '',
-      itinerary: t.itinerary || [],
-      inclusions: t.inclusions || [],
-      exclusions: t.exclusions || [],
-      faqs: t.faqs || [],
-      status: 'published',
-      isActive: true,
-      seo: {
-        seoTitle: `${t.title} | WanderLuxe Expeditions`,
-        metaDescription: t.overview || `Book ${t.title} with WanderLuxe.`,
-        canonicalUrl: `https://wanderluxe.in/trip/${t.slug || t.id}`,
-        indexingDirective: 'index, follow'
-      }
+    if (count > 0 && req.query.force !== 'true') return res.json({ message: `Database already has ${count} trips. Pass ?force=true to reseed.`, count });
+    const rows = staticList.map((trip) => ({
+      ...trip,
+      slug: normalizeSlug(trip.slug || trip.title),
+      status: 'draft',
+      isActive: false,
+      batches: Array.isArray(trip.batches) ? trip.batches : [],
+      nextBatch: trip.nextBatch || ''
     }));
-
-    const created = await Trip.insertMany(normalizedToInsert, { ordered: false });
-    res.status(201).json({ message: `Successfully seeded ${created.length} trip packages into MongoDB.`, count: created.length });
+    const created = await Trip.insertMany(rows, { ordered: false });
+    return res.status(201).json({ message: `Seeded ${created.length} draft trips. Review and publish them from Staff Trips.`, count: created.length });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error seeding trips' });
+    return res.status(500).json({ message: error.message || 'Unable to seed trips.' });
   }
 };

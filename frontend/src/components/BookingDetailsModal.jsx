@@ -147,7 +147,7 @@ export default function BookingDetailsModal({
                     <button
                       onClick={() => {
                         onClose();
-                        navigate(`/admin/quotations/${quotationData._id}`);
+                        navigate(`/staff/sales/quotations/${quotationData._id}`);
                       }}
                       className="px-3 py-1 bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-[11px] font-black flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                     >
