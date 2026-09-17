@@ -78,9 +78,13 @@ const BookingConfirmation = () => {
       }
 
       const orderData = await payRemainingBalanceApi(booking.bookingId);
+      const razorpayKey = orderData.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        throw new Error('Payment gateway is not configured. Please contact support.');
+      }
 
       const options = {
-        key: orderData.key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TPjMsWKDyvGh27',
+        key: razorpayKey,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'WanderLuxe Expeditions',

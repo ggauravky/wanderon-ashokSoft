@@ -1,4 +1,10 @@
 const API_BASE = 'http://localhost:5000/api';
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  throw new Error('TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD are required.');
+}
 
 async function runTest() {
   console.log('--- STARTING ADMIN SYSTEM COMPREHENSIVE TEST ---');
@@ -7,7 +13,7 @@ async function runTest() {
   const loginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'gaurav999@gmail.com', password: 'gaurav@999' })
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
   });
   const loginData = await loginRes.json();
   if (!loginRes.ok) {

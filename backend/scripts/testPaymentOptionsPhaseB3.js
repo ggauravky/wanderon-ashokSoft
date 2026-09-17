@@ -72,7 +72,7 @@ const runTests = async () => {
   // Test 6: In-Memory / Document Lifecycle Simulation: 10% Deposit
   const bookingDoc = {
     bookingId: 'WLX-2026-TESTB3',
-    userId: 'usr_test_b3',
+    userId: '64b000000000000000000021',
     pricing: {
       finalAmount: 40000,
       amountPaid: 0,

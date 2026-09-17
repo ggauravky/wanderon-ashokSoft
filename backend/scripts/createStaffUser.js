@@ -23,8 +23,8 @@ const validateStaffConfig = (config) => {
     throw new Error(`STAFF_ROLE must be one of: ${[...ALLOWED_STAFF_ROLES].join(', ')}`);
   }
 
-  if (config.password.length < 6) {
-    throw new Error('STAFF_PASSWORD must contain at least 6 characters.');
+  if (config.password.length < 8) {
+    throw new Error('STAFF_PASSWORD must contain at least 8 characters.');
   }
 };
 

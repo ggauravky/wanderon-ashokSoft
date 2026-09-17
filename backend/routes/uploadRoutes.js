@@ -11,7 +11,7 @@ import { protect, requireRoles } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 // Protected Upload Endpoints
-const staffUpload = requireRoles('admin', 'sales', 'marketing');
+const staffUpload = requireRoles('super_admin', 'admin', 'sales', 'marketing');
 router.post('/image', protect, staffUpload, uploadSingleImage, uploadImageController);
 router.post('/images', protect, staffUpload, uploadMultipleImages, uploadImageController);
 router.post('/document', protect, staffUpload, uploadSingleDocument, uploadDocumentController);

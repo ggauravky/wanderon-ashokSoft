@@ -15,13 +15,29 @@ const rejectInfluencerApplicationApi = async (...args) => (apiService.rejectInfl
 
 const AuthContext = createContext();
 
-const ENV_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
-const ENV_ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'gaurav@999';
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [influencerApplications, setInfluencerApplications] = useState([]);
+
+  const clearSession = () => {
+    localStorage.removeItem('wanderluxe_token');
+    localStorage.removeItem('wanderluxe_user');
+    setUser(null);
+  };
+
+  const establishSession = async (loginData) => {
+    if (!loginData?.token) throw new Error('Authentication did not return a session token.');
+    localStorage.setItem('wanderluxe_token', loginData.token);
+    try {
+      const currentUser = await getMeApi();
+      setUser(currentUser);
+      return currentUser;
+    } catch (error) {
+      clearSession();
+      throw error;
+    }
+  };
 
   // Load database applications directly from MongoDB
   const fetchInfluencerApplications = async () => {
@@ -46,29 +62,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const loadUserSession = async () => {
       const token = localStorage.getItem('wanderluxe_token');
+      localStorage.removeItem('wanderluxe_user');
       if (token) {
         try {
           const userData = await getMeApi();
-          const clean = userData.email?.toLowerCase();
-          const normalizedRole = (userData.role || 'user').toLowerCase();
-          const isSuperAdmin = normalizedRole === 'super_admin';
-          const isSales = normalizedRole === 'sales';
-          const isAdmin = normalizedRole === 'admin' || clean === ENV_ADMIN_EMAIL;
-          const isInfluencer = normalizedRole === 'influencer' && userData.influencerStatus === 'approved';
-          
-          const effectiveRole = isSuperAdmin ? 'super_admin' : isSales ? 'sales' : isAdmin ? 'admin' : isInfluencer ? 'influencer' : normalizedRole;
-
-          setUser({
-            ...userData,
-            role: effectiveRole,
-            influencerStatus: userData.influencerStatus || 'none',
-            wanderCoins: userData.wanderCoins || 500
-          });
+          setUser(userData);
         } catch (error) {
           console.warn('Session expired or invalid, clearing token');
-          localStorage.removeItem('wanderluxe_token');
-          localStorage.removeItem('wanderluxe_user');
-          setUser(null);
+          clearSession();
         }
       } else {
         setUser(null);
@@ -79,99 +80,52 @@ export const AuthProvider = ({ children }) => {
     loadUserSession();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('wanderluxe_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('wanderluxe_user');
-    }
-  }, [user]);
-
   // Standard User Login (Strict Database Auth)
   const login = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
     const data = await loginApi({ email: cleanEmail, password });
-    if (data.token) {
-      localStorage.setItem('wanderluxe_token', data.token);
-    }
-    const cleanRole = (data.role || 'user').toLowerCase();
-    const isSuperAdmin = cleanRole === 'super_admin';
-    const isSales = cleanRole === 'sales';
-    const isAdmin = cleanRole === 'admin' || cleanEmail === ENV_ADMIN_EMAIL;
-    const isInfluencer = cleanRole === 'influencer' && data.influencerStatus === 'approved';
-    const fullUser = {
-      ...data,
-      role: isSuperAdmin ? 'super_admin' : isSales ? 'sales' : isAdmin ? 'admin' : isInfluencer ? 'influencer' : cleanRole,
-      influencerStatus: data.influencerStatus || 'none',
-      wanderCoins: data.wanderCoins || 500
-    };
-    setUser(fullUser);
-    return { success: true, user: fullUser };
+    const currentUser = await establishSession(data);
+    return { success: true, user: currentUser };
   };
 
   // Canonical Staff Control Center login
   const staffLogin = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
     const data = await loginApi({ email: cleanEmail, password });
-
-    const returnedRole = (data.role || '').toLowerCase();
+    const currentUser = await establishSession(data);
+    const returnedRole = (currentUser.role || '').toLowerCase();
     const allowedStaffRoles = ['super_admin', 'admin', 'sales', 'marketing'];
 
     if (!allowedStaffRoles.includes(returnedRole)) {
+      clearSession();
       throw new Error('This account does not have staff portal access.');
     }
-
-    if (data.token) {
-      localStorage.setItem('wanderluxe_token', data.token);
-    }
-
-    const staffUser = {
-      ...data,
-      role: returnedRole,
-      influencerStatus: data.influencerStatus || 'none',
-      wanderCoins: data.wanderCoins || 500
-    };
-
-    setUser(staffUser);
     return {
       success: true,
-      user: staffUser,
-      role: staffUser.role,
+      user: currentUser,
+      role: returnedRole,
       destination: '/staff'
     };
-  };
-
-  // Backwards-compatible Admin Login delegate
-  const adminLogin = async (email, password) => {
-    return await staffLogin(email, password);
   };
 
   // Dedicated Influencer Login (Strict database approval check)
   const influencerLogin = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
     const data = await influencerLoginApi({ email: cleanEmail, password });
-    if (data.token) {
-      localStorage.setItem('wanderluxe_token', data.token);
+    const currentUser = await establishSession(data);
+    if (currentUser.role !== 'influencer' || currentUser.influencerStatus !== 'approved') {
+      clearSession();
+      throw new Error('This account does not have approved creator access.');
     }
-    const influencerUser = {
-      ...data,
-      role: 'influencer',
-      influencerStatus: 'approved'
-    };
-    setUser(influencerUser);
-    return { success: true, user: influencerUser };
+    return { success: true, user: currentUser };
   };
 
   // Standard User Signup (Saved directly into MongoDB)
   const signup = async (name, email, phone, password) => {
     const cleanEmail = email.toLowerCase().trim();
     const data = await registerApi({ name, email: cleanEmail, phone, password });
-    if (data.token) {
-      localStorage.setItem('wanderluxe_token', data.token);
-    }
-    const fullUser = { ...data, role: data.role || 'user', influencerStatus: data.influencerStatus || 'none', wanderCoins: 500 };
-    setUser(fullUser);
-    return { success: true, user: fullUser };
+    const currentUser = await establishSession(data);
+    return { success: true, user: currentUser };
   };
 
   // Submit Influencer Application for Current Logged-in User
@@ -215,9 +169,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem('wanderluxe_token');
-    localStorage.removeItem('wanderluxe_user');
-    setUser(null);
+    clearSession();
   };
 
   const updateProfile = async (profileData) => {
@@ -265,7 +217,6 @@ export const AuthProvider = ({ children }) => {
         loading,
         login,
         staffLogin,
-        adminLogin,
         influencerLogin,
         signup,
         logout,

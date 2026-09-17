@@ -9,9 +9,14 @@ async function reproduce() {
   console.log('🔄 Connecting to MongoDB to reproduce error...');
   await connectDB();
 
-  // 1. Generate an Admin token exactly as generated when logging in as Admin
-  const adminToken = generateToken('usr_admin', 'admin', 'gaurav999@gmail.com');
-  console.log('Generated adminToken payload id: usr_admin');
+  const adminUserId = process.env.REPRO_ADMIN_USER_ID;
+  if (!adminUserId || !mongoose.Types.ObjectId.isValid(adminUserId)) {
+    throw new Error('REPRO_ADMIN_USER_ID must identify a real MongoDB user.');
+  }
+
+  // 1. Generate the same minimal identity token used by normal login.
+  const adminToken = generateToken(adminUserId);
+  console.log('Generated token for configured database user.');
 
   // 2. Simulate the request that passes through optionalAuth
   const req = {

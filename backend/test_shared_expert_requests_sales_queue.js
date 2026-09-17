@@ -6,6 +6,16 @@ import Lead from './models/Lead.js';
 import { seedSalesUsers } from './scripts/seedSalesUsers.js';
 
 const API_BASE = 'http://127.0.0.1:5000/api';
+const SALES_1_EMAIL = process.env.SALES_1_EMAIL;
+const SALES_1_PASSWORD = process.env.SALES_1_PASSWORD;
+const SALES_2_EMAIL = process.env.SALES_2_EMAIL;
+const SALES_2_PASSWORD = process.env.SALES_2_PASSWORD;
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+
+if (![SALES_1_EMAIL, SALES_1_PASSWORD, SALES_2_EMAIL, SALES_2_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD].every(Boolean)) {
+  throw new Error('Sales and admin test credentials must be supplied through environment variables.');
+}
 
 let passCount = 0;
 let failCount = 0;
@@ -34,9 +44,9 @@ async function runTestSuite() {
   console.log('--- STEP 0: ENSURE SALES USERS ARE SEEDED ---');
   await seedSalesUsers();
 
-  const sales1User = await User.findOne({ email: 'ashoksoftsales1@gmail.com' });
-  const sales2User = await User.findOne({ email: 'ashoksoftsales2@gmail.com' });
-  let adminUser = await User.findOne({ email: 'admin@wanderluxe.com' });
+  const sales1User = await User.findOne({ email: SALES_1_EMAIL });
+  const sales2User = await User.findOne({ email: SALES_2_EMAIL });
+  let adminUser = await User.findOne({ email: ADMIN_EMAIL });
   if (!adminUser) {
     adminUser = await User.findOne({ role: { $in: ['admin', 'super_admin'] } });
   }
@@ -50,7 +60,7 @@ async function runTestSuite() {
   const s1LoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'ashoksoftsales1@gmail.com', password: 'AshokSoftSales1@123' })
+    body: JSON.stringify({ email: SALES_1_EMAIL, password: SALES_1_PASSWORD })
   });
   const s1Auth = await s1LoginRes.json();
   const s1Destination = s1Auth.role === 'sales' ? '/staff/sales' : '/admin';
@@ -64,7 +74,7 @@ async function runTestSuite() {
   const s2LoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'ashoksoftsales2@gmail.com', password: 'AshokSoftSales2@123' })
+    body: JSON.stringify({ email: SALES_2_EMAIL, password: SALES_2_PASSWORD })
   });
   const s2Auth = await s2LoginRes.json();
   const s2Destination = s2Auth.role === 'sales' ? '/staff/sales' : '/admin';
@@ -75,12 +85,10 @@ async function runTestSuite() {
   const s2Token = s2Auth.token;
 
   // 3. Authenticate Admin
-  const adminEmail = process.env.ADMIN_EMAIL || 'gaurav999@gmail.com';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'gaurav@999';
   const adminLoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: adminEmail, password: adminPassword })
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
   });
   const adminAuth = await adminLoginRes.json();
   const adminDestination = adminAuth.role === 'sales' ? '/staff/sales' : '/admin';

@@ -72,12 +72,12 @@ async function runPhase6Tests() {
   console.log('===============================================================\n');
 
   // Test User Identities
-  const superAdminUser = { _id: 'usr_super', name: 'Master Super Admin', email: 'gaurav999@gmail.com', role: 'super_admin' };
-  const operationsUser = { _id: 'usr_ops', name: 'Dev Sharma (Ops)', email: 'ops@wanderluxe.in', role: 'operations' };
-  const salesUser = { _id: 'usr_sales_1', name: 'Aakash Verma (Sales)', email: 'aakash.v@wanderluxe.in', role: 'sales' };
-  const marketingUser = { _id: 'usr_mktg', name: 'Riya Sen (Marketing)', email: 'riya.s@wanderluxe.in', role: 'marketing' };
-  const influencerUser = { _id: 'usr_inf', name: 'Kavita Nomad', email: 'kavita@creator.in', role: 'influencer', influencerStatus: 'approved' };
-  const travelerUser = { _id: 'usr_trav', name: 'Rahul Joshi', email: 'rahul@gmail.com', role: 'user' };
+  const superAdminUser = { _id: '64b000000000000000000001', name: 'Master Super Admin', email: 'super.admin@test.invalid', role: 'super_admin' };
+  const operationsUser = { _id: '64b000000000000000000002', name: 'Dev Sharma (Ops)', email: 'operations@test.invalid', role: 'operations' };
+  const salesUser = { _id: '64b000000000000000000003', name: 'Aakash Verma (Sales)', email: 'sales@test.invalid', role: 'sales' };
+  const marketingUser = { _id: '64b000000000000000000004', name: 'Riya Sen (Marketing)', email: 'marketing@test.invalid', role: 'marketing' };
+  const influencerUser = { _id: '64b000000000000000000005', name: 'Kavita Nomad', email: 'creator@test.invalid', role: 'influencer', influencerStatus: 'approved' };
+  const travelerUser = { _id: '64b000000000000000000006', name: 'Rahul Joshi', email: 'traveler@test.invalid', role: 'user' };
 
   // --------------------------------------------------------------------------
   // TEST GROUP 1: SUPER ADMIN PERMISSIONS (Full Access & Unrestricted Discretion)
@@ -215,7 +215,7 @@ async function runPhase6Tests() {
   // Sales scoping check: Sales specialist queries assigned leads
   const allSampleLeads = [
     { _id: 'l1', name: 'Lead 1', assignedToUser: salesUser._id, assignedTo: salesUser.name },
-    { _id: 'l2', name: 'Lead 2', assignedToUser: 'usr_other_sales', assignedTo: 'Other Sales Person' },
+    { _id: 'l2', name: 'Lead 2', assignedToUser: '64b000000000000000000007', assignedTo: 'Other Sales Person' },
     { _id: 'l3', name: 'Lead 3', assignedTo: 'Sales Concierge Team' } // Unassigned pool
   ];
 
@@ -237,7 +237,7 @@ async function runPhase6Tests() {
   const influencerAccess = testMiddleware(influencerOnly, mockReq(influencerUser));
   assert(influencerAccess.nextCalled, 'Approved Influencer has access to Creator Partner hub');
 
-  const pendingInfluencerUser = { _id: 'usr_inf_pend', role: 'influencer', influencerStatus: 'pending' };
+  const pendingInfluencerUser = { _id: '64b000000000000000000008', role: 'influencer', influencerStatus: 'pending' };
   const pendingInfluencerAccess = testMiddleware(influencerOnly, mockReq(pendingInfluencerUser));
   assert(!pendingInfluencerAccess.nextCalled && pendingInfluencerAccess.statusCode === 403, 'Pending Influencer application is blocked until Admin approval');
 

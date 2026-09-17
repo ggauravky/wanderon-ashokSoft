@@ -3,29 +3,35 @@ import mongoose from 'mongoose';
 import connectDB from '../config/db.js';
 import User from '../models/User.js';
 
-// Configuration: Pull credentials from environment variables, with safe local setup defaults
-const SALES_USERS_CONFIG = [
+const requiredEnvironmentValue = (name) => {
+  const value = String(process.env[name] || '').trim();
+  if (!value) throw new Error(`${name} is required. Prefer npm run staff:create for staff provisioning.`);
+  return value;
+};
+
+// Legacy bulk helper. Credentials are always explicit environment values.
+const getSalesUsersConfig = () => ([
   {
-    name: 'AshokSoft Sales 1',
-    email: (process.env.SALES_1_EMAIL || 'ashoksoftsales1@gmail.com').toLowerCase().trim(),
-    password: process.env.SALES_1_PASSWORD || 'AshokSoftSales1@123',
-    phone: '+91 9876543211',
-    address: 'WanderLuxe Sales Desk, India',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+    name: process.env.SALES_1_NAME || 'Sales Specialist 1',
+    email: requiredEnvironmentValue('SALES_1_EMAIL').toLowerCase(),
+    password: requiredEnvironmentValue('SALES_1_PASSWORD'),
+    phone: process.env.SALES_1_PHONE || '',
+    address: process.env.SALES_1_ADDRESS || '',
+    avatar: '',
     role: 'sales',
     isActive: true
   },
   {
-    name: 'AshokSoft Sales 2',
-    email: (process.env.SALES_2_EMAIL || 'ashoksoftsales2@gmail.com').toLowerCase().trim(),
-    password: process.env.SALES_2_PASSWORD || 'AshokSoftSales2@123',
-    phone: '+91 9876543212',
-    address: 'WanderLuxe Sales Desk, India',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+    name: process.env.SALES_2_NAME || 'Sales Specialist 2',
+    email: requiredEnvironmentValue('SALES_2_EMAIL').toLowerCase(),
+    password: requiredEnvironmentValue('SALES_2_PASSWORD'),
+    phone: process.env.SALES_2_PHONE || '',
+    address: process.env.SALES_2_ADDRESS || '',
+    avatar: '',
     role: 'sales',
     isActive: true
   }
-];
+]);
 
 export const seedSalesUsers = async () => {
   try {
@@ -38,7 +44,7 @@ export const seedSalesUsers = async () => {
 
     const results = [];
 
-    for (const config of SALES_USERS_CONFIG) {
+    for (const config of getSalesUsersConfig()) {
       const normalizedEmail = config.email.toLowerCase().trim();
       const existing = await User.findOne({ email: normalizedEmail });
 

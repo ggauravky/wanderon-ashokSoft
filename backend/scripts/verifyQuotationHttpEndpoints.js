@@ -23,9 +23,14 @@ const testApp = express();
 testApp.use(cors());
 testApp.use(express.json());
 
-const JWT_SECRET = process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+const TEST_ADMIN_USER_ID = process.env.TEST_ADMIN_USER_ID;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
+if (!TEST_ADMIN_USER_ID || !/^[a-f\d]{24}$/i.test(TEST_ADMIN_USER_ID)) {
+  throw new Error('TEST_ADMIN_USER_ID must be a real MongoDB User ObjectId.');
+}
 const adminToken = jwt.sign(
-  { id: 'usr_admin', email: 'gaurav999@gmail.com', role: 'admin' },
+  { userId: TEST_ADMIN_USER_ID },
   JWT_SECRET,
   { expiresIn: '1h' }
 );

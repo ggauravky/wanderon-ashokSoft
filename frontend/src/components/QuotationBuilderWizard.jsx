@@ -61,8 +61,7 @@ export default function QuotationBuilderWizard({
   onQuotationSaved = () => {}
 }) {
   const { user } = useAuth();
-  const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(user?.role) ||
-                         user?.email?.toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+  const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(user?.role);
 
   // Wizard Navigation
   const [currentStep, setCurrentStep] = useState(1);

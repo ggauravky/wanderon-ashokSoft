@@ -5,39 +5,6 @@ import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
-export let memoryFollowUps = [
-  {
-    _id: 'fu_1',
-    leadId: 'lead_1',
-    salesUserId: 'usr_sales_1',
-    salesUserName: 'Gaurav Concierge',
-    title: 'Follow-up regarding Spiti Valley quad sharing and pickup timings',
-    notes: 'Customer inquired about 4-person group pricing and requested an afternoon callback.',
-    scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    callWindow: 'Afternoon',
-    channel: 'call',
-    priority: 'high',
-    status: 'pending',
-    outcomeNotes: '',
-    createdAt: new Date()
-  },
-  {
-    _id: 'fu_2',
-    leadId: 'lead_2',
-    salesUserId: 'usr_sales_1',
-    salesUserName: 'Gaurav Concierge',
-    title: 'Discuss Meghalaya Living Root Bridges custom dates',
-    notes: 'Requested private cab upgrade information.',
-    scheduledAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-    callWindow: 'Evening',
-    channel: 'whatsapp',
-    priority: 'medium',
-    status: 'pending',
-    outcomeNotes: '',
-    createdAt: new Date()
-  }
-];
-
 // @desc    Get follow-ups (RBAC scoped to sales agent or all for admin)
 // @route   GET /api/follow-ups
 // @access  Private (Sales, Operations, Admin)
@@ -71,24 +38,8 @@ export const getFollowUps = async (req, res) => {
       filter.scheduledAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
     }
 
-    let followUps = [];
-    if (isDbConnected()) {
-      try {
-        followUps = await FollowUp.find(filter).populate('leadId', 'name email phone destination tripTitle').sort({ scheduledAt: 1 });
-      } catch (dbErr) {
-        console.warn('FollowUp DB query warning:', dbErr.message);
-      }
-    }
-
-    if (!isDbConnected() && process.env.NODE_ENV !== 'production' && process.env.ALLOW_IN_MEMORY_FALLBACK === 'true') {
-      followUps = memoryFollowUps.filter(f => {
-        if (userRole === 'sales' && userId && String(f.salesUserId) !== String(userId) && String(f.salesUserId) !== 'usr_sales_1') return false;
-        if (status && status !== 'All' && f.status !== status) return false;
-        if (priority && priority !== 'All' && f.priority !== priority) return false;
-        if (leadId && String(f.leadId) !== String(leadId)) return false;
-        return true;
-      });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
+    const followUps = await FollowUp.find(filter).populate('leadId', 'name email phone destination tripTitle').sort({ scheduledAt: 1 });
 
     res.json({
       success: true,
@@ -107,17 +58,8 @@ export const getFollowUps = async (req, res) => {
 export const getFollowUpById = async (req, res) => {
   try {
     const { id } = req.params;
-    let followUp = null;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        followUp = await FollowUp.findById(id).populate('leadId');
-      } catch (e) {}
-    }
-
-    if (!followUp) {
-      followUp = memoryFollowUps.find(f => String(f._id) === String(id));
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
+    const followUp = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findById(id).populate('leadId') : null;
 
     if (!followUp) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
@@ -171,9 +113,11 @@ export const createFollowUp = async (req, res) => {
     const safeLeadId = (leadId && isValidMongoObjectId(leadId))
       ? toObjectIdOrNull(leadId)
       : null;
+    if (!safeLeadId) return res.status(400).json({ success: false, message: 'A valid database lead is required.' });
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
 
     const followUpData = {
-      leadId: safeLeadId || new mongoose.Types.ObjectId('64f000000000000000000002'),
+      leadId: safeLeadId,
       customerId: safeCustomerId,
       salesUserId: assignedSalesId,
       salesUserName: assignedSalesName,
@@ -187,10 +131,7 @@ export const createFollowUp = async (req, res) => {
       createdBy: safeCreatorId
     };
 
-    let newFollowUp = null;
-    if (isDbConnected()) {
-      try {
-        newFollowUp = await FollowUp.create(followUpData);
+    const newFollowUp = await FollowUp.create(followUpData);
         // Sync Lead document
         if (mongoose.Types.ObjectId.isValid(leadId)) {
           const lead = await Lead.findById(leadId);
@@ -200,27 +141,6 @@ export const createFollowUp = async (req, res) => {
             await lead.save();
           }
         }
-      } catch (dbErr) {
-        console.warn('FollowUp DB save warning:', dbErr.message);
-        throw dbErr;
-      }
-    }
-
-    if (!newFollowUp) {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
-        return res.status(503).json({
-          success: false,
-          message: 'Follow-up storage is unavailable while the database is disconnected.'
-        });
-      }
-      newFollowUp = {
-        _id: 'fu_' + Date.now(),
-        ...followUpData,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryFollowUps.unshift(newFollowUp);
-    }
 
     res.status(201).json({
       success: true,
@@ -241,19 +161,8 @@ export const updateFollowUp = async (req, res) => {
     const { id } = req.params;
     const { title, notes, scheduledAt, callWindow, channel, priority, status } = req.body;
 
-    let followUp = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        followUp = await FollowUp.findById(id);
-      } catch (e) {}
-    }
-
-    if (!followUp) {
-      const memIndex = memoryFollowUps.findIndex(f => String(f._id) === String(id));
-      if (memIndex !== -1) {
-        followUp = memoryFollowUps[memIndex];
-      }
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
+    const followUp = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findById(id) : null;
 
     if (!followUp) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
@@ -267,9 +176,7 @@ export const updateFollowUp = async (req, res) => {
     if (priority) followUp.priority = priority;
     if (status) followUp.status = status;
 
-    if (isDbConnected() && typeof followUp.save === 'function') {
-      await followUp.save();
-    }
+    await followUp.save();
 
     res.json({
       success: true,
@@ -289,19 +196,8 @@ export const completeFollowUp = async (req, res) => {
     const { id } = req.params;
     const { outcomeNotes, leadStatusUpdate } = req.body;
 
-    let followUp = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        followUp = await FollowUp.findById(id);
-      } catch (e) {}
-    }
-
-    if (!followUp) {
-      const memIndex = memoryFollowUps.findIndex(f => String(f._id) === String(id));
-      if (memIndex !== -1) {
-        followUp = memoryFollowUps[memIndex];
-      }
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
+    const followUp = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findById(id) : null;
 
     if (!followUp) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
@@ -312,9 +208,7 @@ export const completeFollowUp = async (req, res) => {
     followUp.completedAt = new Date();
     followUp.completedBy = (req.user?._id && isValidMongoObjectId(req.user._id)) ? toObjectIdOrNull(req.user._id) : null;
 
-    if (isDbConnected() && typeof followUp.save === 'function') {
-      await followUp.save();
-    }
+    await followUp.save();
 
     // Optional: update parent lead status if provided
     if (leadStatusUpdate && followUp.leadId && isDbConnected()) {
@@ -340,13 +234,9 @@ export const deleteFollowUp = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        await FollowUp.findByIdAndDelete(id);
-      } catch (e) {}
-    }
-
-    memoryFollowUps = memoryFollowUps.filter(f => String(f._id) !== String(id));
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
+    const deleted = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findByIdAndDelete(id) : null;
+    if (!deleted) return res.status(404).json({ success: false, message: 'Follow-up not found.' });
 
     res.json({
       success: true,

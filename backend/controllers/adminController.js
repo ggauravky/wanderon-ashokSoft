@@ -21,8 +21,7 @@ const requireIdentityDatabase = (res) => {
   return false;
 };
 
-const actorIsSuperAdmin = (req) => req.user?.role === 'super_admin'
-  || req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+const actorIsSuperAdmin = (req) => req.user?.role === 'super_admin';
 
 const actorMongoId = (req) => {
   const value = req.authContext?.source === 'database' ? req.authContext.mongoUserId : null;
@@ -284,7 +283,7 @@ export const createAdminStaffUser = async (req, res) => {
     const role = String(req.body.role || '').trim().toLowerCase();
     const isActive = req.body.isActive !== false;
     if (!name || !email || !password || !role) return res.status(400).json({ success: false, message: 'Name, email, password, and role are required.' });
-    if (password.length < 6) return res.status(400).json({ success: false, message: 'Password must contain at least 6 characters.' });
+    if (password.length < 8) return res.status(400).json({ success: false, message: 'Password must contain at least 8 characters.' });
     const allowedRoles = actorIsSuperAdmin(req) ? [...CREATABLE_STAFF_ROLES, 'super_admin'] : CREATABLE_STAFF_ROLES;
     if (!allowedRoles.includes(role)) return res.status(403).json({ success: false, message: 'You are not authorized to create that staff role.' });
     if (await User.exists({ email })) return res.status(409).json({ success: false, message: 'A user with this email already exists.' });

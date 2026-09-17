@@ -20,11 +20,20 @@ import followUpRoutes from './routes/followUpRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
+import { getAllowedOrigins, validateRuntimeConfig } from './config/environment.js';
 
-// Connect to MongoDB Atlas
-connectDB();
+try {
+  validateRuntimeConfig();
+  await connectDB();
+} catch (error) {
+  console.error(`Startup validation failed: ${error.message}`);
+  process.exit(1);
+}
 
 const app = express();
+app.set('trust proxy', 1);
+const allowedOrigins = getAllowedOrigins();
+const allowVercelPreviews = process.env.ALLOW_VERCEL_PREVIEWS === 'true';
 
 // Dynamic CORS Middleware: Supports Localhost, Vercel Production/Preview, and Custom Domains
 app.use(cors({
@@ -35,16 +44,14 @@ app.use(cors({
     if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
-    // Allow any Vercel deployment (*.vercel.app)
-    if (/^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin) || origin.endsWith('.vercel.app')) {
+    if (allowVercelPreviews && /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
-    // Allow configured production frontend URLs
-    if (origin === process.env.FRONTEND_URL || origin === process.env.CLIENT_URL) {
+    if (allowedOrigins.has(origin)) {
       return callback(null, true);
     }
 
-    return callback(null, true); // Permissive fallback to prevent CORS blocks
+    return callback(new Error('Origin is not allowed by CORS policy.'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -52,6 +59,11 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // Dedicated Production Health Check Endpoints (For Render / Monitoring)
 app.get('/health', (req, res) => {
@@ -108,6 +120,9 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
+  if (err.message === 'Origin is not allowed by CORS policy.') {
+    return res.status(403).json({ message: err.message });
+  }
   console.error('Unhandled Server Error:', err.stack);
   res.status(500).json({
     message: err.message || 'Internal Server Error'

@@ -29,7 +29,7 @@ const RoleProtectedRoute = ({ allowedRoles = ['admin', 'super_admin'], children 
   }
 
   const userRole = (user.role || 'user').toLowerCase();
-  const isAllowed = userRole === 'super_admin' || allowedRoles.map(r => r.toLowerCase()).includes(userRole);
+  const isAllowed = allowedRoles.map(r => r.toLowerCase()).includes(userRole);
 
   // 2. Role is Allowed -> Render Protected Screen
   if (isAllowed) {

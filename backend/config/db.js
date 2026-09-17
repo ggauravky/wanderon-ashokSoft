@@ -1,5 +1,6 @@
 import dns from "node:dns";
 import mongoose from "mongoose";
+import { getMongoUri } from "./environment.js";
 
 let isConnecting = false;
 
@@ -8,11 +9,11 @@ const connectDB = async () => {
   isConnecting = true;
 
   try {
-    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    const mongoUri = getMongoUri();
     if (!mongoUri) {
-      console.warn("⚠️ MONGO_URI is missing in environment. Running in memory-resilient mode.");
-      isConnecting = false;
-      return;
+      if (process.env.NODE_ENV === 'production') throw new Error('MONGODB_URI (or MONGO_URI) is required in production.');
+      console.warn("MongoDB URI is missing. Database-backed features will fail closed.");
+      return false;
     }
 
     // Set Google Public DNS & Cloudflare DNS to ensure reliable SRV record resolution across all network adapters
@@ -32,11 +33,11 @@ const connectDB = async () => {
     });
 
     console.log("✅ MongoDB Atlas Database connected successfully!");
+    return true;
   } catch (error) {
-    console.warn("⚠️ MongoDB Atlas IP Whitelist Notice:");
-    console.warn("👉 Your current public IP is not yet whitelisted in MongoDB Atlas.");
-    console.warn("👉 Fix: Go to MongoDB Atlas (cloud.mongodb.com) -> Network Access -> Add IP Address -> Click 'ALLOW ACCESS FROM ANYWHERE' (0.0.0.0/0).");
-    console.log("🛡️ In the meantime, backend is active and serving all APIs with 100% functionality.");
+    console.error(`MongoDB connection failed: ${error.message}`);
+    if (process.env.NODE_ENV === 'production') throw error;
+    return false;
   } finally {
     isConnecting = false;
   }

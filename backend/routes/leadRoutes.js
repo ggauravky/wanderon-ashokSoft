@@ -20,8 +20,8 @@ router.post('/', optionalAuth, createLead);
 router.get('/sales-users', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), getSalesUsers);
 
 // Authenticated Lead Management with RBAC Scoping
-router.get('/', protect, requireRoles('super_admin', 'admin', 'operations', 'sales', 'marketing'), getLeads);
-router.get('/:id', protect, requireRoles('super_admin', 'admin', 'operations', 'sales', 'marketing'), getLeadById);
+router.get('/', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), getLeads);
+router.get('/:id', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), getLeadById);
 
 // Lead Actions
 router.post('/:id/claim', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), claimLead);

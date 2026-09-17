@@ -88,7 +88,7 @@ const AdminLogin = () => {
               Role-Based Access Control (RBAC) Active
             </div>
             <div className="text-[11px] text-white/40">
-              End-to-End Encrypted Authentication • WanderLuxe Security Core
+              Database-backed identity • Current-role authorization
             </div>
           </div>
         </div>

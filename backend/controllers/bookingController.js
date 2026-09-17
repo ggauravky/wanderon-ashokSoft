@@ -13,9 +13,6 @@ import { validateCouponForAmount } from '../services/couponService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
-// In-Memory Bookings Store Fallback
-const memoryBookings = [];
-
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
 const recordCouponRedemption = async (booking) => {
@@ -41,8 +38,7 @@ const recordCouponRedemption = async (booking) => {
 
 const getBookingRole = (user) => String(user?.role || 'user').toLowerCase();
 const isBroadBookingStaff = (user) => (
-  ['super_admin', 'admin', 'operations'].includes(getBookingRole(user)) ||
-  user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase()
+  ['super_admin', 'admin', 'operations'].includes(getBookingRole(user))
 );
 
 const getSalesQuotationScope = (user) => {
@@ -85,10 +81,19 @@ const findBookableTrip = async (tripId) => {
 };
 
 const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_wanderluxe2026key';
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'wanderluxe_rzp_secret_key_2026';
-
+  const key_id = String(process.env.RAZORPAY_KEY_ID || '').trim();
+  const key_secret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+  if (!key_id || !key_secret) throw Object.assign(new Error('Payment provider is not configured.'), { status: 503 });
   return new Razorpay({ key_id, key_secret });
+};
+
+const hasValidRazorpaySignature = (orderId, paymentId, signature) => {
+  const secret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+  if (!secret) throw Object.assign(new Error('Payment verification is unavailable.'), { status: 503 });
+  if (!signature) return false;
+  const expected = crypto.createHmac('sha256', secret).update(`${orderId}|${paymentId}`).digest();
+  const received = Buffer.from(String(signature), 'hex');
+  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
 };
 
 // Helper: Parse batch departure date accurately
@@ -300,6 +305,7 @@ export const createBookingOrder = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ message: 'Authentication required to create a booking.' });
     }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking storage is temporarily unavailable.' });
 
     const {
       tripId,
@@ -417,13 +423,9 @@ export const createBookingOrder = async (req, res) => {
 
     const bookingId = 'WLX-2026-' + crypto.randomBytes(4).toString('hex').toUpperCase();
     const verificationToken = crypto.randomBytes(16).toString('hex');
-    const orderId = 'order_' + crypto.randomBytes(8).toString('hex');
-
     // Create Razorpay Order strictly with server-calculated amount
-    let rzpOrder = null;
-    try {
-      const rzp = getRazorpayInstance();
-      rzpOrder = await rzp.orders.create({
+    const rzp = getRazorpayInstance();
+    const rzpOrder = await rzp.orders.create({
         amount: amountToCharge * 100,
         currency: 'INR',
         receipt: bookingId,
@@ -435,21 +437,9 @@ export const createBookingOrder = async (req, res) => {
           depositPercent: planType === 'PARTIAL' ? depositPercent : 100
         }
       });
-    } catch (rzpErr) {
-      console.warn('Razorpay SDK sandbox mode fallback:', rzpErr.message);
-      rzpOrder = { id: orderId, amount: amountToCharge * 100, currency: 'INR' };
-    }
 
-    let safeUserId = (userId && isValidMongoObjectId(userId)) ? toObjectIdOrNull(userId) : null;
-    if (!safeUserId && req.user?.email && isDbConnected()) {
-      try {
-        const foundUser = await User.findOne({ email: req.user.email.toLowerCase().trim() });
-        if (foundUser) safeUserId = foundUser._id;
-      } catch (e) {}
-    }
-    if (!safeUserId) {
-      safeUserId = new mongoose.Types.ObjectId('64f000000000000000000001');
-    }
+    const safeUserId = isValidMongoObjectId(userId) ? toObjectIdOrNull(userId) : null;
+    if (!safeUserId) return res.status(401).json({ message: 'A valid database user is required to create a booking.' });
 
     const bookingData = {
       bookingId,
@@ -515,17 +505,15 @@ export const createBookingOrder = async (req, res) => {
     };
 
     let booking = null;
-    if (isDbConnected()) {
-      try {
-        // Pending booking deduplication (update active draft instead of creating duplicates)
-        const existingPending = await Booking.findOne({
+    // Pending booking deduplication (update active draft instead of creating duplicates)
+    const existingPending = await Booking.findOne({
           userId,
           tripId: String(tripId),
           bookingStatus: { $in: ['DRAFT', 'PENDING_PAYMENT'] },
           createdAt: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
         });
 
-        if (existingPending) {
+    if (existingPending) {
           existingPending.batchId = bookingData.batchId;
           existingPending.tripSnapshot = bookingData.tripSnapshot;
           existingPending.customer = bookingData.customer;
@@ -537,18 +525,9 @@ export const createBookingOrder = async (req, res) => {
           existingPending.payment.razorpayOrderId = rzpOrder.id;
           existingPending.influencerAttribution = bookingData.influencerAttribution;
           existingPending.couponRedemption = bookingData.couponRedemption;
-          booking = await existingPending.save();
-        } else {
-          booking = await Booking.create(bookingData);
-        }
-      } catch (dbErr) {
-        console.warn('Booking DB save fallback:', dbErr.message);
-      }
-    }
-
-    if (!booking) {
-      booking = { ...bookingData, _id: 'bk_' + Date.now(), createdAt: new Date() };
-      memoryBookings.unshift(booking);
+      booking = await existingPending.save();
+    } else {
+      booking = await Booking.create(bookingData);
     }
 
     res.status(201).json({
@@ -561,7 +540,7 @@ export const createBookingOrder = async (req, res) => {
       balanceDueDate,
       paymentPlan: booking.paymentPlan,
       currency: rzpOrder.currency || 'INR',
-      key: process.env.RAZORPAY_KEY_ID || 'rzp_test_wanderluxe2026key',
+      key: process.env.RAZORPAY_KEY_ID,
       customer: booking.customer,
       pricing: booking.pricing,
       tripSnapshot: booking.tripSnapshot
@@ -584,49 +563,39 @@ export const verifyBookingPayment = async (req, res) => {
 
     const { bookingId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    if (!bookingId || !razorpay_order_id || !razorpay_payment_id) {
+    if (!bookingId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ message: 'Missing required payment verification parameters.' });
     }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Payment verification is temporarily unavailable.' });
 
     // CRITICAL: Verify Razorpay HMAC-SHA256 signature to prevent fake payment confirmation
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (razorpaySecret && razorpay_signature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', razorpaySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      if (expectedSignature !== razorpay_signature) {
+    if (!hasValidRazorpaySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
         console.error('Razorpay signature mismatch — potential tampered payment attempt', {
           bookingId,
           razorpay_order_id,
           razorpay_payment_id
         });
         return res.status(400).json({ message: 'Payment signature verification failed. Contact support.' });
-      }
-    } else if (!razorpaySecret) {
-      // Test/sandbox mode — log warning but do not block
-      console.warn('RAZORPAY_KEY_SECRET not set — skipping HMAC verification (sandbox mode only)');
     }
 
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.bookingId === bookingId);
-    }
+    const booking = await Booking.findOne({ bookingId });
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking record not found.' });
     }
 
     // Ensure booking belongs to authenticated user (unless admin)
-    if (req.user?.role !== 'admin' && String(booking.userId) !== String(userId)) {
+    if (!isBroadBookingStaff(req.user) && String(booking.userId) !== String(userId)) {
       return res.status(403).json({ message: 'Not authorized to verify this booking.' });
+    }
+    if (String(booking.payment?.razorpayOrderId || '') !== String(razorpay_order_id)) {
+      return res.status(400).json({ message: 'Payment order does not match this booking.' });
+    }
+    if (booking.payment?.razorpayPaymentId) {
+      if (booking.payment.razorpayPaymentId === razorpay_payment_id) {
+        return res.json({ success: true, message: 'Payment was already verified.', booking });
+      }
+      return res.status(409).json({ message: 'This booking already has a different verified payment.' });
     }
 
     const isPartial = booking.paymentPlan?.type === 'PARTIAL';
@@ -645,7 +614,7 @@ export const verifyBookingPayment = async (req, res) => {
       booking.bookingStatus = 'PROVISIONALLY_CONFIRMED';
       booking.payment.status = 'PAID';
       booking.payment.razorpayPaymentId = razorpay_payment_id;
-      booking.payment.razorpaySignature = razorpay_signature || 'verified_test_sig';
+      booking.payment.razorpaySignature = razorpay_signature;
       booking.payment.paidAt = new Date();
 
       if (!Array.isArray(booking.payments)) booking.payments = [];
@@ -656,7 +625,7 @@ export const verifyBookingPayment = async (req, res) => {
         amount: depositPaid,
         type: 'DEPOSIT',
         verifiedAt: new Date(),
-        signature: razorpay_signature || 'verified_test_sig'
+        signature: razorpay_signature
       });
 
       // No official Boarding QR unlocked for partial payment
@@ -669,7 +638,7 @@ export const verifyBookingPayment = async (req, res) => {
       booking.bookingStatus = 'CONFIRMED';
       booking.payment.status = 'PAID';
       booking.payment.razorpayPaymentId = razorpay_payment_id;
-      booking.payment.razorpaySignature = razorpay_signature || 'verified_test_sig';
+      booking.payment.razorpaySignature = razorpay_signature;
       booking.payment.paidAt = new Date();
 
       if (!Array.isArray(booking.payments)) booking.payments = [];
@@ -680,7 +649,7 @@ export const verifyBookingPayment = async (req, res) => {
         amount: finalAmount,
         type: 'FULL',
         verifiedAt: new Date(),
-        signature: razorpay_signature || 'verified_test_sig'
+        signature: razorpay_signature
       });
 
       // Generate Official Boarding Pass QR Code
@@ -749,10 +718,8 @@ export const verifyBookingPayment = async (req, res) => {
       console.warn('Trip batch seat update warning:', seatErr.message);
     }
 
-    if (isDbConnected() && typeof booking.save === 'function') {
-      await booking.save();
-      await recordCouponRedemption(booking);
-    }
+    await booking.save();
+    await recordCouponRedemption(booking);
 
     res.json({
       success: true,
@@ -763,7 +730,7 @@ export const verifyBookingPayment = async (req, res) => {
     });
   } catch (error) {
     console.error('Verify Payment Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error verifying payment' });
+    res.status(error.status || 500).json({ message: error.message || 'Server Error verifying payment' });
   }
 };
 
@@ -869,21 +836,12 @@ export const payRemainingBalance = async (req, res) => {
   try {
     const userId = req.user?._id;
     const { bookingId } = req.params;
-
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-    if (!booking) {
-      booking = memoryBookings.find(b => b.bookingId === bookingId);
-    }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Payment service is temporarily unavailable.' });
+    const booking = await Booking.findOne({ bookingId });
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
     }
-
-    if (booking.userId && String(booking.userId) !== String(userId) && req.user?.role !== 'admin') {
+    if (booking.userId && String(booking.userId) !== String(userId) && !isBroadBookingStaff(req.user)) {
       return res.status(403).json({ message: 'Not authorized to pay for this booking.' });
     }
 
@@ -900,11 +858,8 @@ export const payRemainingBalance = async (req, res) => {
       return res.status(400).json({ message: 'Booking is already fully paid. No outstanding balance due.' });
     }
 
-    const balanceOrderId = 'order_bal_' + crypto.randomBytes(8).toString('hex');
-    let rzpOrder = null;
-    try {
-      const rzp = getRazorpayInstance();
-      rzpOrder = await rzp.orders.create({
+    const rzp = getRazorpayInstance();
+    const rzpOrder = await rzp.orders.create({
         amount: outstanding * 100,
         currency: 'INR',
         receipt: `${booking.bookingId}_BAL`,
@@ -914,10 +869,8 @@ export const payRemainingBalance = async (req, res) => {
           userId: userId.toString()
         }
       });
-    } catch (rzpErr) {
-      console.warn('Razorpay SDK balance order fallback:', rzpErr.message);
-      rzpOrder = { id: balanceOrderId, amount: outstanding * 100, currency: 'INR' };
-    }
+    booking.payment.pendingBalanceOrderId = rzpOrder.id;
+    await booking.save();
 
     res.json({
       success: true,
@@ -926,13 +879,13 @@ export const payRemainingBalance = async (req, res) => {
       amount: rzpOrder.amount,
       outstandingAmount: outstanding,
       currency: rzpOrder.currency || 'INR',
-      key: process.env.RAZORPAY_KEY_ID || 'rzp_test_wanderluxe2026key',
+      key: process.env.RAZORPAY_KEY_ID,
       tripTitle: booking.tripSnapshot?.title,
       batchDate: booking.tripSnapshot?.batchDate
     });
   } catch (error) {
     console.error('Pay Remaining Balance Error:', error);
-    res.status(500).json({ message: error.message || 'Error initializing balance payment order' });
+    res.status(error.status || 500).json({ message: error.message || 'Error initializing balance payment order' });
   }
 };
 
@@ -945,40 +898,37 @@ export const verifyRemainingBalance = async (req, res) => {
     const { bookingId } = req.params;
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id) {
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ message: 'Missing payment verification parameters.' });
     }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Payment verification is temporarily unavailable.' });
 
     // CRITICAL: Verify Razorpay HMAC-SHA256 signature for balance payment
-    const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (razorpaySecret && razorpay_signature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', razorpaySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      if (expectedSignature !== razorpay_signature) {
+    if (!hasValidRazorpaySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)) {
         console.error('Razorpay balance signature mismatch — potential tampered payment attempt', {
           bookingId,
           razorpay_order_id
         });
         return res.status(400).json({ message: 'Balance payment signature verification failed. Contact support.' });
-      }
-    } else if (!razorpaySecret) {
-      console.warn('RAZORPAY_KEY_SECRET not set — skipping balance HMAC verification (sandbox mode only)');
     }
 
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-    if (!booking) {
-      booking = memoryBookings.find(b => b.bookingId === bookingId);
-    }
+    const booking = await Booking.findOne({ bookingId });
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
+    }
+
+    if (!isBroadBookingStaff(req.user) && String(booking.userId) !== String(userId)) {
+      return res.status(403).json({ message: 'Not authorized to verify this booking payment.' });
+    }
+    if (String(booking.payment?.pendingBalanceOrderId || '') !== String(razorpay_order_id)) {
+      return res.status(400).json({ message: 'Balance payment order does not match this booking.' });
+    }
+    const existingBalancePayment = (booking.payments || []).find((payment) => payment.type === 'BALANCE');
+    if (existingBalancePayment) {
+      if (existingBalancePayment.paymentId === razorpay_payment_id) {
+        return res.json({ success: true, message: 'Balance payment was already verified.', booking });
+      }
+      return res.status(409).json({ message: 'This booking already has a verified balance payment.' });
     }
 
     const finalAmount = Number(booking.pricing?.finalAmount);
@@ -992,6 +942,7 @@ export const verifyRemainingBalance = async (req, res) => {
     booking.paymentStatus = 'PAID';
     booking.bookingStatus = 'CONFIRMED';
     booking.payment.status = 'PAID';
+    booking.payment.pendingBalanceOrderId = '';
     booking.payment.paidAt = new Date();
 
     if (!Array.isArray(booking.payments)) booking.payments = [];
@@ -1002,7 +953,7 @@ export const verifyRemainingBalance = async (req, res) => {
       amount: outstandingPaid,
       type: 'BALANCE',
       verifiedAt: new Date(),
-      signature: razorpay_signature || 'verified_test_sig'
+      signature: razorpay_signature
     });
 
     // Generate Final Scannable QR Code
@@ -1030,10 +981,8 @@ export const verifyRemainingBalance = async (req, res) => {
       await sendWhatsAppTicketAndReceipt(booking);
     } catch (waErr) {}
 
-    if (isDbConnected() && typeof booking.save === 'function') {
-      await booking.save();
-      await recordCouponRedemption(booking);
-    }
+    await booking.save();
+    await recordCouponRedemption(booking);
 
     res.json({
       success: true,
@@ -1042,7 +991,7 @@ export const verifyRemainingBalance = async (req, res) => {
     });
   } catch (error) {
     console.error('Verify Balance Payment Error:', error);
-    res.status(500).json({ message: error.message || 'Error verifying balance payment' });
+    res.status(error.status || 500).json({ message: error.message || 'Error verifying balance payment' });
   }
 };
 
@@ -1056,16 +1005,8 @@ export const getMyBookings = async (req, res) => {
       return res.status(401).json({ message: 'Authentication required.' });
     }
 
-    let bookings = [];
-    if (isDbConnected()) {
-      try {
-        bookings = await Booking.find({ userId }).sort({ createdAt: -1 });
-      } catch (e) {}
-    }
-
-    if (bookings.length === 0) {
-      bookings = memoryBookings.filter((b) => String(b.userId) === String(userId));
-    }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking history is temporarily unavailable.' });
+    const bookings = await Booking.find({ userId }).sort({ createdAt: -1 });
 
     res.json(bookings);
   } catch (error) {
@@ -1151,23 +1092,15 @@ export const getBookingById = async (req, res) => {
   try {
     const { bookingId } = req.params;
 
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        const lookup = mongoose.Types.ObjectId.isValid(bookingId)
-          ? { $or: [{ _id: bookingId }, { bookingId }] }
-          : { bookingId };
-        booking = await Booking.findOne(lookup)
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking data is temporarily unavailable.' });
+    const lookup = mongoose.Types.ObjectId.isValid(bookingId)
+      ? { $or: [{ _id: bookingId }, { bookingId }] }
+      : { bookingId };
+    const booking = await Booking.findOne(lookup)
           .populate('sourceQuotationId', 'quotationNumber status bookingCode leadId assignedTo createdBy')
           .populate('leadId', 'referenceId name email phone status')
           .populate('createdBy', 'name email')
           .populate('updatedBy', 'name email');
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.bookingId === bookingId);
-    }
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
@@ -1190,16 +1123,8 @@ export const verifyBookingToken = async (req, res) => {
   try {
     const { token } = req.params;
 
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ 'qrCode.verificationToken': token });
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.qrCode?.verificationToken === token);
-    }
+    if (!isDbConnected()) return res.status(503).json({ valid: false, message: 'Booking verification is temporarily unavailable.' });
+    const booking = await Booking.findOne({ 'qrCode.verificationToken': token });
 
     if (!booking) {
       return res.status(404).json({ valid: false, message: 'Invalid QR verification token. No booking found.' });

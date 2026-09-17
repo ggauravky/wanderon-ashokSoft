@@ -153,9 +153,10 @@ const Signup = () => {
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type={showPassword ? 'text' : 'password'}
+                  minLength={8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   className="w-full pl-11 pr-12 py-3 bg-brand-light border border-gray-200 rounded-2xl focus:outline-none focus:border-brand-emerald text-brand-navy text-sm font-medium"
                   required
                 />

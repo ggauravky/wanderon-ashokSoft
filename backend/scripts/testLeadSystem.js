@@ -3,6 +3,12 @@
  */
 
 const API_BASE = 'http://localhost:5000/api';
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  throw new Error('TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD are required.');
+}
 
 async function runTests() {
   console.log('--- STARTING LEAD & SCHEDULE CALL SYSTEM AUTOMATED TESTS ---\n');
@@ -13,8 +19,8 @@ async function runTests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: 'gaurav999@gmail.com',
-      password: process.env.ADMIN_PASSWORD || 'gaurav@999'
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD
     })
   });
 

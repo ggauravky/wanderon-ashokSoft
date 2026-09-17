@@ -74,11 +74,11 @@ async function runMasterQASuite() {
   console.log('======================================================================\n');
 
   // Identities
-  const superAdminUser = { _id: 'usr_super_admin', name: 'Master Admin', email: 'gaurav999@gmail.com', role: 'super_admin' };
-  const opsUser = { _id: 'usr_ops_lead', name: 'Operations Team Lead', email: 'ops@wanderluxe.in', role: 'operations' };
-  const salesRepUser = { _id: 'usr_sales_rep_1', name: 'Rohan Deshmukh (Sales)', email: 'rohan.d@wanderluxe.in', role: 'sales' };
-  const mktgUser = { _id: 'usr_mktg_lead', name: 'Marketing Specialist', email: 'marketing@wanderluxe.in', role: 'marketing' };
-  const influencerUser = { _id: 'usr_creator', name: 'Shreya Nomad', email: 'shreya@wanderluxe.in', role: 'influencer', influencerStatus: 'approved' };
+  const superAdminUser = { _id: '64b000000000000000000011', name: 'Master Admin', email: 'super.admin@test.invalid', role: 'super_admin' };
+  const opsUser = { _id: '64b000000000000000000012', name: 'Operations Team Lead', email: 'operations@test.invalid', role: 'operations' };
+  const salesRepUser = { _id: '64b000000000000000000013', name: 'Rohan Deshmukh (Sales)', email: 'sales@test.invalid', role: 'sales' };
+  const mktgUser = { _id: '64b000000000000000000014', name: 'Marketing Specialist', email: 'marketing@test.invalid', role: 'marketing' };
+  const influencerUser = { _id: '64b000000000000000000015', name: 'Shreya Nomad', email: 'creator@test.invalid', role: 'influencer', influencerStatus: 'approved' };
 
   // ==========================================================================
   // JOURNEY 1 — WEBSITE LEAD CAPTURE TO SALES ASSIGNMENT

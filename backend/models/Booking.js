@@ -83,6 +83,7 @@ const bookingSchema = new mongoose.Schema(
         default: 'PENDING'
       },
       razorpayOrderId: { type: String, index: true },
+      pendingBalanceOrderId: { type: String, default: '' },
       razorpayPaymentId: { type: String, index: true },
       razorpaySignature: { type: String },
       paidAt: { type: Date }

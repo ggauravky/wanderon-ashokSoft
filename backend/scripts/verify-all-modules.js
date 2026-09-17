@@ -28,18 +28,25 @@ app.use('/api/marketing', marketingRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/bookings', bookingRoutes);
 
-const JWT_SECRET = process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET is required.');
 
 const generateToken = (payload) => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' });
 };
 
-// Tokens for various roles
-const superAdminToken = generateToken({ id: 'usr_super', name: 'Super Admin', email: 'admin@wanderluxe.in', role: 'super_admin' });
-const operationsToken = generateToken({ id: 'usr_ops', name: 'Ops Manager', email: 'ops@wanderluxe.in', role: 'operations' });
-const salesToken = generateToken({ id: 'usr_sales_1', name: 'Sales Agent', email: 'sales@wanderluxe.in', role: 'sales' });
-const marketingToken = generateToken({ id: 'usr_mkt', name: 'Marketing Lead', email: 'mkt@wanderluxe.in', role: 'marketing' });
-const userToken = generateToken({ id: 'usr_cust', name: 'Regular Traveler', email: 'traveler@gmail.com', role: 'user' });
+const requiredUserId = (name) => {
+  const value = process.env[name];
+  if (!value || !/^[a-f\d]{24}$/i.test(value)) throw new Error(`${name} must be a real MongoDB User ObjectId.`);
+  return value;
+};
+
+// Authorization still resolves each current database user; role claims are intentionally absent.
+const superAdminToken = generateToken({ userId: requiredUserId('TEST_SUPER_ADMIN_USER_ID') });
+const operationsToken = generateToken({ userId: requiredUserId('TEST_OPERATIONS_USER_ID') });
+const salesToken = generateToken({ userId: requiredUserId('TEST_SALES_USER_ID') });
+const marketingToken = generateToken({ userId: requiredUserId('TEST_MARKETING_USER_ID') });
+const userToken = generateToken({ userId: requiredUserId('TEST_CUSTOMER_USER_ID') });
 
 let passed = 0;
 let failed = 0;

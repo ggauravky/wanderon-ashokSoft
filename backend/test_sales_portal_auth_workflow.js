@@ -6,6 +6,16 @@ import Lead from './models/Lead.js';
 import { seedSalesUsers } from './scripts/seedSalesUsers.js';
 
 const API_BASE = 'http://localhost:5000/api';
+const SALES_1_EMAIL = process.env.SALES_1_EMAIL;
+const SALES_1_PASSWORD = process.env.SALES_1_PASSWORD;
+const SALES_2_EMAIL = process.env.SALES_2_EMAIL;
+const SALES_2_PASSWORD = process.env.SALES_2_PASSWORD;
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD;
+
+if (![SALES_1_EMAIL, SALES_1_PASSWORD, SALES_2_EMAIL, SALES_2_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD].every(Boolean)) {
+  throw new Error('Sales and admin test credentials must be supplied through environment variables.');
+}
 
 // Test runner helper
 let passCount = 0;
@@ -46,8 +56,8 @@ async function runTestSuite() {
     'Seed script is idempotent (reports already_exists on re-run without duplication)'
   );
 
-  const sales1Doc = await User.findOne({ email: 'ashoksoftsales1@gmail.com' });
-  const sales2Doc = await User.findOne({ email: 'ashoksoftsales2@gmail.com' });
+  const sales1Doc = await User.findOne({ email: SALES_1_EMAIL });
+  const sales2Doc = await User.findOne({ email: SALES_2_EMAIL });
 
   assert(!!sales1Doc, 'Sales 1 Mongo user exists');
   assert(!!sales2Doc, 'Sales 2 Mongo user exists');
@@ -61,10 +71,10 @@ async function runTestSuite() {
   assert(sales1Doc?.password?.startsWith('$2'), 'Sales 1 password is saved as bcrypt hash');
   assert(sales2Doc?.password?.startsWith('$2'), 'Sales 2 password is saved as bcrypt hash');
 
-  const s1PwMatch = await sales1Doc?.matchPassword('AshokSoftSales1@123');
-  const s2PwMatch = await sales2Doc?.matchPassword('AshokSoftSales2@123');
-  assert(s1PwMatch === true, 'Sales 1 password matches AshokSoftSales1@123');
-  assert(s2PwMatch === true, 'Sales 2 password matches AshokSoftSales2@123');
+  const s1PwMatch = await sales1Doc?.matchPassword(SALES_1_PASSWORD);
+  const s2PwMatch = await sales2Doc?.matchPassword(SALES_2_PASSWORD);
+  assert(s1PwMatch === true, 'Sales 1 password matches configured test credential');
+  assert(s2PwMatch === true, 'Sales 2 password matches configured test credential');
 
   // ---------------------------------------------------------------------------
   // 2. AUTHENTICATION & LOGIN WORKFLOW
@@ -75,7 +85,7 @@ async function runTestSuite() {
   const s1LoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'ashoksoftsales1@gmail.com', password: 'AshokSoftSales1@123' })
+    body: JSON.stringify({ email: SALES_1_EMAIL, password: SALES_1_PASSWORD })
   });
   const s1Data = await s1LoginRes.json();
   assert(s1LoginRes.status === 200, 'Sales 1 login returns 200 OK');
@@ -87,7 +97,7 @@ async function runTestSuite() {
   const s2LoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'ashoksoftsales2@gmail.com', password: 'AshokSoftSales2@123' })
+    body: JSON.stringify({ email: SALES_2_EMAIL, password: SALES_2_PASSWORD })
   });
   const s2Data = await s2LoginRes.json();
   assert(s2LoginRes.status === 200, 'Sales 2 login returns 200 OK');
@@ -99,7 +109,7 @@ async function runTestSuite() {
   const wrongPwRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'ashoksoftsales1@gmail.com', password: 'WrongPassword@999' })
+    body: JSON.stringify({ email: SALES_1_EMAIL, password: 'WrongPassword@999' })
   });
   assert(wrongPwRes.status === 401, 'Wrong password blocked with 401 Unauthorized');
 
@@ -152,7 +162,7 @@ async function runTestSuite() {
   const adminLoginRes = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'gaurav999@gmail.com', password: 'gaurav@999' })
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
   });
   const adminData = await adminLoginRes.json();
   const adminToken = adminData.token;

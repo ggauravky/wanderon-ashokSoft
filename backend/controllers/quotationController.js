@@ -151,8 +151,7 @@ export const sanitizeForCustomer = (quotation) => {
 // ============================================================================
 export const validateCommercialConcessions = (user, pricing = {}) => {
   const userRole = (user?.role || 'sales').toLowerCase();
-  const isAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
-                  user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+  const isAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
   if (isAdmin) return null; // Admins & Operations are unrestricted
 
@@ -410,8 +409,7 @@ export const getQuotations = async (req, res) => {
     // Role-based filtering: Sales users only see quotations assigned to them, created by them, or unassigned
     const userRole = (req.user?.role || 'admin').toLowerCase();
     const userId = req.user?._id || req.user?.id;
-    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
-                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
     if (userRole === 'sales' && !isSuperOrAdmin) {
       andConditions.push({
@@ -525,8 +523,7 @@ export const getQuotations = async (req, res) => {
 export const isUserAuthorizedForQuotation = (user, quotation) => {
   if (!user) return false;
   const userRole = (user.role || 'admin').toLowerCase();
-  const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
-                         user.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+  const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
   if (isSuperOrAdmin) return true;
 
   if (userRole === 'sales') {
@@ -538,11 +535,6 @@ export const isUserAuthorizedForQuotation = (user, quotation) => {
       return true;
     }
     return false;
-  }
-
-  // Marketing has read-only view permission
-  if (userRole === 'marketing') {
-    return true;
   }
 
   return false;
@@ -658,8 +650,7 @@ export const updateQuotation = async (req, res) => {
 
     const userId = req.user ? (req.user._id || req.user.id) : null;
     const userName = req.user?.name || 'Sales Specialist';
-    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes((req.user?.role || 'admin').toLowerCase()) ||
-                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes((req.user?.role || 'admin').toLowerCase());
 
     // Merge & recalculate pricing
     const mergedData = {
@@ -1188,8 +1179,7 @@ export const convertToTrip = async (req, res) => {
 
     // Role check: Only Admin and Operations can convert quotations into catalog trips
     const userRole = (req.user?.role || '').toLowerCase();
-    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole) ||
-                           req.user?.email?.toLowerCase() === (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
+    const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
     if (!isSuperOrAdmin) {
       return res.status(403).json({ message: 'Only Admins and Operations can convert quotations into catalog trips.' });
     }

@@ -1044,27 +1044,7 @@ export const getSalesUsers = async (req, res) => {
         activeLeadsCount: countMap[String(u._id)] || 0
       }));
     } else {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
-        return res.status(503).json({ message: 'Database service is currently unavailable.' });
-      }
-      salesUsers = [
-        {
-          _id: 'usr_admin',
-          name: 'Gaurav Kumar (Master Admin)',
-          email: 'gaurav999@gmail.com',
-          role: 'admin',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
-          activeLeadsCount: 2
-        },
-        {
-          _id: 'usr_sales_1',
-          name: 'Ashok Travel Concierge',
-          email: 'sales@wanderluxe.in',
-          role: 'sales',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
-          activeLeadsCount: 5
-        }
-      ];
+      return res.status(503).json({ message: 'Database service is currently unavailable.' });
     }
 
     res.json({

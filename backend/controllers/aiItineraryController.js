@@ -518,9 +518,7 @@ export const saveItineraryController = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid itinerary data provided.' });
     }
 
-    const userId = req.user?._id && req.user._id !== 'usr_admin' && req.user._id !== 'usr_influencer'
-      ? req.user._id
-      : null;
+    const userId = mongoose.Types.ObjectId.isValid(req.user?._id) ? req.user._id : null;
     const userEmail = req.user?.email || '';
 
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
@@ -719,9 +717,9 @@ export const getMyItinerariesController = async (req, res) => {
     const userId = req.user?._id;
 
     let filter = {};
-    if (req.user?.role === 'admin') {
+    if (['admin', 'super_admin'].includes(req.user?.role)) {
       filter = {}; // Admin has master visibility into all saved AI itineraries
-    } else if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
+    } else if (mongoose.Types.ObjectId.isValid(userId)) {
       filter = { $or: [{ user: userId }, { userEmail }] };
     } else if (userEmail) {
       filter = { userEmail };

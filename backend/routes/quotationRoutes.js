@@ -38,11 +38,11 @@ router.use(protect);
 router.post('/calculate-preview', requireRoles('super_admin', 'admin', 'sales'), calculateQuotationPricingPreview);
 
 router.route('/')
-  .get(requireRoles('super_admin', 'admin', 'operations', 'sales', 'marketing'), getQuotations)
+  .get(requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotations)
   .post(requireRoles('super_admin', 'admin', 'sales'), createQuotation);
 
 router.route('/:id')
-  .get(requireRoles('super_admin', 'admin', 'operations', 'sales', 'marketing'), getQuotationById)
+  .get(requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationById)
   .patch(requireRoles('super_admin', 'admin', 'sales'), updateQuotation)
   .delete(adminOnly, deleteQuotation);
 
