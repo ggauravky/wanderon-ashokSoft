@@ -207,7 +207,7 @@ export const influencerOnly = (req, res, next) => {
   const isApproved = req.user && (
     req.user.role === 'admin' ||
     req.user.role === 'super_admin' ||
-    req.user.influencerStatus === 'approved' ||
+    (req.user.role === 'influencer' && req.user.influencerStatus === 'approved') ||
     req.user.email?.toLowerCase() === ADMIN_EMAIL
   );
 

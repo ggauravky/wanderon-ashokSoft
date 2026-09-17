@@ -1,0 +1,9 @@
+import React from 'react';
+import { ExternalLink, Pencil, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { formatPageDate } from '../pageHelpers.js';
+
+const PagesMobileCard = ({ page, onDelete }) => <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-950">{page.title}</h2><p className="mt-1 font-mono text-xs text-slate-500">/page/{page.slug}</p></div><span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${page.status === 'published' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>{page.status}</span></div><div className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3 text-xs"><p><span className="text-slate-400">SEO</span><span className="mt-1 block font-semibold text-slate-800">{page.seoHealthScore ?? 0}%</span></p><p><span className="text-slate-400">Updated</span><span className="mt-1 block text-slate-700">{formatPageDate(page.updatedAt)}</span></p></div><div className="mt-3 flex gap-2"><Link to={`/staff/admin/pages/${page._id}/edit`} className="inline-flex min-h-9 flex-1 items-center justify-center gap-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700"><Pencil size={14} />Edit</Link>{page.status === 'published' && <a href={`/page/${page.slug}`} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 px-3 text-slate-600"><ExternalLink size={14} /></a>}<button type="button" onClick={() => onDelete(page)} className="inline-flex min-h-9 items-center justify-center rounded-lg border border-rose-200 px-3 text-rose-700"><Trash2 size={14} /></button></div></article>;
+
+export default PagesMobileCard;
+

@@ -26,15 +26,15 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      default: '+91 8542036499'
+      default: ''
     },
     address: {
       type: String,
-      default: 'Lucknow, UP, India'
+      default: ''
     },
     avatar: {
       type: String,
-      default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250'
+      default: ''
     },
     role: {
       type: String,
@@ -52,17 +52,26 @@ const userSchema = new mongoose.Schema(
     },
     influencerApplication: {
       socialHandle: { type: String, default: '' },
-      platform: { type: String, default: 'Instagram' },
-      followerCount: { type: String, default: '10K+' },
-      niche: { type: String, default: 'Travel & Lifestyle' },
+      platform: { type: String, default: '' },
+      followerCount: { type: String, default: '' },
+      niche: { type: String, default: '' },
       sampleContent: { type: String, default: '' },
       applicationSubmitted: { type: Boolean, default: false },
       appliedAt: { type: Date },
       approvedAt: { type: Date },
+      approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       rejectedAt: { type: Date },
+      rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      rejectionReason: { type: String, default: '', trim: true, maxlength: 1000 },
       reviewedAt: { type: Date },
       reviewedBy: { type: String, default: '' },
       reviewNotes: { type: String, default: '' }
+    },
+    accessAudit: {
+      roleChangedAt: { type: Date },
+      roleChangedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      statusChangedAt: { type: Date },
+      statusChangedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
     },
     bookedTrips: {
       type: Array,
@@ -73,6 +82,9 @@ const userSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+userSchema.index({ role: 1, isActive: 1, createdAt: -1 });
+userSchema.index({ influencerStatus: 1, updatedAt: -1 });
 
 // Encrypt password using bcrypt before saving
 userSchema.pre('save', async function (next) {

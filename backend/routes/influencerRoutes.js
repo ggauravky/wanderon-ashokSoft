@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
   getEligiblePlans, generateCoupon, getInfluencerCoupons, 
-  getWalletSummary, getWalletTransactions, requestPayout, getAnalytics 
+  getWalletSummary, getWalletTransactions, getInfluencerPayouts, requestPayout, getAnalytics
 } from '../controllers/influencerController.js';
 import { protect, influencerOnly } from '../middlewares/authMiddleware.js';
 
@@ -17,7 +17,7 @@ router.get('/coupons', getInfluencerCoupons);
 router.get('/wallet', getWalletSummary);
 router.get('/wallet/transactions', getWalletTransactions);
 router.post('/payouts', requestPayout);
+router.get('/payouts', getInfluencerPayouts);
 router.get('/analytics', getAnalytics);
 
 export default router;
-

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { 
-  X, Upload, Image as ImageIcon, MapPin, Tag, Check, AlertCircle, 
-  Sparkles, RefreshCw, FileText, Camera
+import {
+  X, Upload, Check, AlertCircle,
+  RefreshCw, Camera
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { uploadImageApi, createMediaAssetApi } from '../services/api.js';
@@ -22,11 +22,11 @@ export default function UploadLocationImageModal({
   const [locality, setLocality] = useState(initialLocationName || '');
   const [poi, setPoi] = useState(initialLocationName || '');
   const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [country, setCountry] = useState('India');
+  const [state] = useState('');
+  const [country] = useState('India');
   const [title, setTitle] = useState(initialLocationName ? `${initialLocationName} View` : '');
-  const [caption, setCaption] = useState('');
-  const [altText, setAltText] = useState('');
+  const [caption] = useState('');
+  const [altText] = useState('');
   const [credit, setCredit] = useState('WanderLuxe Archival Collection');
   const [tags, setTags] = useState('');
   const [featured, setFeatured] = useState(false);
@@ -38,7 +38,7 @@ export default function UploadLocationImageModal({
     const selected = e.target.files[0];
     if (selected) {
       if (filePreview && filePreview.startsWith('blob:')) {
-        try { URL.revokeObjectURL(filePreview); } catch (_) {}
+        try { URL.revokeObjectURL(filePreview); } catch {}
       }
       setFile(selected);
       setFilePreview(URL.createObjectURL(selected));
@@ -57,6 +57,8 @@ export default function UploadLocationImageModal({
     let publicId = '';
     let width = 1600;
     let height = 900;
+    let format = 'jpg';
+    let bytes = 0;
 
     if (uploadMode === 'file') {
       if (!file) {
@@ -71,6 +73,8 @@ export default function UploadLocationImageModal({
         publicId = uploadRes.public_id || '';
         if (uploadRes.width) width = uploadRes.width;
         if (uploadRes.height) height = uploadRes.height;
+        if (uploadRes.format) format = uploadRes.format;
+        if (uploadRes.bytes) bytes = uploadRes.bytes;
       } catch (uploadErr) {
         setUploading(false);
         setErrorMsg('Image upload failed: ' + uploadErr.message);
@@ -107,12 +111,13 @@ export default function UploadLocationImageModal({
         caption: caption.trim() || title.trim(),
         altText: altText.trim() || `${poi || locality || title}, ${destination}`,
         storage: {
-          provider: 'cloudinary',
+          provider: publicId ? 'cloudinary' : 'external',
           secureUrl: finalImageUrl,
           publicId,
           width,
           height,
-          format: 'webp'
+          format,
+          bytes
         },
         geography: {
           country: country.trim() || 'India',

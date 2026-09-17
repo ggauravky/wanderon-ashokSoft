@@ -158,26 +158,16 @@ export const applyInfluencer = async (req, res) => {
 
     const { name, socialHandle, platform, followerCount, niche, sampleContent, phone } = req.body;
 
-    let user = null;
-    if (isDbConnected()) {
-      try {
-        user = await User.findById(userId);
-      } catch (e) {}
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Creator applications are unavailable while the database is disconnected.' });
     }
 
-    if (!user) {
-      user = memoryUsers.find((u) => String(u._id) === String(userId));
-    }
+    const user = mongoose.Types.ObjectId.isValid(userId)
+      ? await User.findById(userId)
+      : await User.findOne({ email: req.user?.email?.toLowerCase().trim() });
 
     if (!user) {
-      user = {
-        _id: userId,
-        name: req.user.name || 'Traveler',
-        email: req.user.email || 'user@wanderluxe.in',
-        role: 'user',
-        influencerStatus: 'none'
-      };
-      memoryUsers.push(user);
+      return res.status(404).json({ message: 'A MongoDB user account is required before applying as a creator.' });
     }
 
     if (user.influencerStatus === 'approved') {
@@ -199,18 +189,16 @@ export const applyInfluencer = async (req, res) => {
 
     user.influencerStatus = 'pending';
     user.influencerApplication = {
-      socialHandle: socialHandle || '@creator',
-      platform: platform || 'Instagram',
-      followerCount: followerCount || '10K+',
-      niche: niche || 'Travel & Adventure',
+      socialHandle: socialHandle || '',
+      platform: platform || '',
+      followerCount: followerCount || '',
+      niche: niche || '',
       sampleContent: sampleContent || '',
       applicationSubmitted: true,
       appliedAt: new Date()
     };
 
-    if (isDbConnected() && typeof user.save === 'function') {
-      await user.save();
-    }
+    await user.save();
 
     res.status(201).json({
       message: 'Influencer application submitted successfully. Status is PENDING Admin review.',

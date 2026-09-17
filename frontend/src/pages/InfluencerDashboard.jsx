@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   TrendingUp, DollarSign, Tag, Users, Ticket, Plus, Copy, Check, 
@@ -8,9 +8,10 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import SEOHead from '../components/SEOHead';
+import { generateCouponApi, getInfluencerCouponsApi, getInfluencerPayoutsApi, getInfluencerPlansApi, getWalletSummaryApi, getWalletTransactionsApi, requestPayoutApi } from '../services/api.js';
 
 const InfluencerDashboard = () => {
-  const { user, logout, eligiblePlans, generatePlanCoupon, requestPayoutWithdrawal } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('home');
@@ -20,36 +21,36 @@ const InfluencerDashboard = () => {
   // Payout Modal State
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
-  const [paymentMethodDetails, setPaymentMethodDetails] = useState('8542036499@upi');
+  const [paymentMethodDetails, setPaymentMethodDetails] = useState('');
   const [payoutError, setPayoutError] = useState('');
   const [payoutSuccessMsg, setPayoutSuccessMsg] = useState('');
 
-  const coupons = user?.influencerCoupons || [
-    { id: 'ic1', code: 'GOA-KR7X9P', planId: 3, planTitle: 'Goa Sun Beach and Party Getaway', discountType: 'percentage', discountValue: 15, commissionRate: 10, totalRedemptions: 14, revenueGenerated: 485000, commissionEarned: 37000, expiryDate: '2026-12-31', active: true },
-    { id: 'ic2', code: 'MEGH-X82P9A', planId: 1, planTitle: 'Meghalaya Backpacking Living Root Bridges', discountType: 'percentage', discountValue: 10, commissionRate: 10, totalRedemptions: 6, revenueGenerated: 180000, commissionEarned: 11500, expiryDate: '2026-12-31', active: true }
-  ];
+  const [eligiblePlans, setEligiblePlans] = useState([]);
+  const [coupons, setCoupons] = useState([]);
+  const [ledgerTransactions, setLedgerTransactions] = useState([]);
+  const [payoutHistory, setPayoutHistory] = useState([]);
+  const [wallet, setWallet] = useState({ pendingBalance: 0, availableBalance: 0, totalWithdrawn: 0, minPayoutThreshold: 1000 });
+  const [dataError, setDataError] = useState('');
 
-  const ledgerTransactions = user?.ledgerTransactions || [
-    { id: 'tx1', bookingId: 'WL-849201', type: 'Commission Pending', amount: 3700, date: '2026-08-05', status: 'Pending Settlement', reference: 'Booking WL-849201 (Meghalaya)' },
-    { id: 'tx2', bookingId: 'WL-729104', type: 'Commission Cleared', amount: 2200, date: '2026-08-07', status: 'Available for Payout', reference: 'Cleared Settlement WL-729104 (Spiti)' },
-    { id: 'tx3', bookingId: 'PO-910293', type: 'Payout Transfer', amount: 18000, date: '2026-08-01', status: 'Paid Out', reference: 'Bank Transfer UPI (8542036499@upi)' }
-  ];
+  const loadCreatorFinance = async () => {
+    setDataError('');
+    try {
+      const [plans, couponRows, summary, transactions, payouts] = await Promise.all([getInfluencerPlansApi(), getInfluencerCouponsApi(), getWalletSummaryApi(), getWalletTransactionsApi(), getInfluencerPayoutsApi()]);
+      setEligiblePlans(Array.isArray(plans) ? plans : []); setCoupons(Array.isArray(couponRows) ? couponRows : []); setWallet(summary || {}); setLedgerTransactions(Array.isArray(transactions) ? transactions : []); setPayoutHistory(Array.isArray(payouts) ? payouts : []);
+    } catch (error) { setDataError(error.message || 'Creator finance data is unavailable.'); }
+  };
+  useEffect(() => { loadCreatorFinance(); }, []);
 
-  const payoutHistory = user?.payoutHistory || [
-    { id: 'po1', amount: 18000, date: '2026-08-01', method: 'UPI Instant (8542036499@upi)', status: 'Approved & Paid', reference: 'TXN-918239012' }
-  ];
-
-  // Calculated Financial Balances
-  const pendingBalance = user?.pendingBalance || 18500;
-  const availableBalance = user?.availableBalance || 12000;
-  const totalWithdrawn = user?.totalWithdrawn || 18000;
-  const totalEarnings = user?.totalEarnings || 48500;
-  const minThreshold = user?.minPayoutThreshold || 1000;
+  const pendingBalance = Number(wallet.pendingBalance || 0);
+  const availableBalance = Number(wallet.availableBalance || 0);
+  const totalWithdrawn = Number(wallet.totalWithdrawn || 0);
+  const totalEarnings = coupons.reduce((sum, coupon) => sum + Number(coupon.commissionEarned || 0), 0);
+  const minThreshold = Number(wallet.minPayoutThreshold || 1000);
 
   const totalBookingsCount = coupons.reduce((sum, c) => sum + (c.totalRedemptions || 0), 0);
   const totalGrossRevenue = coupons.reduce((sum, c) => sum + (c.revenueGenerated || 0), 0);
-  const totalCustomerSavings = Math.round(totalGrossRevenue * 0.12);
-  const conversionRate = '8.4%';
+  const totalCustomerSavings = '—';
+  const conversionRate = '—';
 
   const handleCopy = (text, label) => {
     navigator.clipboard.writeText(text);
@@ -57,23 +58,22 @@ const InfluencerDashboard = () => {
     setTimeout(() => setCopiedCode(''), 3000);
   };
 
-  const handleGeneratePlanCoupon = (plan) => {
-    const coupon = generatePlanCoupon(plan);
-    setGeneratedSuccess(`Unique coupon code ${coupon.code} generated successfully for ${plan.planTitle}!`);
-    setActiveTab('coupons');
-    setTimeout(() => setGeneratedSuccess(''), 6000);
+  const handleGeneratePlanCoupon = async (plan) => {
+    try { const coupon = await generateCouponApi(plan); setGeneratedSuccess(`Coupon ${coupon.code} created.`); await loadCreatorFinance(); setActiveTab('coupons'); setTimeout(() => setGeneratedSuccess(''), 6000); }
+    catch (error) { setGeneratedSuccess(error.message || 'Coupon creation is unavailable.'); }
   };
 
-  const handleRequestPayout = (e) => {
+  const handleRequestPayout = async (e) => {
     e.preventDefault();
     setPayoutError('');
     setPayoutSuccessMsg('');
 
     try {
-      const record = requestPayoutWithdrawal(payoutAmount, paymentMethodDetails);
+      const record = await requestPayoutApi(payoutAmount, paymentMethodDetails);
       setPayoutSuccessMsg(`Payout request of ₹${record.amount.toLocaleString()} submitted for admin approval!`);
       setPayoutAmount('');
       setShowPayoutModal(false);
+      await loadCreatorFinance();
       setTimeout(() => setPayoutSuccessMsg(''), 6000);
     } catch (err) {
       setPayoutError(err.message || 'Payout request failed.');
@@ -149,12 +149,12 @@ const InfluencerDashboard = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-brand-navy uppercase mb-1">UPI ID or Bank Account Details</label>
+                  <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Manual settlement reference</label>
                   <input
                     type="text"
                     value={paymentMethodDetails}
                     onChange={(e) => setPaymentMethodDetails(e.target.value)}
-                    placeholder="e.g. 8542036499@upi or HDFC0001234 A/C 91823901"
+                    placeholder="Reference for staff review"
                     className="w-full px-4 py-3 bg-brand-light border border-gray-200 rounded-2xl text-xs font-bold focus:outline-none focus:border-brand-emerald"
                     required
                   />
@@ -192,6 +192,8 @@ const InfluencerDashboard = () => {
             <button onClick={() => setPayoutSuccessMsg('')} className="text-emerald-700 hover:text-emerald-950"><X size={16} /></button>
           </div>
         )}
+
+        {dataError && <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-700">{dataError}</div>}
 
         {/* Header Banner */}
         <div className="bg-brand-navy text-white rounded-3xl p-6 md:p-8 shadow-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
@@ -280,9 +282,9 @@ const InfluencerDashboard = () => {
 
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-200/80">
                 <span className="text-xs font-bold text-gray-400 uppercase">Customer Savings</span>
-                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">₹{totalCustomerSavings.toLocaleString()}</h3>
+                <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">{totalCustomerSavings}</h3>
                 <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded mt-2 inline-block">
-                  Discounts Issued
+                  Not currently recorded
                 </span>
               </div>
 
@@ -311,7 +313,7 @@ const InfluencerDashboard = () => {
                 <span className="text-xs font-bold text-gray-400 uppercase">Total Withdrawn</span>
                 <h3 className="text-2xl md:text-3xl font-extrabold text-brand-navy mt-1">₹{totalWithdrawn.toLocaleString()}</h3>
                 <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded mt-2 inline-block">
-                  Paid to Bank/UPI
+                  Recorded commission paid
                 </span>
               </div>
 
@@ -389,6 +391,7 @@ const InfluencerDashboard = () => {
                   </button>
                 </div>
               ))}
+              {eligiblePlans.length === 0 && <div className="md:col-span-2 rounded-3xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">No creator promotion plans are currently configured.</div>}
             </div>
           </div>
         )}
@@ -419,7 +422,7 @@ const InfluencerDashboard = () => {
                 const isCopiedText = copiedCode === promoMessage;
 
                 return (
-                  <div key={coupon.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/80 space-y-4">
+                  <div key={coupon._id || coupon.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/80 space-y-4">
                     <div className="flex items-center justify-between border-b border-gray-100 pb-3">
                       <div>
                         <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block">Generated Unique Code</span>
@@ -485,6 +488,7 @@ const InfluencerDashboard = () => {
                   </div>
                 );
               })}
+              {coupons.length === 0 && <div className="md:col-span-2 rounded-3xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">No persisted creator coupons found.</div>}
             </div>
           </div>
         )}
@@ -509,9 +513,9 @@ const InfluencerDashboard = () => {
                 <span className="text-[10px] text-emerald-600 font-bold">Cleared for payout</span>
               </div>
               <div className="p-5 bg-white rounded-2xl border border-gray-200 shadow-sm">
-                <span className="text-[10px] font-extrabold uppercase text-gray-400">Total Paid Out</span>
+                <span className="text-[10px] font-extrabold uppercase text-gray-400">Recorded Paid Commission</span>
                 <h3 className="text-2xl font-extrabold text-brand-navy mt-1">₹{totalWithdrawn.toLocaleString()}</h3>
-                <span className="text-[10px] text-gray-500">Transferred to bank/UPI</span>
+                <span className="text-[10px] text-gray-500">Recorded as paid in the commission ledger</span>
               </div>
               <div className="p-5 bg-white rounded-2xl border border-gray-200 shadow-sm">
                 <span className="text-[10px] font-extrabold uppercase text-gray-400">Payout Threshold</span>
@@ -541,17 +545,17 @@ const InfluencerDashboard = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 font-medium">
                   {ledgerTransactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy">{tx.id}</td>
+                    <tr key={tx._id || tx.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-mono font-bold text-brand-navy">{tx._id || tx.id}</td>
                       <td className="p-4 font-bold text-gray-700">{tx.type}</td>
                       <td className="p-4 text-gray-600">{tx.reference}</td>
-                      <td className="p-4 text-gray-500">{tx.date}</td>
-                      <td className={`p-4 font-extrabold text-sm ${tx.type.includes('Transfer') ? 'text-gray-700' : 'text-brand-emerald'}`}>
-                        {tx.type.includes('Transfer') ? `-₹${tx.amount.toLocaleString()}` : `+₹${tx.amount.toLocaleString()}`}
+                      <td className="p-4 text-gray-500">{new Date(tx.createdAt || tx.date).toLocaleDateString('en-IN')}</td>
+                      <td className={`p-4 font-extrabold text-sm ${Number(tx.amount) < 0 ? 'text-gray-700' : 'text-brand-emerald'}`}>
+                        {Number(tx.amount) < 0 ? `-₹${Math.abs(Number(tx.amount)).toLocaleString()}` : `+₹${Number(tx.amount).toLocaleString()}`}
                       </td>
                       <td className="p-4 text-right">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          tx.status.includes('Available') || tx.status.includes('Paid') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          String(tx.status).includes('AVAILABLE') || String(tx.status).includes('PAID') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                         }`}>
                           {tx.status}
                         </span>
@@ -570,7 +574,7 @@ const InfluencerDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-extrabold text-brand-navy">Payout System & Requests</h2>
-                <p className="text-xs text-gray-500 font-medium">Minimum payout threshold: ₹{minThreshold.toLocaleString()}. Bank or UPI destinations supported.</p>
+                <p className="text-xs text-gray-500 font-medium">Minimum payout threshold: ₹{minThreshold.toLocaleString()}. Requests enter a manual Staff review workflow.</p>
               </div>
               <button
                 onClick={() => setShowPayoutModal(true)}
@@ -594,15 +598,15 @@ const InfluencerDashboard = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 font-medium">
                   {payoutHistory.map((po) => (
-                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="p-4 font-mono font-bold text-brand-navy">{po.id}</td>
+                    <tr key={po._id || po.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="p-4 font-mono font-bold text-brand-navy">{po.reference || po._id || po.id}</td>
                       <td className="p-4 font-extrabold text-brand-emerald text-sm">₹{po.amount.toLocaleString()}</td>
-                      <td className="p-4 text-gray-500">{po.date}</td>
-                      <td className="p-4 text-gray-700">{po.method}</td>
-                      <td className="p-4 font-mono text-gray-500">{po.reference || 'REF-81920'}</td>
+                      <td className="p-4 text-gray-500">{new Date(po.requestedAt || po.createdAt || po.date).toLocaleDateString('en-IN')}</td>
+                      <td className="p-4 text-gray-700">{po.destination || po.method || 'Manual settlement'}</td>
+                      <td className="p-4 font-mono text-gray-500">{po.reference || po.providerReference || '—'}</td>
                       <td className="p-4 text-right">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
-                          po.status.includes('Approved') || po.status.includes('Paid') ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          ['UNDER_REVIEW', 'PROCESSING', 'PAID'].includes(po.status) ? 'bg-emerald-100 text-emerald-800' : po.status === 'CANCELLED' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
                         }`}>
                           {po.status}
                         </span>
@@ -626,18 +630,18 @@ const InfluencerDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-3xl border border-gray-200 space-y-2">
                 <span className="text-xs text-gray-400 font-bold uppercase">Audience Clicks / Visits</span>
-                <h3 className="text-3xl font-extrabold text-brand-navy">248 Clicks</h3>
-                <span className="text-xs text-emerald-600 font-bold">High engagement quality</span>
+                <h3 className="text-3xl font-extrabold text-brand-navy">—</h3>
+                <span className="text-xs text-gray-500 font-medium">Tracking is not configured</span>
               </div>
               <div className="bg-white p-6 rounded-3xl border border-gray-200 space-y-2">
                 <span className="text-xs text-gray-400 font-bold uppercase">Average Order Value (AOV)</span>
-                <h3 className="text-3xl font-extrabold text-brand-emerald">₹33,250</h3>
+                <h3 className="text-3xl font-extrabold text-brand-emerald">₹{(totalBookingsCount ? Math.round(totalGrossRevenue / totalBookingsCount) : 0).toLocaleString()}</h3>
                 <span className="text-xs text-gray-500 font-medium">Per completed booking</span>
               </div>
               <div className="bg-white p-6 rounded-3xl border border-gray-200 space-y-2">
                 <span className="text-xs text-gray-400 font-bold uppercase">Creator ROI</span>
-                <h3 className="text-3xl font-extrabold text-emerald-600">10x Yield</h3>
-                <span className="text-xs text-emerald-600 font-bold">10% commission vs gross sales</span>
+                <h3 className="text-3xl font-extrabold text-emerald-600">₹{totalEarnings.toLocaleString()}</h3>
+                <span className="text-xs text-gray-500 font-medium">Persisted commission earned</span>
               </div>
             </div>
           </div>

@@ -42,7 +42,7 @@ const pageSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['published', 'draft'],
-      default: 'published',
+      default: 'draft',
       index: true
     },
     author: {
@@ -73,5 +73,7 @@ const pageSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+pageSchema.index({ status: 1, updatedAt: -1 });
 
 export default mongoose.model('Page', pageSchema);

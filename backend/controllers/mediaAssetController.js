@@ -2,12 +2,11 @@ import mongoose from 'mongoose';
 import MediaAsset, { generateLocationKeys } from '../models/MediaAsset.js';
 import Trip from '../models/Trip.js';
 import Quotation from '../models/Quotation.js';
+import Page from '../models/Page.js';
 import { resolveItineraryMedia } from '../services/mediaResolverService.js';
-import { getDestinations } from '../services/travelKnowledgeService.js';
-import { CANONICAL_MEDIA_ASSETS } from '../data/canonicalMediaAssets.js';
 
-let memoryMediaAssets = [...CANONICAL_MEDIA_ASSETS];
 const isDbConnected = () => mongoose.connection.readyState === 1;
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // @desc    List media assets with filters and pagination
 // @route   GET /api/media
@@ -22,48 +21,16 @@ export const listMediaAssets = async (req, res) => {
       usage,
       featured,
       orientation,
-      active = 'true',
+      type,
+      category,
+      source,
+      active: requestedActive = 'true',
       page = 1,
       limit = 24
     } = req.query;
+    const active = req.mediaAdmin === true ? requestedActive : 'true';
 
-    if (!isDbConnected()) {
-      let filtered = [...memoryMediaAssets];
-      if (active !== 'all') {
-        filtered = filtered.filter(a => a.active === (active === 'true'));
-      }
-      if (featured === 'true') {
-        filtered = filtered.filter(a => a.featured);
-      }
-      if (destination) {
-        const dRegex = new RegExp(destination, 'i');
-        filtered = filtered.filter(a => dRegex.test(a.geography?.destination || ''));
-      }
-      if (orientation) {
-        filtered = filtered.filter(a => a.orientation === orientation.toUpperCase());
-      }
-      if (search) {
-        const sLower = search.toLowerCase().trim();
-        filtered = filtered.filter(a => 
-          (a.title || '').toLowerCase().includes(sLower) ||
-          (a.geography?.destination || '').toLowerCase().includes(sLower) ||
-          (a.geography?.poi || '').toLowerCase().includes(sLower) ||
-          (a.locationKeys || []).some(k => k.toLowerCase().includes(sLower))
-        );
-      }
-      const pageNum = Math.max(1, parseInt(page, 10) || 1);
-      const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 24));
-      return res.json({
-        success: true,
-        data: filtered.slice((pageNum - 1) * limitNum, pageNum * limitNum),
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total: filtered.length,
-          pages: Math.ceil(filtered.length / limitNum) || 1
-        }
-      });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets are unavailable while the database is disconnected.' });
 
     const filter = {};
 
@@ -76,13 +43,13 @@ export const listMediaAssets = async (req, res) => {
     }
 
     if (destination) {
-      filter['geography.destination'] = { $regex: new RegExp(destination, 'i') };
+      filter['geography.destination'] = { $regex: new RegExp(escapeRegex(destination), 'i') };
     }
 
     if (location) {
       filter.$or = [
-        { 'geography.locality': { $regex: new RegExp(location, 'i') } },
-        { 'geography.poi': { $regex: new RegExp(location, 'i') } },
+        { 'geography.locality': { $regex: new RegExp(escapeRegex(location), 'i') } },
+        { 'geography.poi': { $regex: new RegExp(escapeRegex(location), 'i') } },
         { locationKeys: { $in: [location.toLowerCase().trim()] } }
       ];
     }
@@ -95,12 +62,16 @@ export const listMediaAssets = async (req, res) => {
       filter.orientation = orientation.toUpperCase();
     }
 
+    if (type) filter.type = type.toUpperCase();
+    if (category) filter.categories = category;
+    if (source) filter['source.sourceType'] = source;
+
     if (usage) {
       filter[`usage.${usage}`] = true;
     }
 
     if (search) {
-      const qRegex = new RegExp(search.trim(), 'i');
+      const qRegex = new RegExp(escapeRegex(search.trim()), 'i');
       filter.$or = [
         { title: qRegex },
         { altText: qRegex },
@@ -115,18 +86,30 @@ export const listMediaAssets = async (req, res) => {
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 24));
     const skip = (pageNum - 1) * limitNum;
 
-    const [assets, total] = await Promise.all([
+    const [assets, total, destinations, categories, sources, types] = await Promise.all([
       MediaAsset.find(filter)
         .sort({ featured: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
+        .populate('createdBy', 'name email')
         .lean(),
-      MediaAsset.countDocuments(filter)
+      MediaAsset.countDocuments(filter),
+      MediaAsset.distinct('geography.destination', { active: true }),
+      MediaAsset.distinct('categories', { active: true }),
+      MediaAsset.distinct('source.sourceType', { active: true }),
+      MediaAsset.distinct('type', { active: true })
     ]);
 
     res.json({
       success: true,
       data: assets,
+      destinations: destinations.filter(Boolean).sort(),
+      facets: {
+        destinations: destinations.filter(Boolean).sort(),
+        categories: categories.filter(Boolean).sort(),
+        sources: sources.filter(Boolean).sort(),
+        types: types.filter(Boolean).sort()
+      },
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -146,30 +129,31 @@ export const listMediaAssets = async (req, res) => {
 export const getMediaAssetById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!isDbConnected()) {
-      const found = memoryMediaAssets.find(a => String(a._id) === String(id));
-      if (!found) return res.status(404).json({ success: false, message: 'Media asset not found' });
-      return res.json({ success: true, data: found });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets are unavailable while the database is disconnected.' });
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid media asset ID' });
     }
 
-    const asset = await MediaAsset.findById(id).lean();
+    const asset = await MediaAsset.findById(id).populate('createdBy', 'name email').lean();
     if (!asset) {
       return res.status(404).json({ success: false, message: 'Media asset not found' });
     }
 
     // Lookup usages in active trips and quotations
-    const [tripsUsing, quotationsUsing] = await Promise.all([
+    const assetUrl = asset.storage?.secureUrl;
+    const [tripsUsing, quotationsUsing, pagesUsing] = await Promise.all([
       Trip.find(
-        { 'itinerary.coverMediaAssetId': asset._id },
+        { $or: [{ 'itinerary.coverMediaAssetId': asset._id }, { 'itinerary.coverMedia.url': assetUrl }, { heroImage: assetUrl }, { image: assetUrl }] },
         { title: 1, slug: 1, 'itinerary.day': 1, 'itinerary.title': 1 }
       ).limit(10).lean(),
       Quotation.find(
-        { 'itineraryDays.coverMediaAssetId': asset._id },
+        { $or: [{ 'itinerary.coverMediaAssetId': asset._id }, { 'itinerary.coverMedia.url': assetUrl }] },
         { quotationNumber: 1, status: 1, 'tripRequirements.title': 1 }
+      ).limit(10).lean(),
+      Page.find(
+        { $or: [{ 'sections.imageUrl': assetUrl }, { 'seo.ogImage': assetUrl }, { 'seo.twitterImage': assetUrl }] },
+        { title: 1, slug: 1, status: 1 }
       ).limit(10).lean()
     ]);
 
@@ -181,7 +165,10 @@ export const getMediaAssetById = async (req, res) => {
           tripCount: tripsUsing.length,
           trips: tripsUsing.map(t => ({ id: t._id, title: t.title, slug: t.slug })),
           quotationCount: quotationsUsing.length,
-          quotations: quotationsUsing.map(q => ({ id: q._id, number: q.quotationNumber, status: q.status }))
+          quotations: quotationsUsing.map(q => ({ id: q._id, number: q.quotationNumber, status: q.status })),
+          pageCount: pagesUsing.length,
+          pages: pagesUsing.map(p => ({ id: p._id, title: p.title, slug: p.slug, status: p.status })),
+          totalKnownReferences: tripsUsing.length + quotationsUsing.length + pagesUsing.length
         }
       }
     });
@@ -235,6 +222,8 @@ export const createMediaAsset = async (req, res) => {
 
     const geography = req.body.geography || req.body.location || {};
 
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets cannot be created while the database is disconnected.' });
+
     if (!title || !altText || !storage?.secureUrl || !geography?.destination) {
       return res.status(400).json({
         success: false,
@@ -250,33 +239,6 @@ export const createMediaAsset = async (req, res) => {
     }
 
     const locationKeys = generateLocationKeys(geography, title, tags);
-
-    if (!isDbConnected()) {
-      const newAsset = {
-        _id: 'med_' + Date.now(),
-        title,
-        altText,
-        caption,
-        storage,
-        geography,
-        locationKeys,
-        tags: Array.isArray(tags) ? tags.map(t => t.toLowerCase().trim()).filter(Boolean) : [],
-        categories,
-        orientation,
-        usage,
-        source,
-        featured: Boolean(featured),
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryMediaAssets.unshift(newAsset);
-      return res.status(201).json({
-        success: true,
-        message: 'Media asset created successfully.',
-        data: newAsset
-      });
-    }
 
     const asset = new MediaAsset({
       title,
@@ -313,6 +275,7 @@ export const createMediaAsset = async (req, res) => {
 export const updateMediaAsset = async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets cannot be updated while the database is disconnected.' });
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid media asset ID' });
     }
@@ -358,10 +321,7 @@ export const deleteMediaAsset = async (req, res) => {
     const { id } = req.params;
     const { permanent = false } = req.query;
 
-    if (!isDbConnected()) {
-      memoryMediaAssets = memoryMediaAssets.filter(a => String(a._id) !== String(id));
-      return res.json({ success: true, message: 'Media asset deleted successfully.' });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets cannot be deleted while the database is disconnected.' });
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid media asset ID' });
@@ -373,14 +333,18 @@ export const deleteMediaAsset = async (req, res) => {
     }
 
     // Check usage in published trips
-    const usageCount = await Trip.countDocuments({
-      'itinerary.coverMediaAssetId': asset._id
-    });
+    const assetUrl = asset.storage?.secureUrl;
+    const [tripUsage, quotationUsage, pageUsage] = await Promise.all([
+      Trip.countDocuments({ $or: [{ 'itinerary.coverMediaAssetId': asset._id }, { 'itinerary.coverMedia.url': assetUrl }, { heroImage: assetUrl }, { image: assetUrl }] }),
+      Quotation.countDocuments({ $or: [{ 'itinerary.coverMediaAssetId': asset._id }, { 'itinerary.coverMedia.url': assetUrl }] }),
+      Page.countDocuments({ $or: [{ 'sections.imageUrl': assetUrl }, { 'seo.ogImage': assetUrl }, { 'seo.twitterImage': assetUrl }] })
+    ]);
+    const usageCount = tripUsage + quotationUsage + pageUsage;
 
     if (usageCount > 0 && permanent === 'true') {
       return res.status(400).json({
         success: false,
-        message: `This image is actively used by ${usageCount} trip itinerary day(s). Please replace or reassign references before permanently deleting.`
+        message: `This asset has ${usageCount} known reference(s) across Trips, Quotations, or Pages. Replace those references before permanently deleting it.`
       });
     }
 
@@ -442,114 +406,112 @@ export const resolveItineraryMediaController = async (req, res) => {
 // @access  Private (Admin)
 export const getMediaCoverageReport = async (req, res) => {
   try {
-    // 1. Scan unique destinations and locations from Catalog Trips
-    const trips = isDbConnected() ? await Trip.find({ status: { $ne: 'inactive' } }, { destination: 1, location: 1, itinerary: 1 }).lean() : [];
-    const centralDestinations = getDestinations();
-
-    const locationSet = new Map();
-
-    // Add Central Knowledge destinations & attractions
-    centralDestinations.forEach(d => {
-      const destName = d.name;
-      if (!locationSet.has(destName.toLowerCase())) {
-        locationSet.set(destName.toLowerCase(), { name: destName, destination: destName, count: 0, source: 'KnowledgeBase' });
-      }
-      (d.attractions || []).forEach(att => {
-        const attName = att.name;
-        if (!locationSet.has(attName.toLowerCase())) {
-          locationSet.set(attName.toLowerCase(), { name: attName, destination: destName, count: 0, source: 'Attraction' });
-        }
-      });
-    });
-
-    // Add locations used in real Trip Itineraries
-    trips.forEach(t => {
-      const dest = t.destination || t.location;
-      (t.itinerary || []).forEach(day => {
-        const locName = day.locationName || day.title;
-        if (locName) {
-          const key = locName.toLowerCase().trim();
-          const existing = locationSet.get(key);
-          if (existing) {
-            existing.count += 1;
-          } else {
-            locationSet.set(key, { name: locName, destination: dest, count: 1, source: 'Trip' });
-          }
-        }
-      });
-    });
-
-    // 2. Query MediaAsset database for exact matches and calculate coverage
-    const allUniqueLocations = Array.from(locationSet.values());
-    const reportList = [];
-    let exactCount = 0;
-    let fallbackCount = 0;
-    let missingCount = 0;
-
-    for (const item of allUniqueLocations) {
-      const resolution = await resolveItineraryMedia({
-        locationName: item.name,
-        destination: item.destination
-      });
-
-      const hasExact = resolution.exactMatch;
-      const isUnmapped = resolution.matchLevel === 'FALLBACK_UNMAPPED' || resolution.matchLevel === 'NONE';
-      const hasAny = Boolean(resolution.recommended);
-
-      let status = 'MISSING';
-      if (hasExact) {
-        status = 'EXACT';
-        exactCount += 1;
-      } else if (hasAny && !isUnmapped) {
-        status = 'FALLBACK';
-        fallbackCount += 1;
-      } else {
-        status = 'MISSING';
-        missingCount += 1;
-      }
-
-      reportList.push({
-        location: item.name,
-        destination: item.destination,
-        source: item.source,
-        usageCount: item.count,
-        status,
-        matchLevel: resolution.matchLevel,
-        asset: resolution.recommended ? {
-          id: resolution.recommended._id,
-          title: resolution.recommended.title,
-          url: resolution.recommended.storage?.secureUrl
-        } : null
-      });
+    if (!isDbConnected()) {
+      return res.status(503).json({ success: false, message: 'Media coverage is unavailable while the database is disconnected.' });
     }
 
-    const totalLocations = allUniqueLocations.length;
-    const coveragePercentage = totalLocations > 0 
-      ? Math.round(((exactCount + fallbackCount) / totalLocations) * 100) 
-      : 100;
+    const [trips, assets] = await Promise.all([
+      Trip.find(
+        { status: { $ne: 'inactive' } },
+        { title: 1, destination: 1, location: 1, itinerary: 1 }
+      ).lean(),
+      MediaAsset.find({ active: true })
+        .select('title storage geography locationKeys categories')
+        .lean()
+    ]);
 
-    const totalAssetsCount = isDbConnected() ? await MediaAsset.countDocuments({ active: true }) : memoryMediaAssets.length;
+    const locationSet = new Map();
+    const addLocation = (name, destination, source = 'Trip') => {
+      const cleanName = String(name || '').trim();
+      if (!cleanName) return;
+      const key = cleanName.toLowerCase();
+      const existing = locationSet.get(key);
+      if (existing) {
+        existing.usageCount += 1;
+        return;
+      }
+      locationSet.set(key, {
+        name: cleanName,
+        destination: String(destination || cleanName).trim(),
+        source,
+        usageCount: 1
+      });
+    };
 
-    res.json({
+    trips.forEach((trip) => {
+      const destination = trip.destination || trip.location || '';
+      addLocation(destination, destination, 'Trip destination');
+      (trip.itinerary || []).forEach((day) => addLocation(day.locationName || day.title, destination, 'Trip itinerary'));
+    });
+
+    const normalizedAssets = assets.map((asset) => {
+      const values = [
+        ...(asset.locationKeys || []),
+        asset.geography?.destination,
+        asset.geography?.city,
+        asset.geography?.locality,
+        asset.geography?.poi
+      ].filter(Boolean).map((value) => String(value).toLowerCase().trim());
+      return { ...asset, matchKeys: new Set(values) };
+    });
+
+    const locations = Array.from(locationSet.values()).map((location) => {
+      const locationKey = location.name.toLowerCase();
+      const destinationKey = location.destination.toLowerCase();
+      const asset = normalizedAssets.find((candidate) =>
+        candidate.matchKeys.has(locationKey)
+        || candidate.matchKeys.has(destinationKey)
+        || Array.from(candidate.matchKeys).some((key) => key.includes(locationKey) || locationKey.includes(key))
+      );
+      return {
+        location: location.name,
+        destination: location.destination,
+        source: location.source,
+        usageCount: location.usageCount,
+        status: asset ? 'EXACT' : 'MISSING',
+        matchLevel: asset ? 'DATABASE_MATCH' : 'NONE',
+        asset: asset ? { id: asset._id, title: asset.title, url: asset.storage?.secureUrl } : null
+      };
+    });
+
+    const byDestination = {};
+    const byCategory = {};
+    assets.forEach((asset) => {
+      const destination = asset.geography?.destination || 'Unassigned';
+      byDestination[destination] = (byDestination[destination] || 0) + 1;
+      (asset.categories || []).forEach((category) => {
+        byCategory[category] = (byCategory[category] || 0) + 1;
+      });
+    });
+
+    const exactCount = locations.filter((item) => item.status === 'EXACT').length;
+    const missingQueue = locations.filter((item) => item.status === 'MISSING');
+    const totalLocations = locations.length;
+    const coveragePercentage = totalLocations ? Math.round((exactCount / totalLocations) * 100) : 100;
+
+    return res.json({
       success: true,
       data: {
         metrics: {
+          totalAssets: assets.length,
           totalLocations,
           exactCount,
-          fallbackCount,
-          missingCount,
+          fallbackCount: 0,
+          missingCount: missingQueue.length,
           coveragePercentage
         },
-        locations: reportList,
-        missingQueue: reportList.filter(l => l.status === 'MISSING')
+        byDestination,
+        byCategory,
+        locations,
+        missingQueue
       },
-      totalAssets: totalAssetsCount,
+      totalAssets: assets.length,
       coverageRate: `${coveragePercentage}%`,
-      missingLocations: reportList.filter(l => l.status === 'MISSING')
+      missingLocations: missingQueue
     });
   } catch (error) {
     console.error('Media Coverage Report Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to generate media coverage report' });
+    return res.status(500).json({ success: false, message: error.message || 'Failed to generate media coverage report' });
   }
 };
 
@@ -558,6 +520,7 @@ export const getMediaCoverageReport = async (req, res) => {
 // @access  Private (Admin)
 export const getMediaHealth = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media health is unavailable while the database is disconnected.' });
     const [totalAssets, activeCount, inactiveCount, withoutUrl] = await Promise.all([
       MediaAsset.countDocuments(),
       MediaAsset.countDocuments({ active: true }),

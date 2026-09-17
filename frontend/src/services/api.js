@@ -138,8 +138,9 @@ export async function getAdminStatsApi(range = '30d') {
   return data;
 }
 
-export async function getCouponsApi() {
-  const response = await fetch(`${API_BASE_URL}/admin/coupons`, {
+export async function getCouponsApi(params = {}) {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all')).toString();
+  const response = await fetch(`${API_BASE_URL}/admin/coupons${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -162,6 +163,15 @@ export async function createCouponApi(couponData) {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to create coupon');
   }
+  return data;
+}
+
+export async function updateCouponApi(couponId, couponData) {
+  const response = await fetch(`${API_BASE_URL}/admin/coupons/${encodeURIComponent(couponId)}`, {
+    method: 'PUT', headers: getHeaders(), body: JSON.stringify(couponData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update coupon');
   return data;
 }
 
@@ -191,8 +201,47 @@ export async function deleteCouponApi(couponId) {
   return data;
 }
 
-export async function getAdminUsersApi() {
-  const response = await fetch(`${API_BASE_URL}/admin/users`, {
+export async function getAdminPayoutsApi(params = {}) {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all')).toString();
+  const response = await fetch(`${API_BASE_URL}/admin/payouts${query ? `?${query}` : ''}`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch payouts');
+  return data;
+}
+
+export async function getAdminPayoutApi(payoutId) {
+  const response = await fetch(`${API_BASE_URL}/admin/payouts/${encodeURIComponent(payoutId)}`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch payout');
+  return data.payout || data;
+}
+
+export async function getEligiblePayoutCreatorsApi() {
+  const response = await fetch(`${API_BASE_URL}/admin/payouts/eligible-creators`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch eligible creators');
+  return data.creators || [];
+}
+
+export async function createPayoutApi(payload) {
+  const response = await fetch(`${API_BASE_URL}/admin/payouts`, { method: 'POST', headers: getHeaders(), body: JSON.stringify(payload) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create payout');
+  return data.payout || data;
+}
+
+export async function updatePayoutStatusApi(payoutId, action, reason = '') {
+  const response = await fetch(`${API_BASE_URL}/admin/payouts/${encodeURIComponent(payoutId)}/status`, { method: 'PUT', headers: getHeaders(), body: JSON.stringify({ action, reason }) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update payout');
+  return data.payout || data;
+}
+
+export async function getAdminUsersApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'envelope' && value !== undefined && value !== null && value !== '' && value !== 'all')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/admin/users${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -201,25 +250,60 @@ export async function getAdminUsersApi() {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch users');
   }
+  return params.envelope ? data : (data.users || data);
+}
+
+export async function getAdminUserByIdApi(userId) {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch user details');
   return data;
 }
 
-export async function updateUserRoleApi(userId, role) {
-  const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+export async function createAdminStaffUserApi(staffData) {
+  const response = await fetch(`${API_BASE_URL}/admin/users/staff`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(staffData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create staff account');
+  return data.user || data;
+}
+
+export async function updateUserRoleApi(userId, role, options = {}) {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/role`, {
     method: 'PUT',
     headers: getHeaders(),
-    body: JSON.stringify({ role })
+    body: JSON.stringify({ role, confirmSelfChange: options.confirmSelfChange === true })
   });
 
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to update user role');
   }
-  return data;
+  return data.user || data;
 }
 
-export async function getAdminBookingsApi() {
-  const response = await fetch(`${API_BASE_URL}/admin/bookings`, {
+export async function updateUserAccountStatusApi(userId, isActive, options = {}) {
+  const response = await fetch(`${API_BASE_URL}/admin/users/${encodeURIComponent(userId)}/status`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ isActive, confirmSelfChange: options.confirmSelfChange === true })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update account status');
+  return data.user || data;
+}
+
+export async function getAdminBookingsApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'envelope' && value !== undefined && value !== null && value !== '' && value !== 'all')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/admin/bookings${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -228,12 +312,46 @@ export async function getAdminBookingsApi() {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch admin bookings');
   }
+  return params.envelope ? data : (data.bookings || data);
+}
+
+export async function getAdminBookingByIdApi(bookingId) {
+  const response = await fetch(`${API_BASE_URL}/admin/bookings/${encodeURIComponent(bookingId)}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch booking details');
+  return data.booking || data;
+}
+
+export async function cancelBookingRecordApi(bookingId, reason) {
+  const response = await fetch(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/cancel`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ reason })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to cancel booking');
+  return data;
+}
+
+export async function resendBookingWhatsAppApi(bookingId) {
+  const response = await fetch(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/send-whatsapp`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to process WhatsApp notification');
   return data;
 }
 
 // Influencer Verification Endpoints (Database-Driven)
-export async function getInfluencerApplicationsApi() {
-  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications`, {
+export async function getInfluencerApplicationsApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'envelope' && value !== undefined && value !== null && value !== '' && value !== 'all')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -242,13 +360,24 @@ export async function getInfluencerApplicationsApi() {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch influencer applications');
   }
-  return data;
+  return params.envelope ? data : (data.applications || data);
 }
 
-export async function approveInfluencerApplicationApi(userId) {
-  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/approve`, {
-    method: 'PUT',
+export async function getInfluencerApplicationByIdApi(userId) {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${encodeURIComponent(userId)}`, {
+    method: 'GET',
     headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch creator application');
+  return data.application || data;
+}
+
+export async function approveInfluencerApplicationApi(userId, notes = '') {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${encodeURIComponent(userId)}/approve`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify({ notes })
   });
 
   const data = await response.json();
@@ -259,7 +388,7 @@ export async function approveInfluencerApplicationApi(userId) {
 }
 
 export async function rejectInfluencerApplicationApi(userId, reason) {
-  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${userId}/reject`, {
+  const response = await fetch(`${API_BASE_URL}/admin/influencer-applications/${encodeURIComponent(userId)}/reject`, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify({ reason })
@@ -307,7 +436,9 @@ export async function getInfluencerPlansApi() {
     method: 'GET',
     headers: getHeaders()
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch eligible plans');
+  return data.plans || data;
 }
 
 export async function generateCouponApi(planData) {
@@ -316,7 +447,16 @@ export async function generateCouponApi(planData) {
     headers: getHeaders(),
     body: JSON.stringify(planData)
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to generate coupon');
+  return data.coupon || data;
+}
+
+export async function getInfluencerCouponsApi() {
+  const response = await fetch(`${API_BASE_URL}/influencer/coupons`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch creator coupons');
+  return data.coupons || data;
 }
 
 export async function getWalletSummaryApi() {
@@ -324,7 +464,23 @@ export async function getWalletSummaryApi() {
     method: 'GET',
     headers: getHeaders()
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch wallet summary');
+  return data.wallet || data;
+}
+
+export async function getWalletTransactionsApi() {
+  const response = await fetch(`${API_BASE_URL}/influencer/wallet/transactions`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch wallet transactions');
+  return data.transactions || data;
+}
+
+export async function getInfluencerPayoutsApi() {
+  const response = await fetch(`${API_BASE_URL}/influencer/payouts`, { headers: getHeaders() });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch payout history');
+  return data.payouts || data;
 }
 
 export async function requestPayoutApi(amount, destination) {
@@ -333,7 +489,9 @@ export async function requestPayoutApi(amount, destination) {
     headers: getHeaders(),
     body: JSON.stringify({ amount, destination })
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to request payout');
+  return data.payout || data;
 }
 
 // ==========================================
@@ -939,7 +1097,7 @@ export async function deleteTripApi(tripId) {
   return data;
 }
 
-// Media / Image Upload API (Cloudinary + Local Fallback)
+// Staff Media / Image Upload API (Cloudinary)
 export async function uploadImageApi(file, folder = 'wanderluxe/trips') {
   const formData = new FormData();
   formData.append('image', file);
@@ -965,8 +1123,11 @@ export async function uploadImageApi(file, folder = 'wanderluxe/trips') {
 // MASTER ADMIN DYNAMIC PAGES CMS APIS
 // ==========================================
 
-export async function getAllAdminPagesApi() {
-  const response = await fetch(`${API_BASE_URL}/pages`, {
+export async function getAllAdminPagesApi(params = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'envelope' && value !== undefined && value !== null && value !== '' && value !== 'all')
+  ).toString();
+  const response = await fetch(`${API_BASE_URL}/pages/admin${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -974,7 +1135,17 @@ export async function getAllAdminPagesApi() {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch dynamic pages');
   }
-  return Array.isArray(data) ? data : (data.pages || []);
+  return params.envelope ? data : (data.pages || []);
+}
+
+export async function getAdminPageByIdApi(pageId) {
+  const response = await fetch(`${API_BASE_URL}/pages/admin/${encodeURIComponent(pageId)}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch CMS page');
+  return data.page || data;
 }
 
 export async function getPageBySlugApi(slug) {
@@ -1193,8 +1364,10 @@ export async function customerQuotationDecisionApi(token, payload) {
 // ================================================================
 
 export async function listMediaAssetsApi(params = {}) {
-  const query = new URLSearchParams(params).toString();
-  const url = `${API_BASE_URL}/media${query ? `?${query}` : ''}`;
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([key, value]) => key !== 'admin' && value !== undefined && value !== null && value !== '' && (value !== 'all' || key === 'active'))
+  ).toString();
+  const url = `${API_BASE_URL}/media${params.admin ? '/admin' : ''}${query ? `?${query}` : ''}`;
   const response = await fetch(url, {
     method: 'GET',
     headers: getHeaders()
@@ -1227,7 +1400,7 @@ export async function resolveItineraryMediaApi(payload) {
 
 export async function getMediaCoverageReportApi(params = {}) {
   const query = new URLSearchParams(params).toString();
-  const url = `${API_BASE_URL}/media/coverage-report${query ? `?${query}` : ''}`;
+  const url = `${API_BASE_URL}/media/coverage${query ? `?${query}` : ''}`;
   const response = await fetch(url, {
     method: 'GET',
     headers: getHeaders()
@@ -1259,8 +1432,8 @@ export async function updateMediaAssetApi(id, assetData) {
   return data.data;
 }
 
-export async function deleteMediaAssetApi(id) {
-  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+export async function deleteMediaAssetApi(id, { permanent = false } = {}) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}${permanent ? '?permanent=true' : ''}`, {
     method: 'DELETE',
     headers: getHeaders()
   });
@@ -1305,19 +1478,35 @@ export default {
   getAdminStatsApi,
   getCouponsApi,
   createCouponApi,
+  updateCouponApi,
   toggleCouponApi,
   deleteCouponApi,
+  getAdminPayoutsApi,
+  getAdminPayoutApi,
+  getEligiblePayoutCreatorsApi,
+  createPayoutApi,
+  updatePayoutStatusApi,
   getAdminUsersApi,
+  getAdminUserByIdApi,
+  createAdminStaffUserApi,
   updateUserRoleApi,
+  updateUserAccountStatusApi,
   getAdminBookingsApi,
+  getAdminBookingByIdApi,
+  cancelBookingRecordApi,
+  resendBookingWhatsAppApi,
   getInfluencerApplicationsApi,
+  getInfluencerApplicationByIdApi,
   approveInfluencerApplicationApi,
   rejectInfluencerApplicationApi,
   updateTripSeoApi,
   validateCouponServerApi,
   getInfluencerPlansApi,
   generateCouponApi,
+  getInfluencerCouponsApi,
   getWalletSummaryApi,
+  getWalletTransactionsApi,
+  getInfluencerPayoutsApi,
   requestPayoutApi,
   calculateBookingPricingApi,
   createBookingOrderApi,
@@ -1362,6 +1551,7 @@ export default {
   deleteTripApi,
   uploadImageApi,
   getAllAdminPagesApi,
+  getAdminPageByIdApi,
   getPageBySlugApi,
   createPageApi,
   updatePageApi,

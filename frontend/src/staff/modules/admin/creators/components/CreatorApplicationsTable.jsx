@@ -1,0 +1,10 @@
+import React from 'react';
+import { ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import CreatorStatusBadge from './CreatorStatusBadge.jsx';
+import { creatorProfileLabel, formatCreatorDate } from '../creatorAdminHelpers.js';
+
+const CreatorApplicationsTable = ({ applications }) => <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white lg:block"><table className="w-full min-w-[900px] text-left"><thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500"><tr><th className="px-4 py-3">Applicant</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3">Platform / profile</th><th className="px-4 py-3">Followers / reach</th><th className="px-4 py-3">Applied</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{applications.map((user) => <tr key={user._id} className="hover:bg-slate-50/70"><td className="px-4 py-4"><p className="text-sm font-semibold text-slate-900">{user.name}</p><p className="mt-1 text-xs text-slate-500">{user.influencerApplication?.niche || 'No niche provided'}</p></td><td className="px-4 py-4"><p className="text-sm text-slate-700">{user.email}</p><p className="mt-1 text-xs text-slate-500">{user.phone || 'No phone'}</p></td><td className="px-4 py-4 text-sm text-slate-600">{creatorProfileLabel(user.influencerApplication)}</td><td className="px-4 py-4 text-sm font-semibold text-slate-700">{user.influencerApplication?.followerCount || 'Not provided'}</td><td className="px-4 py-4 text-xs text-slate-500">{formatCreatorDate(user.influencerApplication?.appliedAt)}</td><td className="px-4 py-4"><CreatorStatusBadge status={user.influencerStatus} /></td><td className="px-4 py-4 text-right"><Link to={`/staff/admin/creators/${user._id}`} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Review <ArrowRight size={14} /></Link></td></tr>)}</tbody></table></div>;
+
+export default CreatorApplicationsTable;
+

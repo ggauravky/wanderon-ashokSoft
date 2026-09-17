@@ -3,103 +3,24 @@ import Page from '../models/Page.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
-// Memory Fallback Store for Pages
-const memoryPages = [
-  {
-    _id: 'page_meghalaya_guide',
-    title: 'Complete Meghalaya Travel Guide 2026',
-    slug: 'meghalaya-travel-guide',
-    heroSubtitle: 'Explore the Abode of Clouds, Living Root Bridges, and Crystal Clear Rivers',
-    category: 'Guides',
-    content: 'Meghalaya, located in Northeast India, is famous for Cherrapunji, Mawlynnong, and the magical Umngot River in Dawki. Plan your perfect adventure with WanderLuxe curated itineraries.',
-    sections: [
-      {
-        heading: 'Top Attractions in Meghalaya',
-        subheading: 'From Nohkalikai Falls to Double Decker Root Bridges',
-        body: 'Walk through lush rainforests of Nongriat and experience indigenous Khasi bio-engineering at the living root bridges.',
-        imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-        imageAlt: 'Meghalaya Living Root Bridge',
-        ctaLabel: 'Book Meghalaya Trip',
-        ctaUrl: '/trip/meghalaya-backpacking-living-root-bridges'
-      }
-    ],
-    status: 'published',
-    author: 'WanderLuxe Editorial',
-    createdAt: new Date('2026-01-10'),
-    updatedAt: new Date('2026-01-15'),
-    seo: {
-      metaTitle: 'Meghalaya Travel Guide 2026 | Itinerary, Best Time & Root Bridges | WanderLuxe',
-      metaDescription: 'Discover the ultimate Meghalaya backpacking guide. Explore Dawki river, living root bridges, waterfalls, and local Khasi culture with WanderLuxe.',
-      keywords: 'Meghalaya travel, Cherrapunji, Dawki, Living Root Bridges, Northeast India tours',
-      canonicalUrl: 'https://wanderluxe.in/page/meghalaya-travel-guide',
-      robots: 'index, follow',
-      ogTitle: 'Ultimate Meghalaya Backpacking Guide 2026',
-      ogDescription: 'Experience living root bridges and crystal Dawki river with curated WanderLuxe itineraries.',
-      ogImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-      ogType: 'article',
-      twitterCard: 'summary_large_image',
-      twitterTitle: 'Meghalaya Travel Guide | WanderLuxe',
-      twitterDescription: 'Complete guide to Meghalaya waterfalls and root bridges.',
-      twitterImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-      structuredDataType: 'TouristAttraction',
-      structuredDataJson: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "TouristAttraction",
-        "name": "Meghalaya Living Root Bridges",
-        "description": "Natural living root bridges engineered by local Khasi tribes in Meghalaya.",
-        "location": {
-          "@type": "Place",
-          "name": "Nongriat, Meghalaya, India"
-        }
-      })
-    }
-  },
-  {
-    _id: 'page_spiti_guide',
-    title: 'Spiti Valley High Altitude Expedition Blueprint',
-    slug: 'spiti-valley-guide',
-    heroSubtitle: 'Conquer Key Monastery, Chandratal Lake, and High Himalayan Passes',
-    category: 'Expeditions',
-    content: 'Spiti Valley is a cold desert mountain valley located high in the Himalayas. Discover ancient monasteries, homestays, and rugged terrain.',
-    sections: [
-      {
-        heading: 'Monasteries & High Passes',
-        subheading: 'Key Monastery & Kunzum Pass',
-        body: 'Visit 1000-year-old Key Monastery perched atop a cliff at 13,668 feet above sea level.',
-        imageUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
-        imageAlt: 'Key Monastery Spiti Valley',
-        ctaLabel: 'Book Spiti Expedition',
-        ctaUrl: '/trip/spiti-valley-circuit-high-altitude-roadtrip'
-      }
-    ],
-    status: 'published',
-    author: 'Gaurav Sharma',
-    createdAt: new Date('2026-02-01'),
-    updatedAt: new Date('2026-02-05'),
-    seo: {
-      metaTitle: 'Spiti Valley Travel Guide 2026 | Key Monastery & Roadtrips | WanderLuxe',
-      metaDescription: 'Complete travel guide for Spiti Valley circuit. Tips for acclimatization, best month to visit, Chandratal camping, and monastery circuits.',
-      keywords: 'Spiti Valley roadtrip, Key Monastery, Kaza, Chandratal, Himachal Pradesh',
-      canonicalUrl: 'https://wanderluxe.in/page/spiti-valley-guide',
-      robots: 'index, follow',
-      ogTitle: 'Spiti Valley Circuit Expedition Blueprint',
-      ogDescription: 'Experience the raw magic of Himachal cold desert in Spiti Valley.',
-      ogImage: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
-      ogType: 'article',
-      twitterCard: 'summary_large_image',
-      twitterTitle: 'Spiti Valley Expedition Guide',
-      twitterDescription: 'Key Monastery and Chandratal roadtrip blueprint.',
-      twitterImage: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
-      structuredDataType: 'Article',
-      structuredDataJson: JSON.stringify({
-        "@context": "https://schema.org",
-        "@type": "Article",
-        "headline": "Spiti Valley High Altitude Expedition Blueprint",
-        "author": { "@type": "Person", "name": "Gaurav Sharma" }
-      })
-    }
-  }
-];
+const normalizeSlug = (value) => String(value || '')
+  .toLowerCase()
+  .trim()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '');
+
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^{}()|[\]\\$]/g, '\\$&');
+const requireDatabase = (res) => {
+  if (isDbConnected()) return true;
+  res.status(503).json({ success: false, message: 'CMS pages are unavailable while the database is disconnected.' });
+  return false;
+};
+
+const withSeoAudit = (page) => {
+  const pageObject = typeof page?.toObject === 'function' ? page.toObject() : page;
+  const seoAudit = calculateSeoHealth(pageObject?.seo, pageObject?.title);
+  return { ...pageObject, seoHealthScore: seoAudit.totalScore, seoAudit };
+};
 
 // Helper: Calculate Live Backend SEO Health Audit Score (0 - 100%)
 export const calculateSeoHealth = (seo, pageTitle) => {
@@ -165,228 +86,210 @@ export const calculateSeoHealth = (seo, pageTitle) => {
   return { totalScore: score, checks };
 };
 
-// @desc    Get all dynamic pages (Admin access sees drafts, public sees published)
+// @desc    Get published dynamic pages
 // @route   GET /api/pages
-// @access  Public / Admin
+// @access  Public
 export const getAllPages = async (req, res) => {
   try {
-    const isAdmin = req.user?.role === 'admin';
-    const filter = isAdmin ? {} : { status: 'published' };
-
-    let pages = [];
-    if (isDbConnected()) {
-      try {
-        pages = await Page.find(filter).sort({ updatedAt: -1 });
-      } catch (e) {}
-    }
-
-    if (pages.length === 0) {
-      pages = memoryPages.filter((p) => (isAdmin ? true : p.status === 'published'));
-    }
-
-    const pagesWithSeoScore = pages.map((p) => {
-      const pageObj = typeof p.toObject === 'function' ? p.toObject() : p;
-      const seoAudit = calculateSeoHealth(pageObj.seo, pageObj.title);
-      return { ...pageObj, seoHealthScore: seoAudit.totalScore, seoAudit };
-    });
-
-    res.json(pagesWithSeoScore);
+    if (!requireDatabase(res)) return;
+    const pages = await Page.find({ status: 'published' }).sort({ updatedAt: -1 }).limit(100).lean();
+    return res.json(pages.map(withSeoAudit));
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error fetching pages' });
+    return res.status(500).json({ message: error.message || 'Server Error fetching pages' });
   }
 };
 
-// @desc    Get single dynamic page by slug
+// @desc    Get all CMS pages, including drafts
+// @route   GET /api/pages/admin
+// @access  Private/Admin
+export const getAdminPages = async (req, res) => {
+  try {
+    if (!requireDatabase(res)) return;
+    const { search, status = 'all', page = 1, limit = 25, sort = 'updated_desc' } = req.query;
+    const filter = {};
+    if (status !== 'all') filter.status = status;
+    if (search?.trim()) {
+      const pattern = new RegExp(escapeRegex(search.trim()), 'i');
+      filter.$or = [{ title: pattern }, { slug: pattern }, { category: pattern }, { author: pattern }];
+    }
+
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
+    const sortOptions = {
+      updated_desc: { updatedAt: -1 },
+      updated_asc: { updatedAt: 1 },
+      title_asc: { title: 1 },
+      title_desc: { title: -1 }
+    };
+    const [total, pages] = await Promise.all([
+      Page.countDocuments(filter),
+      Page.find(filter)
+        .sort(sortOptions[sort] || sortOptions.updated_desc)
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
+        .lean()
+    ]);
+
+    return res.json({
+      success: true,
+      pages: pages.map(withSeoAudit),
+      pagination: { page: pageNumber, limit: pageSize, total, pages: Math.ceil(total / pageSize) }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || 'Server Error fetching CMS pages' });
+  }
+};
+
+// @desc    Get one CMS page, including drafts
+// @route   GET /api/pages/admin/:id
+// @access  Private/Admin
+export const getAdminPageById = async (req, res) => {
+  try {
+    if (!requireDatabase(res)) return;
+    const { id } = req.params;
+    const filter = mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { slug: normalizeSlug(id) };
+    const page = await Page.findOne(filter).lean();
+    if (!page) return res.status(404).json({ success: false, message: 'Page record not found.' });
+    return res.json({ success: true, page: withSeoAudit(page) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || 'Server Error fetching CMS page' });
+  }
+};
+
+// @desc    Get single published dynamic page by slug
 // @route   GET /api/pages/:slug
 // @access  Public
 export const getPageBySlug = async (req, res) => {
   try {
-    const { slug } = req.params;
-    const cleanSlug = String(slug).toLowerCase().trim();
-
-    let page = null;
-    if (isDbConnected()) {
-      try {
-        page = await Page.findOne({ slug: cleanSlug, status: 'published' });
-      } catch (e) {}
-    }
-
-    if (!page) {
-      page = memoryPages.find((p) => p.slug === cleanSlug && p.status === 'published');
-    }
-
+    if (!requireDatabase(res)) return;
+    const cleanSlug = normalizeSlug(req.params.slug);
+    const page = await Page.findOne({ slug: cleanSlug, status: 'published' }).lean();
     if (!page) {
       return res.status(404).json({ message: `Dynamic page '/page/${cleanSlug}' not found or in draft mode.` });
     }
-
-    const pageObj = typeof page.toObject === 'function' ? page.toObject() : page;
-    const seoAudit = calculateSeoHealth(pageObj.seo, pageObj.title);
-
-    res.json({ ...pageObj, seoHealthScore: seoAudit.totalScore, seoAudit });
+    return res.json(withSeoAudit(page));
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error fetching page' });
+    return res.status(500).json({ message: error.message || 'Server Error fetching page' });
   }
 };
 
-// @desc    Create new dynamic page (Admin Only)
+const buildSeo = ({ seo = {}, title, slug, heroSubtitle = '', content = '', sections = [] }, currentSeo = {}) => {
+  const frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in';
+  const merged = { ...currentSeo, ...seo };
+  return {
+    metaTitle: merged.metaTitle || `${title} | WanderLuxe`,
+    metaDescription: merged.metaDescription || heroSubtitle || String(content).slice(0, 160),
+    keywords: merged.keywords || '',
+    canonicalUrl: merged.canonicalUrl || `${frontendUrl}/page/${slug}`,
+    robots: merged.robots || 'index, follow',
+    ogTitle: merged.ogTitle || merged.metaTitle || title,
+    ogDescription: merged.ogDescription || merged.metaDescription || '',
+    ogImage: merged.ogImage || sections?.[0]?.imageUrl || '',
+    ogType: merged.ogType || 'website',
+    twitterCard: merged.twitterCard || 'summary_large_image',
+    twitterTitle: merged.twitterTitle || merged.ogTitle || title,
+    twitterDescription: merged.twitterDescription || merged.ogDescription || '',
+    twitterImage: merged.twitterImage || merged.ogImage || '',
+    structuredDataType: merged.structuredDataType || 'WebPage',
+    structuredDataJson: merged.structuredDataJson || ''
+  };
+};
+
+// @desc    Create new dynamic page
 // @route   POST /api/pages
 // @access  Private/Admin
 export const createPage = async (req, res) => {
   try {
-    const { title, slug, heroSubtitle, category, content, sections, status, author, seo } = req.body;
+    if (!requireDatabase(res)) return;
+    const { title, slug, heroSubtitle = '', category = 'General', content = '', sections = [], status = 'draft', author, seo = {} } = req.body;
+    const cleanTitle = String(title || '').trim();
+    const cleanSlug = normalizeSlug(slug || cleanTitle);
+    if (!cleanTitle || !cleanSlug) return res.status(400).json({ message: 'Page title and URL slug are required.' });
+    if (!['draft', 'published'].includes(status)) return res.status(400).json({ message: 'Page status must be draft or published.' });
 
-    if (!title || !slug) {
-      return res.status(400).json({ message: 'Page title and URL slug are required.' });
-    }
-
-    const cleanSlug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-
-    // Check duplicate
-    let existing = null;
-    if (isDbConnected()) {
-      try { existing = await Page.findOne({ slug: cleanSlug }); } catch (e) {}
-    }
-    if (!existing) {
-      existing = memoryPages.find((p) => p.slug === cleanSlug);
-    }
-
-    if (existing) {
-      return res.status(400).json({ message: `A page with URL slug '/page/${cleanSlug}' already exists.` });
-    }
-
-    const frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in';
+    const duplicate = await Page.exists({ slug: cleanSlug });
+    if (duplicate) return res.status(409).json({ message: `A page with URL slug '/page/${cleanSlug}' already exists.` });
 
     const pageData = {
-      title,
+      title: cleanTitle,
       slug: cleanSlug,
-      heroSubtitle: heroSubtitle || '',
-      category: category || 'General',
-      content: content || '',
-      sections: sections || [],
-      status: status || 'published',
-      author: author || req.user?.name || 'WanderLuxe Editorial',
-      seo: {
-        metaTitle: seo?.metaTitle || `${title} | WanderLuxe`,
-        metaDescription: seo?.metaDescription || heroSubtitle || content.substring(0, 160) || title,
-        keywords: seo?.keywords || '',
-        canonicalUrl: seo?.canonicalUrl || `${frontendUrl}/page/${cleanSlug}`,
-        robots: seo?.robots || 'index, follow',
-        ogTitle: seo?.ogTitle || seo?.metaTitle || title,
-        ogDescription: seo?.ogDescription || seo?.metaDescription || '',
-        ogImage: seo?.ogImage || (sections?.[0]?.imageUrl || ''),
-        ogType: seo?.ogType || 'article',
-        twitterCard: seo?.twitterCard || 'summary_large_image',
-        twitterTitle: seo?.twitterTitle || seo?.metaTitle || title,
-        twitterDescription: seo?.twitterDescription || seo?.metaDescription || '',
-        twitterImage: seo?.twitterImage || seo?.ogImage || '',
-        structuredDataType: seo?.structuredDataType || 'WebPage',
-        structuredDataJson: seo?.structuredDataJson || ''
-      }
+      heroSubtitle,
+      category,
+      content,
+      sections: Array.isArray(sections) ? sections : [],
+      status,
+      author: String(author || req.user?.name || 'WanderLuxe Editorial Team').trim(),
+      seo: buildSeo({ seo, title: cleanTitle, slug: cleanSlug, heroSubtitle, content, sections })
     };
-
-    let newPage = null;
-    if (isDbConnected()) {
-      try {
-        newPage = await Page.create(pageData);
-      } catch (dbErr) {
-        console.warn('Page DB Save fallback:', dbErr.message);
-      }
-    }
-
-    if (!newPage) {
-      newPage = { ...pageData, _id: 'page_' + Date.now(), createdAt: new Date(), updatedAt: new Date() };
-      memoryPages.unshift(newPage);
-    }
-
-    const seoAudit = calculateSeoHealth(newPage.seo, newPage.title);
-
-    res.status(201).json({
-      message: 'Dynamic page created successfully with full backend SEO configuration.',
-      page: { ...newPage, seoHealthScore: seoAudit.totalScore, seoAudit }
-    });
+    const newPage = await Page.create(pageData);
+    return res.status(201).json({ message: 'Dynamic page created successfully.', page: withSeoAudit(newPage) });
   } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'A page with this URL slug already exists.' });
     console.error('Create Page Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error creating page' });
+    return res.status(500).json({ message: error.message || 'Server Error creating page' });
   }
 };
 
-// @desc    Update existing dynamic page (Admin Only)
+// @desc    Update existing dynamic page
 // @route   PUT /api/pages/:id
 // @access  Private/Admin
 export const updatePage = async (req, res) => {
   try {
+    if (!requireDatabase(res)) return;
     const { id } = req.params;
-    const { title, slug, heroSubtitle, category, content, sections, status, author, seo } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid page ID.' });
+    const page = await Page.findById(id);
+    if (!page) return res.status(404).json({ message: 'Page record not found.' });
 
-    let page = null;
-    if (isDbConnected()) {
-      try {
-        page = await Page.findById(id);
-      } catch (e) {}
+    const nextTitle = req.body.title !== undefined ? String(req.body.title).trim() : page.title;
+    const nextSlug = req.body.slug !== undefined ? normalizeSlug(req.body.slug) : page.slug;
+    const identityChanged = nextSlug !== page.slug || nextTitle !== page.title;
+    if (!nextTitle || !nextSlug) return res.status(400).json({ message: 'Page title and URL slug are required.' });
+    if (req.body.status !== undefined && !['draft', 'published'].includes(req.body.status)) {
+      return res.status(400).json({ message: 'Page status must be draft or published.' });
+    }
+    const duplicate = await Page.exists({ slug: nextSlug, _id: { $ne: page._id } });
+    if (duplicate) return res.status(409).json({ message: `A page with URL slug '/page/${nextSlug}' already exists.` });
+
+    page.title = nextTitle;
+    page.slug = nextSlug;
+    if (req.body.heroSubtitle !== undefined) page.heroSubtitle = req.body.heroSubtitle;
+    if (req.body.category !== undefined) page.category = req.body.category;
+    if (req.body.content !== undefined) page.content = req.body.content;
+    if (req.body.sections !== undefined) page.sections = Array.isArray(req.body.sections) ? req.body.sections : [];
+    if (req.body.status !== undefined) page.status = req.body.status;
+    if (req.body.author !== undefined) page.author = req.body.author;
+    if (req.body.seo !== undefined || identityChanged) {
+      page.seo = buildSeo({
+        seo: req.body.seo || {},
+        title: page.title,
+        slug: page.slug,
+        heroSubtitle: page.heroSubtitle,
+        content: page.content,
+        sections: page.sections
+      }, page.seo?.toObject?.() || page.seo || {});
     }
 
-    if (!page) {
-      page = memoryPages.find((p) => String(p._id) === String(id) || p.slug === id);
-    }
-
-    if (!page) {
-      return res.status(404).json({ message: 'Page record not found.' });
-    }
-
-    if (title) page.title = title;
-    if (slug) page.slug = String(slug).toLowerCase().replace(/[^a-z0-9-]/g, '-');
-    if (heroSubtitle !== undefined) page.heroSubtitle = heroSubtitle;
-    if (category !== undefined) page.category = category;
-    if (content !== undefined) page.content = content;
-    if (sections !== undefined) page.sections = sections;
-    if (status !== undefined) page.status = status;
-    if (author !== undefined) page.author = author;
-
-    if (seo) {
-      page.seo = {
-        ...(page.seo || {}),
-        ...seo
-      };
-    }
-
-    page.updatedAt = new Date();
-
-    if (isDbConnected() && typeof page.save === 'function') {
-      await page.save();
-    }
-
-    const pageObj = typeof page.toObject === 'function' ? page.toObject() : page;
-    const seoAudit = calculateSeoHealth(pageObj.seo, pageObj.title);
-
-    res.json({
-      message: 'Page updated successfully.',
-      page: { ...pageObj, seoHealthScore: seoAudit.totalScore, seoAudit }
-    });
+    await page.save();
+    return res.json({ message: 'Page updated successfully.', page: withSeoAudit(page) });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error updating page' });
+    if (error?.code === 11000) return res.status(409).json({ message: 'A page with this URL slug already exists.' });
+    return res.status(500).json({ message: error.message || 'Server Error updating page' });
   }
 };
 
-// @desc    Delete dynamic page (Admin Only)
+// @desc    Delete dynamic page
 // @route   DELETE /api/pages/:id
 // @access  Private/Admin
 export const deletePage = async (req, res) => {
   try {
+    if (!requireDatabase(res)) return;
     const { id } = req.params;
-
-    if (isDbConnected()) {
-      try {
-        await Page.findByIdAndDelete(id);
-      } catch (e) {}
-    }
-
-    const idx = memoryPages.findIndex((p) => String(p._id) === String(id) || p.slug === id);
-    if (idx !== -1) {
-      memoryPages.splice(idx, 1);
-    }
-
-    res.json({ message: 'Dynamic page deleted successfully.' });
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid page ID.' });
+    const page = await Page.findByIdAndDelete(id);
+    if (!page) return res.status(404).json({ message: 'Page record not found.' });
+    return res.json({ message: 'Dynamic page deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error deleting page' });
+    return res.status(500).json({ message: error.message || 'Server Error deleting page' });
   }
 };

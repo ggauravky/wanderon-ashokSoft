@@ -1,0 +1,11 @@
+import React from 'react';
+import { ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import UserRoleBadge from './UserRoleBadge.jsx';
+import UserStatusBadge from './UserStatusBadge.jsx';
+import { accountTypeLabel, formatUserDate, userInitials } from '../userAdminHelpers.js';
+
+const UsersTable = ({ users }) => <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white lg:block"><table className="w-full min-w-[980px] text-left"><thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500"><tr><th className="px-4 py-3">User</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Account type</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Last updated</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{users.map((user) => <tr key={user._id} className="hover:bg-slate-50/70"><td className="px-4 py-4"><div className="flex items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">{userInitials(user.name)}</span><div><p className="max-w-52 truncate text-sm font-semibold text-slate-900">{user.name}</p><p className="mt-0.5 text-xs text-slate-500">{user.phone || 'No phone'}</p></div></div></td><td className="px-4 py-4 text-sm text-slate-600">{user.email}</td><td className="px-4 py-4"><UserRoleBadge role={user.role} /></td><td className="px-4 py-4 text-sm text-slate-600">{accountTypeLabel(user.accountType)}</td><td className="px-4 py-4"><UserStatusBadge active={user.isActive} /></td><td className="px-4 py-4 text-xs text-slate-500">{formatUserDate(user.createdAt)}</td><td className="px-4 py-4 text-xs text-slate-500">{formatUserDate(user.updatedAt)}</td><td className="px-4 py-4 text-right"><Link to={`/staff/admin/users/${user._id}`} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">View <ArrowRight size={14} /></Link></td></tr>)}</tbody></table></div>;
+
+export default UsersTable;
+

@@ -100,6 +100,8 @@ mediaAssetSchema.index({ locationKeys: 1, active: 1 });
 mediaAssetSchema.index({ tags: 1, active: 1 });
 mediaAssetSchema.index({ 'storage.publicId': 1, active: 1 });
 mediaAssetSchema.index({ featured: -1, createdAt: -1 });
+mediaAssetSchema.index({ type: 1, active: 1, createdAt: -1 });
+mediaAssetSchema.index({ 'source.sourceType': 1, active: 1, createdAt: -1 });
 
 // Helper method to generate standardized location keys
 export const generateLocationKeys = (geo = {}, title = '', tags = []) => {

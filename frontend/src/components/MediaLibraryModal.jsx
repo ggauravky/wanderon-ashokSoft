@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  X, Search, Filter, Image as ImageIcon, Check, Eye, Tag, MapPin, 
-  Sparkles, RefreshCw, Upload, AlertCircle, Compass, CheckCircle2
+import React, { useCallback, useState, useEffect } from 'react';
+import {
+  X, Search, Image as ImageIcon, Check, Eye,
+  Sparkles, RefreshCw, Upload, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { listMediaAssetsApi } from '../services/api.js';
@@ -11,7 +11,7 @@ export default function MediaLibraryModal({
   onClose,
   onSelectMedia,
   initialDestination = '',
-  initialLocation = '',
+  initialLocation: _initialLocation = '',
   currentSelectedAssetId = null,
   onOpenUpload = null
 }) {
@@ -22,22 +22,15 @@ export default function MediaLibraryModal({
   const [destinationsList, setDestinationsList] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [previewAsset, setPreviewAsset] = useState(null);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (isOpen) {
-      if (initialDestination && !destinationFilter) {
-        setDestinationFilter(initialDestination);
-      }
-      fetchAssets();
-    }
-  }, [isOpen, destinationFilter]);
-
-  const fetchAssets = async () => {
+  const fetchAssets = useCallback(async (searchValue = '', destinationValue = '') => {
     try {
       setLoading(true);
+      setError('');
       const params = { limit: 60 };
-      if (search.trim()) params.search = search.trim();
-      if (destinationFilter && destinationFilter !== 'ALL') params.destination = destinationFilter;
+      if (searchValue.trim()) params.search = searchValue.trim();
+      if (destinationValue && destinationValue !== 'ALL') params.destination = destinationValue;
       
       const res = await listMediaAssetsApi(params);
       if (res.data) {
@@ -47,15 +40,22 @@ export default function MediaLibraryModal({
         }
       }
     } catch (err) {
-      console.error('Failed to load media library:', err);
+      setError(err.message || 'Unable to load media assets.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const nextDestination = destinationFilter || initialDestination;
+    if (initialDestination && !destinationFilter) setDestinationFilter(initialDestination);
+    fetchAssets('', nextDestination);
+  }, [destinationFilter, fetchAssets, initialDestination, isOpen]);
 
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
-    fetchAssets();
+    fetchAssets(search, destinationFilter);
   };
 
   const handleConfirmSelect = () => {
@@ -63,13 +63,13 @@ export default function MediaLibraryModal({
     onSelectMedia({
       assetId: selectedAsset._id,
       url: selectedAsset.storage?.secureUrl || selectedAsset.url,
-      altText: selectedAsset.altText || `${selectedAsset.title}, ${selectedAsset.location?.destination}`,
+      altText: selectedAsset.altText || `${selectedAsset.title}, ${selectedAsset.geography?.destination || ''}`,
       caption: selectedAsset.caption || selectedAsset.title,
       width: selectedAsset.storage?.width || 1600,
       height: selectedAsset.storage?.height || 900,
-      credit: selectedAsset.attribution?.credit || '',
-      locationName: selectedAsset.location?.poi || selectedAsset.location?.locality || selectedAsset.location?.city || selectedAsset.title,
-      destination: selectedAsset.location?.destination || ''
+      credit: selectedAsset.source?.attribution || '',
+      locationName: selectedAsset.geography?.poi || selectedAsset.geography?.locality || selectedAsset.geography?.city || selectedAsset.title,
+      destination: selectedAsset.geography?.destination || ''
     });
     onClose();
   };
@@ -156,7 +156,7 @@ export default function MediaLibraryModal({
 
             <button
               type="button"
-              onClick={fetchAssets}
+              onClick={() => fetchAssets(search, destinationFilter)}
               className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
               title="Refresh Media List"
             >
@@ -167,7 +167,9 @@ export default function MediaLibraryModal({
 
         {/* Media Asset Grid */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          {loading ? (
+          {error ? (
+            <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-rose-700 space-y-3"><AlertCircle size={24} /><p className="text-sm font-semibold">{error}</p><button type="button" onClick={() => fetchAssets(search, destinationFilter)} className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white">Retry</button></div>
+          ) : loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-2">
               <RefreshCw size={24} className="animate-spin text-emerald-600" />
               <span className="text-xs font-bold">Scanning canonical media repository...</span>
@@ -201,8 +203,8 @@ export default function MediaLibraryModal({
               {assets.map((asset) => {
                 const isSelected = selectedAsset?._id === asset._id || currentSelectedAssetId === asset._id;
                 const imgUrl = asset.storage?.secureUrl || asset.url;
-                const poi = asset.location?.poi || asset.title;
-                const dest = asset.location?.destination;
+                const poi = asset.geography?.poi || asset.title;
+                const dest = asset.geography?.destination;
 
                 return (
                   <div
@@ -275,7 +277,7 @@ export default function MediaLibraryModal({
               <div>
                 <strong className="text-slate-900 font-black">{selectedAsset.title}</strong>
                 <span className="text-slate-500 block truncate">
-                  📍 {selectedAsset.location?.poi || selectedAsset.location?.locality || selectedAsset.location?.destination} • {selectedAsset.storage?.width}x{selectedAsset.storage?.height}px
+                  📍 {selectedAsset.geography?.poi || selectedAsset.geography?.locality || selectedAsset.geography?.destination} • {selectedAsset.storage?.width}x{selectedAsset.storage?.height}px
                 </span>
               </div>
             ) : (
@@ -319,7 +321,7 @@ export default function MediaLibraryModal({
               <div className="text-white text-center">
                 <h3 className="font-black text-sm">{previewAsset.title}</h3>
                 <p className="text-xs text-slate-400">
-                  {previewAsset.location?.destination} • {previewAsset.attribution?.credit || 'WanderLuxe Canonical Archive'}
+                  {previewAsset.geography?.destination} • {previewAsset.source?.attribution || 'WanderLuxe Media'}
                 </p>
               </div>
             </div>

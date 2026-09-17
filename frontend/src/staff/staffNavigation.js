@@ -39,13 +39,73 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
-    id: 'admin_legacy',
-    label: 'Existing Admin Tools',
-    path: '/staff/admin/legacy',
-    icon: 'admin_legacy',
+    id: 'admin_bookings',
+    label: 'Bookings',
+    path: '/staff/admin/bookings',
+    icon: 'admin_bookings',
     roles: Object.freeze(['super_admin', 'admin']),
     section: 'administration',
-    description: 'Open administration modules awaiting native migration.',
+    description: 'Inspect every booking, payment state, and commercial handoff.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_media',
+    label: 'Media Library',
+    path: '/staff/admin/media',
+    icon: 'admin_media',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Manage the shared MongoDB and Cloudinary media catalog.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_pages',
+    label: 'Pages',
+    path: '/staff/admin/pages',
+    icon: 'admin_pages',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Create and publish dynamic website pages.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_users',
+    label: 'Users & Roles',
+    path: '/staff/admin/users',
+    icon: 'admin_users',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Manage customer, Staff, and creator identity access.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_creators',
+    label: 'Creator Approvals',
+    path: '/staff/admin/creators',
+    icon: 'admin_creators',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Review and decide creator applications.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_payouts',
+    label: 'Payouts',
+    path: '/staff/admin/payouts',
+    icon: 'admin_payouts',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Manage creator payout approval records.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'admin_discounts',
+    label: 'Discounts',
+    path: '/staff/admin/discounts',
+    icon: 'admin_discounts',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Manage checkout coupon codes and validity rules.',
     navigationOnly: true
   }),
   Object.freeze({

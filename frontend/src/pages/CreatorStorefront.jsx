@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React from 'react';
+import { useParams } from 'react-router-dom';
 import { 
-  CheckCircle2, Tag, Copy, Check, Sparkles, MapPin, Calendar, ArrowRight, ShieldCheck, Heart 
+  CheckCircle2, Tag, Sparkles
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SEOHead from '../components/SEOHead';
@@ -11,7 +11,6 @@ import { UPCOMING_TRIPS } from '../constants/mockData';
 
 const CreatorStorefront = () => {
   const { username } = useParams();
-  const [copiedCode, setCopiedCode] = useState('');
 
   const creator = {
     name: 'Gaurav Kumar Yadav',
@@ -25,23 +24,14 @@ const CreatorStorefront = () => {
       followers: '85,000+',
       communityRating: '4.9 ★'
     },
-    activeCoupons: [
-      { code: 'GOA-KR7X9P', plan: 'Goa Sun Beach Getaway', discount: '15% OFF', expiry: '31 Dec 2026' },
-      { code: 'MEGH-X82P9A', plan: 'Meghalaya Backpacking', discount: '10% OFF', expiry: '31 Dec 2026' }
-    ]
-  };
-
-  const handleCopyCode = (code) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(''), 3000);
+    activeCoupons: []
   };
 
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-24">
       <SEOHead
         title={`${creator.name} (${creator.handle}) Official Travel Creator Storefront | WanderLuxe`}
-        description={`Explore ${creator.name}'s curated travel departures, exclusive promo codes, and group trips. Save up to 15% on WanderLuxe expeditions.`}
+        description={`Explore ${creator.name}'s curated travel departures and group trips on WanderLuxe.`}
         canonical={`/creator/${creator.username}`}
       />
 
@@ -105,25 +95,7 @@ const CreatorStorefront = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {creator.activeCoupons.map((c, i) => (
-              <div key={i} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/80 flex items-center justify-between gap-4">
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-gray-400 block">{c.plan}</span>
-                  <span className="text-2xl font-mono font-extrabold text-brand-navy block mt-0.5">{c.code}</span>
-                  <span className="text-xs font-extrabold text-brand-emerald bg-brand-emerald/10 px-2.5 py-0.5 rounded-full inline-block mt-2">
-                    {c.discount} • Valid till {c.expiry}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => handleCopyCode(c.code)}
-                  className="px-5 py-3 bg-brand-navy text-white rounded-2xl text-xs font-extrabold hover:bg-brand-emerald transition-all shadow-md shrink-0 flex items-center gap-1.5"
-                >
-                  {copiedCode === c.code ? <Check size={16} /> : <Copy size={16} />}
-                  {copiedCode === c.code ? 'Copied!' : 'Copy Code'}
-                </button>
-              </div>
-            ))}
+            {creator.activeCoupons.length === 0 && <div className="md:col-span-2 rounded-3xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-500">No active creator coupons are currently published.</div>}
           </div>
         </div>
 
@@ -140,15 +112,6 @@ const CreatorStorefront = () => {
             {UPCOMING_TRIPS.slice(0, 3).map((trip) => (
               <div key={trip.id} className="relative group">
                 <TripCard trip={trip} />
-                <div className="mt-3 p-3 bg-white rounded-2xl border border-gray-200 flex items-center justify-between text-xs font-bold text-brand-navy">
-                  <span>Use Code: <span className="font-mono text-brand-emerald">GOA-KR7X9P</span></span>
-                  <Link
-                    to={`/checkout?ref=GOA-KR7X9P`}
-                    className="px-3 py-1.5 bg-brand-emerald text-white rounded-xl text-[11px] font-extrabold hover:bg-brand-teal"
-                  >
-                    Book with Discount &rarr;
-                  </Link>
-                </div>
               </div>
             ))}
           </div>

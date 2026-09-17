@@ -18,85 +18,10 @@ const AuthContext = createContext();
 const ENV_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
 const ENV_ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || 'gaurav@999';
 
-const DEFAULT_ELIGIBLE_PLANS = [
-  { 
-    id: 1, 
-    planTitle: 'Meghalaya Backpacking Living Root Bridges', 
-    destination: 'Meghalaya, India', 
-    duration: '5D/4N', 
-    basePrice: 18500, 
-    customerDiscountPct: 10, 
-    influencerCommissionPct: 10, 
-    expiryDate: '2026-12-31', 
-    terms: 'Min booking value ₹15,000. Valid for group departures.',
-    status: 'Approved & Active' 
-  },
-  { 
-    id: 2, 
-    planTitle: 'Spiti Valley Circuit High Altitude Roadtrip', 
-    destination: 'Spiti Valley, Himachal', 
-    duration: '7D/6N', 
-    basePrice: 22000, 
-    customerDiscountPct: 10, 
-    influencerCommissionPct: 8, 
-    expiryDate: '2026-12-31', 
-    terms: 'Min booking value ₹20,000. Max 50 redemptions per code.',
-    status: 'Approved & Active' 
-  },
-  { 
-    id: 3, 
-    planTitle: 'Goa Sun Beach and Party Getaway', 
-    destination: 'Goa, India', 
-    duration: '4D/3N', 
-    basePrice: 14500, 
-    customerDiscountPct: 15, 
-    influencerCommissionPct: 10, 
-    expiryDate: '2026-12-31', 
-    terms: 'Valid on Double & Triple sharing plans.',
-    status: 'Approved & Active' 
-  },
-  { 
-    id: 4, 
-    planTitle: 'Bali Island Escape Beaches and Culture', 
-    destination: 'Bali, Indonesia', 
-    duration: '6D/5N', 
-    basePrice: 45000, 
-    customerDiscountPct: 10, 
-    influencerCommissionPct: 5, 
-    expiryDate: '2026-12-31', 
-    terms: 'Valid on international flight inclusive bookings.',
-    status: 'Approved & Active' 
-  }
-];
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [influencerApplications, setInfluencerApplications] = useState([]);
-
-  const [eligiblePlans, setEligiblePlans] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wanderluxe_eligible_plans')) || DEFAULT_ELIGIBLE_PLANS;
-    } catch (e) {
-      return DEFAULT_ELIGIBLE_PLANS;
-    }
-  });
-
-  const [allPayoutRequests, setAllPayoutRequests] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('wanderluxe_payout_requests')) || [];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('wanderluxe_eligible_plans', JSON.stringify(eligiblePlans));
-  }, [eligiblePlans]);
-
-  useEffect(() => {
-    localStorage.setItem('wanderluxe_payout_requests', JSON.stringify(allPayoutRequests));
-  }, [allPayoutRequests]);
 
   // Load database applications directly from MongoDB
   const fetchInfluencerApplications = async () => {
@@ -104,17 +29,11 @@ export const AuthProvider = ({ children }) => {
       const serverApps = await getInfluencerApplicationsApi();
       if (Array.isArray(serverApps)) {
         const formatted = serverApps.map(u => ({
+          ...u,
+          ...(u.influencerApplication || {}),
           id: u._id || u.id,
           userId: u._id || u.id,
-          name: u.name,
-          email: u.email,
-          socialHandle: u.influencerApplication?.socialHandle || '@creator',
-          platform: u.influencerApplication?.platform || 'Instagram',
-          followerCount: u.influencerApplication?.followerCount || '10K+',
-          niche: u.influencerApplication?.niche || 'Travel',
           status: u.influencerStatus || 'pending',
-          appliedAt: u.influencerApplication?.appliedAt ? new Date(u.influencerApplication.appliedAt).toISOString().split('T')[0] : 'Today',
-          reviewNotes: u.influencerApplication?.reviewNotes || ''
         }));
         setInfluencerApplications(formatted);
       }
@@ -285,55 +204,14 @@ export const AuthProvider = ({ children }) => {
 
   // Admin Approves Application
   const approveInfluencerApplication = async (appId) => {
-    let approvedEmail = null;
-    
-    // Call backend database API
     await approveInfluencerApplicationApi(appId);
-
-    // Update local state
-    setInfluencerApplications((prev) =>
-      prev.map((app) => {
-        if (app.id === appId || app._id === appId || app.userId === appId) {
-          approvedEmail = app.email;
-          return { ...app, status: 'approved' };
-        }
-        return app;
-      })
-    );
-
-    // If current logged-in user matches the approved applicant
-    setUser((prev) => {
-      if (prev && ((prev._id === appId || prev.id === appId) || (approvedEmail && prev.email?.toLowerCase() === approvedEmail?.toLowerCase()))) {
-        return { ...prev, role: 'influencer', influencerStatus: 'approved' };
-      }
-      return prev;
-    });
+    await fetchInfluencerApplications();
   };
 
   // Admin Rejects Application
   const rejectInfluencerApplication = async (appId, reason) => {
-    let rejectedEmail = null;
-
-    // Call backend database API
     await rejectInfluencerApplicationApi(appId, reason);
-
-    // Update local state
-    setInfluencerApplications((prev) =>
-      prev.map((app) => {
-        if (app.id === appId || app._id === appId || app.userId === appId) {
-          rejectedEmail = app.email;
-          return { ...app, status: 'rejected', reviewNotes: reason || 'Criteria not met' };
-        }
-        return app;
-      })
-    );
-
-    setUser((prev) => {
-      if (prev && ((prev._id === appId || prev.id === appId) || (rejectedEmail && prev.email?.toLowerCase() === rejectedEmail?.toLowerCase()))) {
-        return { ...prev, role: 'user', influencerStatus: 'rejected' };
-      }
-      return prev;
-    });
+    await fetchInfluencerApplications();
   };
 
   const logout = () => {
@@ -349,156 +227,6 @@ export const AuthProvider = ({ children }) => {
       ...updated
     }));
     return true;
-  };
-
-  // Influencer Engine Functions
-  const generatePlanCoupon = (plan) => {
-    const prefix = (plan.destination || 'TRIP').slice(0, 4).toUpperCase();
-    const randomHash = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const uniqueCode = `${prefix}-${randomHash}`;
-
-    const newCoupon = {
-      id: 'ic_' + Date.now(),
-      code: uniqueCode,
-      planId: plan.id,
-      planTitle: plan.planTitle,
-      discountType: 'percentage',
-      discountValue: plan.customerDiscountPct || 10,
-      commissionRate: plan.influencerCommissionPct || 10,
-      totalRedemptions: 0,
-      revenueGenerated: 0,
-      commissionEarned: 0,
-      expiryDate: plan.expiryDate || '2026-12-31',
-      active: true
-    };
-
-    setUser((prev) => {
-      if (!prev) return null;
-      const updated = [newCoupon, ...(prev.influencerCoupons || [])];
-      return {
-        ...prev,
-        influencerCoupons: updated
-      };
-    });
-
-    return newCoupon;
-  };
-
-  const requestPayoutWithdrawal = (amount, methodDetails) => {
-    const amt = Number(amount);
-    const minThreshold = user?.minPayoutThreshold || 1000;
-
-    if (amt < minThreshold) {
-      throw new Error(`Minimum payout threshold is ₹${minThreshold.toLocaleString()}`);
-    }
-
-    if (user && amt > (user.availableBalance || 0)) {
-      throw new Error(`Requested amount ₹${amt} exceeds available wallet balance of ₹${user.availableBalance}`);
-    }
-
-    const payoutRecord = {
-      id: 'po_' + Date.now(),
-      influencerName: user?.name,
-      influencerEmail: user?.email,
-      amount: amt,
-      date: new Date().toISOString().split('T')[0],
-      method: methodDetails,
-      status: 'Requested',
-      reference: `REQ-${Math.floor(100000 + Math.random() * 900000)}`
-    };
-
-    setAllPayoutRequests((prev) => [payoutRecord, ...prev]);
-
-    setUser((prev) => {
-      if (!prev) return prev;
-      const newAvailable = Math.max(0, (prev.availableBalance || 0) - amt);
-      const newLedgerTx = {
-        id: 'tx_' + Date.now(),
-        bookingId: payoutRecord.id,
-        type: 'Payout Transfer Requested',
-        amount: amt,
-        date: payoutRecord.date,
-        status: 'Under Review',
-        reference: `Withdrawal to ${methodDetails}`
-      };
-
-      return {
-        ...prev,
-        availableBalance: newAvailable,
-        payoutHistory: [payoutRecord, ...(prev.payoutHistory || [])],
-        ledgerTransactions: [newLedgerTx, ...(prev.ledgerTransactions || [])]
-      };
-    });
-
-    return payoutRecord;
-  };
-
-  const recordInfluencerCommission = (couponCode, bookingAmount, customerName, tripTitle) => {
-    const commission = Math.round(Number(bookingAmount) * 0.1);
-    const bookingId = 'WL-' + Math.floor(100000 + Math.random() * 900000);
-    const dateStr = new Date().toISOString().split('T')[0];
-
-    const newLedgerTx = {
-      id: 'tx_' + Date.now(),
-      bookingId: bookingId,
-      type: 'Commission Pending',
-      amount: commission,
-      date: dateStr,
-      status: 'Pending Settlement',
-      reference: `Attributed Booking ${bookingId} (${tripTitle})`
-    };
-
-    setUser((prev) => {
-      if (!prev || prev.role !== 'influencer') return prev;
-      
-      const updatedCoupons = (prev.influencerCoupons || []).map(c => {
-        if (c.code === couponCode) {
-          return {
-            ...c,
-            totalRedemptions: (c.totalRedemptions || 0) + 1,
-            revenueGenerated: (c.revenueGenerated || 0) + Number(bookingAmount),
-            commissionEarned: (c.commissionEarned || 0) + commission
-          };
-        }
-        return c;
-      });
-
-      return {
-        ...prev,
-        pendingBalance: (prev.pendingBalance || 0) + commission,
-        totalEarnings: (prev.totalEarnings || 0) + commission,
-        influencerCoupons: updatedCoupons,
-        ledgerTransactions: [newLedgerTx, ...(prev.ledgerTransactions || [])]
-      };
-    });
-  };
-
-  const adminApprovePayout = (payoutId) => {
-    setAllPayoutRequests((prev) =>
-      prev.map((po) => po.id === payoutId ? { ...po, status: 'Paid Out' } : po)
-    );
-
-    setUser((prev) => {
-      if (!prev) return prev;
-      const updatedPayouts = (prev.payoutHistory || []).map((po) =>
-        po.id === payoutId ? { ...po, status: 'Approved & Paid' } : po
-      );
-      const updatedLedger = (prev.ledgerTransactions || []).map((tx) =>
-        tx.bookingId === payoutId ? { ...tx, status: 'Paid Out' } : tx
-      );
-      return {
-        ...prev,
-        payoutHistory: updatedPayouts,
-        ledgerTransactions: updatedLedger,
-        totalWithdrawn: (prev.totalWithdrawn || 0) + 18500
-      };
-    });
-  };
-
-  const adminTogglePlanEligibility = (planId) => {
-    setEligiblePlans((prev) =>
-      prev.map((p) => p.id === planId ? { ...p, status: p.status === 'Approved & Active' ? 'Paused' : 'Approved & Active' } : p)
-    );
   };
 
   const addBooking = async (bookingData) => {
@@ -544,13 +272,6 @@ export const AuthProvider = ({ children }) => {
         updateProfile,
         addBooking,
         cancelBooking,
-        eligiblePlans,
-        generatePlanCoupon,
-        requestPayoutWithdrawal,
-        recordInfluencerCommission,
-        allPayoutRequests,
-        adminApprovePayout,
-        adminTogglePlanEligibility,
         influencerApplications,
         fetchInfluencerApplications,
         applyInfluencer,

@@ -9,6 +9,7 @@ import User from '../models/User.js';
 import Coupon from '../models/Coupon.js';
 import Commission from '../models/Commission.js';
 import WalletLedger from '../models/WalletLedger.js';
+import { validateCouponForAmount } from '../services/couponService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
@@ -16,6 +17,27 @@ import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 const memoryBookings = [];
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
+
+const recordCouponRedemption = async (booking) => {
+  if (!isDbConnected() || !booking?._id || !booking?.couponRedemption?.couponId || booking.couponRedemption.recordedAt) return;
+  const coupon = await Coupon.findById(booking.couponRedemption.couponId);
+  if (!coupon) return;
+  const claimed = await Booking.findOneAndUpdate(
+    { _id: booking._id, 'couponRedemption.recordedAt': null },
+    { $set: { 'couponRedemption.recordedAt': new Date() } },
+    { new: true }
+  );
+  if (!claimed) return;
+  const revenue = Number(booking.pricing?.finalAmount || 0);
+  const creator = String(coupon.creatorUserId || coupon.influencerId || '');
+  const commissionRate = mongoose.Types.ObjectId.isValid(creator) ? Number(coupon.commissionRate || 0) : 0;
+  const commissionAmount = Math.round(revenue * (commissionRate / 100));
+  await Coupon.updateOne({ _id: coupon._id }, { $inc: { usageCount: 1, totalRedemptions: 1, revenueGenerated: revenue, commissionEarned: commissionAmount } });
+  if (commissionAmount > 0 && !(await Commission.exists({ bookingId: booking.bookingId, couponCode: coupon.code }))) {
+    await Commission.create({ bookingId: booking.bookingId, influencerId: creator, couponCode: coupon.code, baseAmount: revenue, commissionRate, amount: commissionAmount, status: 'PENDING' });
+    await WalletLedger.create({ influencerId: creator, bookingId: booking.bookingId, type: 'COMMISSION_PENDING', amount: commissionAmount, status: 'PENDING', reference: `Coupon redemption ${coupon.code} · ${booking.bookingId}` });
+  }
+};
 
 const getBookingRole = (user) => String(user?.role || 'user').toLowerCase();
 const isBroadBookingStaff = (user) => (
@@ -182,27 +204,11 @@ export const calculateServerPrice = async (trip, travelersCount, occupancy, coup
   let validatedCoupon = null;
 
   if (couponCode && typeof couponCode === 'string') {
-    const code = couponCode.trim().toUpperCase();
-    if (code === 'GOA-KR7X9P' || code === 'EARLYBIRD15' || code === 'GAURAV15') {
-      discount = Math.round(subtotal * 0.15);
-      validatedCoupon = { code, discountValue: 15, discountType: 'percentage', influencerId: 'usr_influencer' };
-    } else if (code === 'MEGH-X82P9A' || code === 'WANDER10' || code === 'EXPLOREWITHGAURAV') {
-      discount = Math.round(subtotal * 0.10);
-      validatedCoupon = { code, discountValue: 10, discountType: 'percentage', influencerId: 'usr_influencer' };
-    } else if (code === 'SUMMER500') {
-      discount = 500;
-      validatedCoupon = { code, discountValue: 500, discountType: 'flat', influencerId: 'usr_influencer' };
-    } else if (isDbConnected()) {
-      try {
-        const dbCoupon = await Coupon.findOne({ code, status: 'active' });
-        if (dbCoupon) {
-          discount = dbCoupon.discountType === 'percentage'
-            ? Math.round(subtotal * (dbCoupon.discountValue / 100))
-            : dbCoupon.discountValue;
-          validatedCoupon = dbCoupon;
-        }
-      } catch (e) {}
-    }
+    if (!isDbConnected()) throw Object.assign(new Error('Coupon validation is temporarily unavailable.'), { status: 503 });
+    const result = await validateCouponForAmount({ code: couponCode, amount: subtotal, planId: trip._id });
+    if (!result.valid) throw Object.assign(new Error(result.message), { status: result.status });
+    discount = result.discountAmount;
+    validatedCoupon = result.coupon;
   }
 
   const finalAmount = Math.max(1, subtotal - discount);
@@ -281,7 +287,7 @@ export const calculatePricingEndpoint = async (req, res) => {
     });
   } catch (err) {
     console.error('Calculate Pricing Error:', err);
-    res.status(500).json({ message: err.message || 'Server error calculating pricing.' });
+    res.status(err.status || 500).json({ message: err.message || 'Server error calculating pricing.' });
   }
 };
 
@@ -499,12 +505,13 @@ export const createBookingOrder = async (req, res) => {
         verificationToken,
         verificationUrl: `https://wanderluxe.in/booking/verify/${verificationToken}`
       },
-      influencerAttribution: pricing.validatedCoupon ? {
-        influencerId: pricing.validatedCoupon.influencerId || 'usr_influencer',
+      influencerAttribution: pricing.validatedCoupon?.influencerId ? {
+        influencerId: pricing.validatedCoupon.influencerId,
         couponCode: pricing.validatedCoupon.code,
-        commissionRate: 10,
-        commissionAmount: Math.round(pricing.finalAmount * 0.1)
-      } : {}
+        commissionRate: Number(pricing.validatedCoupon.commissionRate || 0),
+        commissionAmount: Math.round(pricing.finalAmount * (Number(pricing.validatedCoupon.commissionRate || 0) / 100))
+      } : {},
+      couponRedemption: pricing.validatedCoupon?._id ? { couponId: pricing.validatedCoupon._id, recordedAt: null } : {}
     };
 
     let booking = null;
@@ -529,6 +536,7 @@ export const createBookingOrder = async (req, res) => {
           existingPending.pricing = bookingData.pricing;
           existingPending.payment.razorpayOrderId = rzpOrder.id;
           existingPending.influencerAttribution = bookingData.influencerAttribution;
+          existingPending.couponRedemption = bookingData.couponRedemption;
           booking = await existingPending.save();
         } else {
           booking = await Booking.create(bookingData);
@@ -560,7 +568,7 @@ export const createBookingOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Booking Order Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error creating payment order' });
+    res.status(error.status || 500).json({ message: error.message || 'Server Error creating payment order' });
   }
 };
 
@@ -743,6 +751,7 @@ export const verifyBookingPayment = async (req, res) => {
 
     if (isDbConnected() && typeof booking.save === 'function') {
       await booking.save();
+      await recordCouponRedemption(booking);
     }
 
     res.json({
@@ -764,42 +773,43 @@ export const verifyBookingPayment = async (req, res) => {
 export const cancelBooking = async (req, res) => {
   try {
     const userId = req.user?._id;
-    const userRole = (req.user?.role || 'user').toLowerCase();
     const { bookingId } = req.params;
-    const { reason = 'Cancelled by traveler / admin' } = req.body;
+    const reason = String(req.body?.reason || '').trim();
 
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
+    if (!isDbConnected()) {
+      return res.status(503).json({ message: 'Booking cancellation is unavailable while the database is disconnected.' });
     }
-    if (!booking) {
-      booking = memoryBookings.find(b => b.bookingId === bookingId);
-    }
+    const lookup = mongoose.Types.ObjectId.isValid(bookingId)
+      ? { $or: [{ _id: bookingId }, { bookingId }] }
+      : { bookingId };
+    let booking = await Booking.findOne(lookup);
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
     }
 
-    // Permission check
-    const isOwner = String(booking.userId) === String(userId);
-    const isStaff = ['super_admin', 'admin', 'operations', 'sales'].includes(userRole);
-    if (!isOwner && !isStaff) {
+    if (!await canAccessBooking(req.user, booking)) {
       return res.status(403).json({ message: 'Not authorized to cancel this booking.' });
     }
 
     if (booking.bookingStatus === 'CANCELLED') {
-      return res.status(400).json({ message: 'Booking is already cancelled.' });
+      return res.json({ success: true, alreadyCancelled: true, refundProcessed: false, message: 'Booking was already cancelled. Inventory was not adjusted again.', booking });
     }
 
-    const wasConfirmed = ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'].includes(booking.bookingStatus);
-    booking.bookingStatus = 'CANCELLED';
-    booking.cancellationReason = reason;
-    booking.cancelledAt = new Date();
-    booking.cancelledBy = userId;
+    const previousStatus = booking.bookingStatus;
+    const wasConfirmed = ['CONFIRMED', 'PROVISIONALLY_CONFIRMED'].includes(previousStatus);
+    booking = await Booking.findOneAndUpdate(
+      { _id: booking._id, bookingStatus: previousStatus },
+      { $set: { bookingStatus: 'CANCELLED', cancellationReason: reason || 'No cancellation reason provided.', cancelledAt: new Date(), cancelledBy: userId } },
+      { new: true }
+    );
+    if (!booking) {
+      const current = await Booking.findOne(lookup);
+      return res.json({ success: true, alreadyCancelled: true, refundProcessed: false, message: 'Booking was already cancelled. Inventory was not adjusted again.', booking: current });
+    }
+    let seatsRestored = false;
 
     // Restore seats on Trip batch if booking was confirmed
-    if (wasConfirmed && booking.tripId && isDbConnected()) {
+    if (wasConfirmed && booking.tripId && !booking.inventoryReleasedAt) {
       try {
         const tripDoc = await Trip.findOne({
           $or: [
@@ -828,6 +838,8 @@ export const cancelBooking = async (req, res) => {
               tripDoc.batches[batchIndex].status = 'available';
             }
             await tripDoc.save();
+            booking.inventoryReleasedAt = new Date();
+            seatsRestored = true;
           }
         }
       } catch (restoreErr) {
@@ -835,13 +847,13 @@ export const cancelBooking = async (req, res) => {
       }
     }
 
-    if (isDbConnected() && typeof booking.save === 'function') {
-      await booking.save();
-    }
+    await booking.save();
 
     res.json({
       success: true,
-      message: `Booking ${booking.bookingId} cancelled successfully. Seats restored to batch availability.`,
+      refundProcessed: false,
+      seatsRestored,
+      message: `Booking ${booking.bookingId} cancelled.${seatsRestored ? ' Departure inventory was released.' : ''} No refund was processed.`,
       booking
     });
   } catch (error) {
@@ -1020,6 +1032,7 @@ export const verifyRemainingBalance = async (req, res) => {
 
     if (isDbConnected() && typeof booking.save === 'function') {
       await booking.save();
+      await recordCouponRedemption(booking);
     }
 
     res.json({
@@ -1217,21 +1230,14 @@ export const verifyBookingToken = async (req, res) => {
 export const resendWhatsAppTicket = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.bookingId === bookingId);
-    }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking notifications are unavailable while the database is disconnected.' });
+    const lookup = mongoose.Types.ObjectId.isValid(bookingId) ? { $or: [{ _id: bookingId }, { bookingId }] } : { bookingId };
+    const booking = await Booking.findOne(lookup);
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking record not found.' });
     }
+    if (!await canAccessBooking(req.user, booking)) return res.status(403).json({ message: 'Not authorized to send this booking notification.' });
 
     const waResult = await sendWhatsAppTicketAndReceipt(booking);
     booking.whatsappNotification = waResult;
@@ -1257,29 +1263,19 @@ export const resendWhatsAppTicket = async (req, res) => {
 export const getBoardingPassData = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.bookingId === bookingId);
-    }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking documents are unavailable while the database is disconnected.' });
+    const lookup = mongoose.Types.ObjectId.isValid(bookingId) ? { $or: [{ _id: bookingId }, { bookingId }] } : { bookingId };
+    const booking = await Booking.findOne(lookup);
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
     }
 
     // Authorization check
-    if (req.user && req.user.role !== 'admin' && String(booking.userId) !== String(req.user._id)) {
-      return res.status(403).json({ message: 'Not authorized to access this boarding pass.' });
-    }
+    if (!await canAccessBooking(req.user, booking)) return res.status(403).json({ message: 'Not authorized to access this boarding pass.' });
 
     // Strict Gatekeeper: No Boarding Pass until Fully Paid & Confirmed
-    if (booking.bookingStatus !== 'CONFIRMED' || (booking.paymentStatus && booking.paymentStatus !== 'PAID')) {
+    if (booking.bookingStatus !== 'CONFIRMED' || booking.paymentStatus !== 'PAID') {
       return res.status(403).json({
         message: 'Official Boarding Pass is locked. Please pay the remaining balance to unlock your boarding pass.',
         bookingStatus: booking.bookingStatus,
@@ -1304,19 +1300,19 @@ export const getBoardingPassData = async (req, res) => {
       confirmedAt: booking.payment?.paidAt || booking.updatedAt || booking.createdAt || new Date(),
       trip: {
         id: booking.tripId,
-        title: booking.tripSnapshot?.title || 'WanderLuxe Expedition',
-        destination: booking.tripSnapshot?.destination || 'Destination Hub',
-        duration: booking.tripSnapshot?.duration || '5D/4N',
-        batchDate: booking.tripSnapshot?.batchDate || '15 Sep - 20 Sep, 2026',
-        pickupPoint: booking.tripSnapshot?.pickupPoint || 'Central Pickup Station',
-        image: booking.tripSnapshot?.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+        title: booking.tripSnapshot?.title || '',
+        destination: booking.tripSnapshot?.destination || '',
+        duration: booking.tripSnapshot?.duration || '',
+        batchDate: booking.tripSnapshot?.batchDate || '',
+        pickupPoint: booking.tripSnapshot?.pickupPoint || '',
+        image: booking.tripSnapshot?.image || ''
       },
       leadTraveler: {
-        name: booking.customer?.name || 'Lead Explorer',
-        email: booking.customer?.email || 'traveler@wanderluxe.in',
-        phone: booking.customer?.phone || '+91 8542036499',
-        age: booking.customer?.age || 24,
-        gender: booking.customer?.gender || 'Male'
+        name: booking.customer?.name || '',
+        email: booking.customer?.email || '',
+        phone: booking.customer?.phone || '',
+        age: booking.customer?.age || '',
+        gender: booking.customer?.gender || ''
       },
       coTravelers: booking.travelers || [],
       numberOfTravelers: booking.numberOfTravelers || 1,
@@ -1329,9 +1325,9 @@ export const getBoardingPassData = async (req, res) => {
         couponCode: booking.pricing?.couponCode || ''
       },
       payment: {
-        status: booking.paymentStatus || 'PAID',
-        method: booking.payment?.method || 'Razorpay Gateway',
-        razorpayPaymentId: booking.payment?.razorpayPaymentId || `pay_rzp_${Date.now()}`
+        status: booking.paymentStatus || '',
+        method: booking.payment?.provider || '',
+        razorpayPaymentId: booking.payment?.razorpayPaymentId || ''
       },
       qrCode: {
         dataUrl: qrDataUrl || '',
@@ -1361,24 +1357,22 @@ export const getBoardingPassData = async (req, res) => {
 export const getProvisionalLetterData = async (req, res) => {
   try {
     const { bookingId } = req.params;
-
-    let booking = null;
-    if (isDbConnected()) {
-      try {
-        booking = await Booking.findOne({ bookingId });
-      } catch (e) {}
-    }
-
-    if (!booking) {
-      booking = memoryBookings.find((b) => b.bookingId === bookingId);
-    }
+    if (!isDbConnected()) return res.status(503).json({ message: 'Booking documents are unavailable while the database is disconnected.' });
+    const lookup = mongoose.Types.ObjectId.isValid(bookingId) ? { $or: [{ _id: bookingId }, { bookingId }] } : { bookingId };
+    const booking = await Booking.findOne(lookup);
 
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found.' });
     }
 
-    if (req.user && req.user.role !== 'admin' && String(booking.userId) !== String(req.user._id)) {
-      return res.status(403).json({ message: 'Not authorized to access this booking document.' });
+    if (!await canAccessBooking(req.user, booking)) return res.status(403).json({ message: 'Not authorized to access this booking document.' });
+
+    if (booking.bookingStatus !== 'PROVISIONALLY_CONFIRMED' && booking.paymentStatus !== 'PARTIALLY_PAID') {
+      return res.status(403).json({
+        message: 'The provisional booking letter is only available for a provisionally confirmed or partially paid booking.',
+        bookingStatus: booking.bookingStatus,
+        paymentStatus: booking.paymentStatus
+      });
     }
 
     const finalAmount = Number(booking.pricing?.finalAmount);
@@ -1393,23 +1387,23 @@ export const getProvisionalLetterData = async (req, res) => {
     const provisionalLetter = {
       bookingId: booking.bookingId,
       bookingStatus: booking.bookingStatus,
-      paymentStatus: booking.paymentStatus || 'PARTIALLY_PAID',
+      paymentStatus: booking.paymentStatus || '',
       confirmedAt: booking.payment?.paidAt || booking.updatedAt || booking.createdAt || new Date(),
       trip: {
         id: booking.tripId,
-        title: booking.tripSnapshot?.title || 'WanderLuxe Expedition',
-        destination: booking.tripSnapshot?.destination || 'Destination Hub',
-        duration: booking.tripSnapshot?.duration || '5D/4N',
-        batchDate: booking.tripSnapshot?.batchDate || '15 Sep - 20 Sep, 2026',
-        pickupPoint: booking.tripSnapshot?.pickupPoint || 'Central Pickup Station',
-        image: booking.tripSnapshot?.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+        title: booking.tripSnapshot?.title || '',
+        destination: booking.tripSnapshot?.destination || '',
+        duration: booking.tripSnapshot?.duration || '',
+        batchDate: booking.tripSnapshot?.batchDate || '',
+        pickupPoint: booking.tripSnapshot?.pickupPoint || '',
+        image: booking.tripSnapshot?.image || ''
       },
       leadTraveler: {
-        name: booking.customer?.name || 'Lead Explorer',
-        email: booking.customer?.email || 'traveler@wanderluxe.in',
-        phone: booking.customer?.phone || '+91 8542036499',
-        age: booking.customer?.age || 24,
-        gender: booking.customer?.gender || 'Male'
+        name: booking.customer?.name || '',
+        email: booking.customer?.email || '',
+        phone: booking.customer?.phone || '',
+        age: booking.customer?.age || '',
+        gender: booking.customer?.gender || ''
       },
       coTravelers: booking.travelers || [],
       numberOfTravelers: booking.numberOfTravelers || 1,

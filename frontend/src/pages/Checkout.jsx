@@ -91,7 +91,7 @@ const Checkout = () => {
   // Payment Plan Selection: 'FULL' vs 'PARTIAL'
   const [paymentPlanType, setPaymentPlanType] = useState('FULL');
 
-  // Parse URL Referral Query Params (?ref=GOA-KR7X9P)
+  // Parse a persisted referral/coupon code from URL query parameters.
   const searchParams = new URLSearchParams(location.search);
   const refCodeFromUrl = searchParams.get('ref') || searchParams.get('coupon') || '';
 

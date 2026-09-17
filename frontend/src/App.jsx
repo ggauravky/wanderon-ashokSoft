@@ -35,7 +35,6 @@ import StaffShell from './staff/StaffShell';
 import StaffOverview from './staff/StaffOverview';
 import StaffModuleRoute from './staff/components/StaffModuleRoute';
 import AdminWorkspace from './staff/workspaces/AdminWorkspace';
-import LegacyAdminWorkspace from './staff/workspaces/LegacyAdminWorkspace';
 import ManagementWorkspace from './staff/workspaces/ManagementWorkspace';
 import SalesOverview from './staff/modules/sales/SalesOverview';
 import ExpertRequestsWorkspace from './staff/modules/sales/ExpertRequestsWorkspace';
@@ -46,6 +45,18 @@ import SalesBookingsWorkspace from './staff/modules/sales/bookings/SalesBookings
 import SalesBookingDetail from './staff/modules/sales/bookings/SalesBookingDetail';
 import TripsWorkspace from './staff/modules/admin/trips/TripsWorkspace';
 import TripEditor from './staff/modules/admin/trips/TripEditor';
+import AdminBookingsWorkspace from './staff/modules/admin/bookings/AdminBookingsWorkspace';
+import AdminBookingDetail from './staff/modules/admin/bookings/AdminBookingDetail';
+import MediaWorkspace from './staff/modules/admin/media/MediaWorkspace';
+import PagesWorkspace from './staff/modules/admin/pages/PagesWorkspace';
+import PageEditor from './staff/modules/admin/pages/PageEditor';
+import UsersWorkspace from './staff/modules/admin/users/UsersWorkspace';
+import UserDetail from './staff/modules/admin/users/UserDetail';
+import CreatorApplicationsWorkspace from './staff/modules/admin/creators/CreatorApplicationsWorkspace';
+import CreatorApplicationDetail from './staff/modules/admin/creators/CreatorApplicationDetail';
+import PayoutsWorkspace from './staff/modules/admin/payouts/PayoutsWorkspace';
+import PayoutDetail from './staff/modules/admin/payouts/PayoutDetail';
+import DiscountsWorkspace from './staff/modules/admin/discounts/DiscountsWorkspace';
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -55,7 +66,7 @@ const LegacyQuotationRedirect = ({ edit = false }) => {
 
 const LegacyAdminBookingRedirect = () => {
   const { id } = useParams();
-  return <Navigate to={`/staff/admin/legacy?tab=bookings_crm&bookingId=${encodeURIComponent(id)}`} replace />;
+  return <Navigate to={`/staff/admin/bookings/${encodeURIComponent(id)}`} replace />;
 };
 
 function App() {
@@ -85,11 +96,6 @@ function App() {
                 <AdminWorkspace />
               </StaffModuleRoute>
             } />
-            <Route path="admin/legacy" element={
-              <StaffModuleRoute moduleId="admin_legacy">
-                <LegacyAdminWorkspace />
-              </StaffModuleRoute>
-            } />
             <Route path="admin/trips" element={
               <StaffModuleRoute moduleId="trips"><TripsWorkspace /></StaffModuleRoute>
             } />
@@ -98,6 +104,45 @@ function App() {
             } />
             <Route path="admin/trips/:id/edit" element={
               <StaffModuleRoute moduleId="trips"><TripEditor /></StaffModuleRoute>
+            } />
+            <Route path="admin/bookings" element={
+              <StaffModuleRoute moduleId="admin_bookings"><AdminBookingsWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/bookings/:id" element={
+              <StaffModuleRoute moduleId="admin_bookings"><AdminBookingDetail /></StaffModuleRoute>
+            } />
+            <Route path="admin/media" element={
+              <StaffModuleRoute moduleId="admin_media"><MediaWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/pages" element={
+              <StaffModuleRoute moduleId="admin_pages"><PagesWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/pages/new" element={
+              <StaffModuleRoute moduleId="admin_pages"><PageEditor /></StaffModuleRoute>
+            } />
+            <Route path="admin/pages/:id/edit" element={
+              <StaffModuleRoute moduleId="admin_pages"><PageEditor /></StaffModuleRoute>
+            } />
+            <Route path="admin/users" element={
+              <StaffModuleRoute moduleId="admin_users"><UsersWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/users/:id" element={
+              <StaffModuleRoute moduleId="admin_users"><UserDetail /></StaffModuleRoute>
+            } />
+            <Route path="admin/creators" element={
+              <StaffModuleRoute moduleId="admin_creators"><CreatorApplicationsWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/creators/:id" element={
+              <StaffModuleRoute moduleId="admin_creators"><CreatorApplicationDetail /></StaffModuleRoute>
+            } />
+            <Route path="admin/payouts" element={
+              <StaffModuleRoute moduleId="admin_payouts"><PayoutsWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="admin/payouts/:id" element={
+              <StaffModuleRoute moduleId="admin_payouts"><PayoutDetail /></StaffModuleRoute>
+            } />
+            <Route path="admin/discounts" element={
+              <StaffModuleRoute moduleId="admin_discounts"><DiscountsWorkspace /></StaffModuleRoute>
             } />
             <Route path="sales" element={
               <StaffModuleRoute moduleId="sales">

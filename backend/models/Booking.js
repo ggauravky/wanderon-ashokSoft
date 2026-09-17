@@ -120,6 +120,10 @@ const bookingSchema = new mongoose.Schema(
       commissionRate: { type: Number, default: 0 },
       commissionAmount: { type: Number, default: 0 }
     },
+    couponRedemption: {
+      couponId: { type: mongoose.Schema.Types.ObjectId, ref: 'Coupon', default: null },
+      recordedAt: { type: Date, default: null }
+    },
     whatsappNotification: {
       sent: { type: Boolean, default: false },
       sentAt: { type: Date },
@@ -171,9 +175,29 @@ const bookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
+    },
+    cancellationReason: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    cancelledAt: {
+      type: Date,
+      default: null
+    },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    inventoryReleasedAt: {
+      type: Date,
+      default: null
     }
   },
   { timestamps: true }
 );
+
+bookingSchema.index({ bookingStatus: 1, paymentStatus: 1, createdAt: -1 });
 
 export default mongoose.model('Booking', bookingSchema);

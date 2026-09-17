@@ -10,7 +10,7 @@ import {
 const visibleLabels = (role) => getVisibleStaffModules(role).map((module) => module.label);
 
 test('administrators see every department workspace', () => {
-  const expected = ['Overview', 'Admin Overview', 'Trips', 'Existing Admin Tools', 'Sales Overview', 'Expert Requests', 'Quotations', 'Bookings', 'Management Workspace'];
+  const expected = ['Overview', 'Admin Overview', 'Trips', 'Bookings', 'Media Library', 'Pages', 'Users & Roles', 'Creator Approvals', 'Payouts', 'Discounts', 'Sales Overview', 'Expert Requests', 'Quotations', 'Bookings', 'Management Workspace'];
   assert.deepEqual(visibleLabels('admin'), expected);
   assert.deepEqual(visibleLabels('super_admin'), expected);
 });
@@ -41,7 +41,7 @@ test('all department links stay inside the canonical staff application', () => {
     .filter((module) => module.id !== 'overview')
     .map((module) => module.path);
 
-  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/trips', '/staff/admin/legacy', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/management']);
+  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/trips', '/staff/admin/bookings', '/staff/admin/media', '/staff/admin/pages', '/staff/admin/users', '/staff/admin/creators', '/staff/admin/payouts', '/staff/admin/discounts', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/management']);
 });
 
 test('role labels normalize existing backend values', () => {

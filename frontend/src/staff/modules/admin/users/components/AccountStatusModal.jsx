@@ -1,0 +1,14 @@
+import React, { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
+
+const AccountStatusModal = ({ user, actor, busy, onClose, onConfirm }) => {
+  const [confirmed, setConfirmed] = useState(false);
+  useEffect(() => setConfirmed(false), [user]);
+  if (!user) return null;
+  const nextActive = !user.isActive;
+  const isSelfDeactivation = !nextActive && String(user._id) === String(actor?._id || actor?.id);
+  const cannotManageSuper = user.role === 'super_admin' && !user.protections?.actorCanManageSuperAdmin;
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl"><header className="flex items-start justify-between border-b border-slate-200 p-5"><div><h2 className="font-semibold text-slate-950">{nextActive ? 'Reactivate account' : 'Deactivate account'}</h2><p className="mt-1 text-xs text-slate-500">{user.name} · {user.email}</p></div><button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={17} /></button></header><div className="space-y-4 p-5"><p className="text-sm leading-6 text-slate-700">{nextActive ? 'This account will be able to authenticate and use access granted by its current role.' : 'This preserves the User record and references while immediately denying protected requests, including requests made with an older JWT.'}</p>{isSelfDeactivation && <label className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-900"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5" /><span>I understand this deactivates my own account and ends my Staff access.</span></label>}{user.protections?.isLastActiveSuperAdmin && !nextActive && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">The last active Super Administrator is protected and cannot be deactivated.</p>}{cannotManageSuper && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">Only a Super Administrator can change this account.</p>}</div><footer className="flex justify-end gap-2 border-t border-slate-200 p-4"><button type="button" onClick={onClose} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700">Cancel</button><button type="button" disabled={busy || cannotManageSuper || (isSelfDeactivation && !confirmed) || (user.protections?.isLastActiveSuperAdmin && !nextActive)} onClick={() => onConfirm(nextActive, { confirmSelfChange: confirmed })} className={`min-h-10 rounded-lg px-4 text-sm font-semibold text-white disabled:opacity-50 ${nextActive ? 'bg-emerald-600' : 'bg-rose-700'}`}>{busy ? 'Saving…' : nextActive ? 'Reactivate' : 'Deactivate'}</button></footer></div></div>;
+};
+
+export default AccountStatusModal;

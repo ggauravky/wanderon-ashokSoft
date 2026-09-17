@@ -10,8 +10,12 @@ import {
   Megaphone,
   PhoneCall,
   ShieldCheck,
+  Image,
   Map,
-  Wrench
+  UserCheck,
+  Users,
+  WalletCards,
+  Tags
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -19,7 +23,13 @@ const ICONS = {
   overview: LayoutDashboard,
   admin: ShieldCheck,
   trips: Map,
-  admin_legacy: Wrench,
+  admin_bookings: BookOpen,
+  admin_media: Image,
+  admin_pages: FileText,
+  admin_users: Users,
+  admin_creators: UserCheck,
+  admin_payouts: WalletCards,
+  admin_discounts: Tags,
   sales: Headphones,
   expert_requests: PhoneCall,
   quotations: FileText,

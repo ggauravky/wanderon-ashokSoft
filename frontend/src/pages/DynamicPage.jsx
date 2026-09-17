@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { 
-  Compass, MapPin, Calendar, Clock, ArrowRight, Share2, 
-  CheckCircle2, ChevronRight, Sparkles, BookOpen, User, ShieldCheck, AlertCircle, Loader2
+import { useParams, Link } from 'react-router-dom';
+import {
+  Compass, Clock, ArrowRight, ChevronRight, Sparkles, User, AlertCircle, Loader2
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import * as apiService from '../services/api.js';
@@ -11,7 +10,6 @@ const getPageBySlugApi = async (...args) => (apiService.getPageBySlugApi || apiS
 
 const DynamicPage = () => {
   const { slug } = useParams();
-  const navigate = useNavigate();
   const [page, setPage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -116,7 +114,7 @@ const DynamicPage = () => {
             </span>
             <span>•</span>
             <span className="flex items-center gap-1.5">
-              <Clock size={13} /> Updated {page.updatedAt ? new Date(page.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '2026'}
+              <Clock size={13} /> Updated {page.updatedAt ? new Date(page.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Date unavailable'}
             </span>
           </div>
         </div>

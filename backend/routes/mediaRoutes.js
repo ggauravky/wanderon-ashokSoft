@@ -20,8 +20,12 @@ router.post('/resolve-itinerary', resolveItineraryMediaController);
 // Protected Admin Operations
 router.get('/coverage', protect, adminOnly, getMediaCoverageReport);
 router.get('/health', protect, adminOnly, getMediaHealth);
+router.get('/admin', protect, adminOnly, (req, res) => {
+  req.mediaAdmin = true;
+  return listMediaAssets(req, res);
+});
 router.post('/', protect, adminOnly, createMediaAsset);
-router.get('/:id', protect, getMediaAssetById);
+router.get('/:id', protect, adminOnly, getMediaAssetById);
 router.put('/:id', protect, adminOnly, updateMediaAsset);
 router.patch('/:id', protect, adminOnly, updateMediaAsset);
 router.delete('/:id', protect, adminOnly, deleteMediaAsset);
