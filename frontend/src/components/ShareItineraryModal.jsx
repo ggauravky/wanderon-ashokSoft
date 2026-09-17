@@ -5,9 +5,7 @@ import {
   Sparkles, Download, MessageCircle, ExternalLink, ShieldCheck,
   ToggleLeft, ToggleRight, Loader2, FileText
 } from 'lucide-react';
-import * as apiService from '../services/api.js';
-
-const toggleShareItineraryApi = async (...args) => (apiService.toggleShareItineraryApi || apiService.default?.toggleShareItineraryApi)?.(...args);
+import { toggleShareItineraryApi } from '../services/api.js';
 import { prepareShareableItinerary, copyToClipboard, getWhatsAppShareUrl } from '../services/itineraryShareService.js';
 
 const ShareItineraryModal = ({ 
@@ -17,11 +15,9 @@ const ShareItineraryModal = ({
   onDownloadPdf,
   onItineraryUpdated 
 }) => {
-  if (!isOpen || !itinerary) return null;
-
   const [copied, setCopied] = useState(false);
-  const [isPublic, setIsPublic] = useState(itinerary.isPublic !== false);
-  const [shareToken, setShareToken] = useState(itinerary.shareToken || null);
+  const [isPublic, setIsPublic] = useState(itinerary?.isPublic !== false);
+  const [shareToken, setShareToken] = useState(itinerary?.shareToken || null);
   const [shareUrl, setShareUrl] = useState('');
   const [isPreparing, setIsPreparing] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -54,14 +50,16 @@ const ShareItineraryModal = ({
       }
     };
 
-    if (isOpen) {
+    if (isOpen && itinerary) {
       initShare();
     }
 
     return () => {
       isMounted = false;
     };
-  }, [isOpen, itinerary._id, itinerary.id]);
+  }, [isOpen, itinerary?._id, itinerary?.id]);
+
+  if (!isOpen || !itinerary) return null;
 
   const handleTogglePublic = async () => {
     const planId = itinerary._id || (String(itinerary.id).length === 24 ? itinerary.id : null);

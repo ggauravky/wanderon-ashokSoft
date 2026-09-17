@@ -18,8 +18,7 @@ import AIItineraryWorkspace from '../components/workspace/AIItineraryWorkspace';
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 import * as apiService from '../services/api.js';
 
-const getAIItineraryByIdApi = async (...args) => (apiService.getAIItineraryByIdApi || apiService.default?.getAIItineraryByIdApi)?.(...args);
-const regenerateDayApi = async (...args) => (apiService.regenerateDayApi || apiService.default?.regenerateDayApi)?.(...args);
+const { getAIItineraryByIdApi, regenerateDayApi } = apiService;
 
 const AIPlannerPage = () => {
   const { planId } = useParams();

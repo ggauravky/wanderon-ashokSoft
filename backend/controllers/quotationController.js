@@ -8,11 +8,22 @@ import User from '../models/User.js';
 import { calculateQuotationPrice } from '../services/quotationPricingService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
+import { buildCreatedAtRange } from '../utils/dateFilters.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
-
-// In-Memory fallback store for quotations during offline tests
-export let memoryQuotations = [];
+const requireQuotationDatabase = (res) => {
+  if (isDbConnected()) return true;
+  res.status(503).json({ success: false, message: 'Quotation service is temporarily unavailable.' });
+  return false;
+};
+const findQuotationRecord = async (id) => {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const byId = await Quotation.findById(id);
+    if (byId) return byId;
+  }
+  return Quotation.findOne({ quotationNumber: id });
+};
 
 // Helper: State Transition State Machine
 const ALLOWED_STATE_TRANSITIONS = {
@@ -34,29 +45,16 @@ export const isValidStateTransition = (currentStatus, targetStatus) => {
 
 // Helper: Sequence Number Generator (WL-Q-YYYY-XXXXX)
 export const generateUniqueQuotationNumber = async () => {
+  if (!isDbConnected()) throw new Error('Quotation database is unavailable.');
   const currentYear = new Date().getFullYear();
   const prefix = `WL-Q-${currentYear}-`;
-  
-  if (isDbConnected()) {
-    try {
-      const count = await Quotation.countDocuments({
-        quotationNumber: new RegExp(`^${prefix}`)
-      });
-      const seq = String(count + 1).padStart(5, '0');
-      const candidate = `${prefix}${seq}`;
-      
-      const exists = await Quotation.findOne({ quotationNumber: candidate });
-      if (!exists) return candidate;
-
-      // Entropy fallback if race condition
-      return `${prefix}${String(count + 1).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
-    } catch (e) {
-      console.warn('Quotation sequence count fallback:', e.message);
-    }
-  }
-
-  const memCount = memoryQuotations.filter(q => q.quotationNumber?.startsWith(prefix)).length;
-  return `${prefix}${String(memCount + 1).padStart(5, '0')}`;
+  const count = await Quotation.countDocuments({ quotationNumber: new RegExp(`^${prefix}`) });
+  const seq = String(count + 1).padStart(5, '0');
+  const candidate = `${prefix}${seq}`;
+  const exists = await Quotation.exists({ quotationNumber: candidate });
+  return exists
+    ? `${prefix}${String(count + 1).padStart(4, '0')}-${crypto.randomBytes(2).toString('hex').toUpperCase()}`
+    : candidate;
 };
 
 // Helper: Sanitize Quotation for Public Customer View (Zero Internal Costs / Profit Margins)
@@ -207,6 +205,7 @@ export const calculateQuotationPricingPreview = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const createQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const {
       leadId,
       customerId,
@@ -271,7 +270,7 @@ export const createQuotation = async (req, res) => {
     const userName = req.user?.name || 'Sales Specialist';
     const actorObjectId = toObjectIdOrNull(userId);
 
-    if (isDbConnected() && !actorObjectId) {
+    if (!actorObjectId) {
       return res.status(400).json({ message: 'A valid authenticated staff identity is required to create a quotation.' });
     }
 
@@ -336,35 +335,13 @@ export const createQuotation = async (req, res) => {
       ]
     };
 
-    let newQuotation = null;
-    if (isDbConnected()) {
-      try {
-        newQuotation = await Quotation.create(quotationPayload);
+    const newQuotation = await Quotation.create(quotationPayload);
 
-        // If linked to a CRM Lead, update Lead status and push to lead.quotations
-        if (leadId && mongoose.Types.ObjectId.isValid(leadId)) {
-          await Lead.findByIdAndUpdate(leadId, {
-            status: 'IN_PROGRESS',
-            $addToSet: { quotations: newQuotation._id }
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Quotation DB Create warning:', dbErr.message);
-        throw dbErr;
-      }
-    }
-
-    if (!newQuotation) {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
-        return res.status(503).json({ message: 'Quotation storage is unavailable while the database is disconnected.' });
-      }
-      newQuotation = {
-        _id: 'quot_' + Date.now(),
-        ...quotationPayload,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryQuotations.unshift(newQuotation);
+    if (leadId && mongoose.Types.ObjectId.isValid(leadId)) {
+      await Lead.findByIdAndUpdate(leadId, {
+        status: 'IN_PROGRESS',
+        $addToSet: { quotations: newQuotation._id }
+      });
     }
 
     res.status(201).json({
@@ -374,7 +351,7 @@ export const createQuotation = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Quotation Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error creating quotation' });
+    return sendErrorResponse(res, error, 'Unable to create the quotation.');
   }
 };
 
@@ -386,6 +363,7 @@ export const createQuotation = async (req, res) => {
 // @access  Private (Sales/Admin/Operations/Marketing)
 export const getQuotations = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { status, leadId, assignedTo, destination, search, dateFrom, dateTo, sortBy = 'updated', page = 1, limit = 50 } = req.query;
 
     const andConditions = [];
@@ -399,12 +377,8 @@ export const getQuotations = async (req, res) => {
     if (destination && typeof destination === 'string' && destination !== 'all') {
       andConditions.push({ 'tripRequirements.destination': { $regex: String(destination).trim(), $options: 'i' } });
     }
-    if (dateFrom || dateTo) {
-      const createdAt = {};
-      if (dateFrom) createdAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
-      if (dateTo) createdAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
-      andConditions.push({ createdAt });
-    }
+    const createdAt = buildCreatedAtRange(dateFrom, dateTo, 'quotation');
+    if (createdAt) andConditions.push({ createdAt });
 
     // Role-based filtering: Sales users only see quotations assigned to them, created by them, or unassigned
     const userRole = (req.user?.role || 'admin').toLowerCase();
@@ -449,61 +423,15 @@ export const getQuotations = async (req, res) => {
       sortObj = { updatedAt: -1 };
     }
 
-    let quotations = [];
-    let totalCount = 0;
-    if (isDbConnected()) {
-      try {
-        totalCount = await Quotation.countDocuments(filter);
-        quotations = await Quotation.find(filter)
-          .select('-itinerary -hotelOptions -transportOptions -activities -addOns -auditTrail -revisions -termsAndConditions -cancellationPolicy')
-          .sort(sortObj)
-          .limit(Number(limit))
-          .skip((Number(page) - 1) * Number(limit))
-          .populate('leadId', 'name email phone status')
-          .populate('assignedTo', 'name email')
-          .lean();
-      } catch (dbErr) {
-        console.warn('Quotation find warning:', dbErr.message);
-        throw dbErr;
-      }
-    }
-
-    if (!isDbConnected()) {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK !== 'true') {
-        return res.status(503).json({ message: 'Quotation data is unavailable while the database is disconnected.' });
-      }
-      quotations = memoryQuotations.filter(q => {
-        if (userRole === 'sales' && !isSuperOrAdmin) {
-          const isAssigned = String(q.assignedTo) === String(userId) || String(q.createdBy) === String(userId) || !q.assignedTo;
-          if (!isAssigned) return false;
-        }
-        if (status && status !== 'all' && q.status !== status) return false;
-        if (leadId && String(q.leadId) !== String(leadId)) return false;
-        if (destination && destination !== 'all') {
-          if (!((q.tripRequirements?.destination || '').toLowerCase().includes(destination.toLowerCase()))) return false;
-        }
-        if (search) {
-          const s = String(search).toLowerCase();
-          const matches = (q.quotationNumber || '').toLowerCase().includes(s) ||
-                          (q.bookingCode || '').toLowerCase().includes(s) ||
-                          (q.customerSnapshot?.name || '').toLowerCase().includes(s) ||
-                          (q.customerSnapshot?.email || '').toLowerCase().includes(s) ||
-                          (q.tripRequirements?.destination || '').toLowerCase().includes(s);
-          if (!matches) return false;
-        }
-        if (dateFrom && new Date(q.createdAt) < new Date(`${dateFrom}T00:00:00.000Z`)) return false;
-        if (dateTo && new Date(q.createdAt) > new Date(`${dateTo}T23:59:59.999Z`)) return false;
-        return true;
-      });
-
-      if (sortBy === 'value') {
-        quotations.sort((a, b) => (b.pricing?.finalTotal || 0) - (a.pricing?.finalTotal || 0));
-      } else if (sortBy === 'newest') {
-        quotations.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-      } else {
-        quotations.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
-      }
-    }
+    const totalCount = await Quotation.countDocuments(filter);
+    const quotations = await Quotation.find(filter)
+      .select('-itinerary -hotelOptions -transportOptions -activities -addOns -auditTrail -revisions -termsAndConditions -cancellationPolicy')
+      .sort(sortObj)
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit))
+      .populate('leadId', 'name email phone status')
+      .populate('assignedTo', 'name email')
+      .lean();
 
     res.json({
       success: true,
@@ -515,7 +443,7 @@ export const getQuotations = async (req, res) => {
     });
   } catch (error) {
     console.error('Get Quotations Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching quotations' });
+    return sendErrorResponse(res, error, 'Unable to fetch quotations.');
   }
 };
 
@@ -548,6 +476,7 @@ export const isUserAuthorizedForQuotation = (user, quotation) => {
 // @access  Private (Sales/Admin/Operations/Marketing)
 export const getQuotationById = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
     const userRole = (req.user?.role || 'admin').toLowerCase();
 
@@ -570,10 +499,6 @@ export const getQuotationById = async (req, res) => {
     }
 
     if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
-
-    if (!quotation) {
       return res.status(404).json({ message: 'Quotation record not found.' });
     }
 
@@ -592,7 +517,7 @@ export const getQuotationById = async (req, res) => {
       quotation: responseQuotation
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error fetching quotation' });
+    return sendErrorResponse(res, error, 'Unable to fetch the quotation.');
   }
 };
 
@@ -604,15 +529,9 @@ export const getQuotationById = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const updateQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
-
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) {
       return res.status(404).json({ message: 'Quotation record not found.' });
@@ -697,9 +616,7 @@ export const updateQuotation = async (req, res) => {
       });
     }
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -708,7 +625,7 @@ export const updateQuotation = async (req, res) => {
     });
   } catch (error) {
     console.error('Update Quotation Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error updating quotation' });
+    return sendErrorResponse(res, error, 'Unable to update the quotation.');
   }
 };
 
@@ -720,15 +637,9 @@ export const updateQuotation = async (req, res) => {
 // @access  Private (Admin Only)
 export const deleteQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
-
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -744,17 +655,10 @@ export const deleteQuotation = async (req, res) => {
       });
     }
 
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      await Quotation.findByIdAndDelete(id);
-      return res.json({ success: true, message: 'Quotation deleted successfully.' });
-    }
-
-    const index = memoryQuotations.findIndex(q => String(q._id) === String(id) || q.quotationNumber === id);
-    if (index !== -1) memoryQuotations.splice(index, 1);
-
+    await quotation.deleteOne();
     res.json({ success: true, message: 'Quotation deleted successfully.' });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error deleting quotation' });
+    return sendErrorResponse(res, error, 'Unable to delete the quotation.');
   }
 };
 
@@ -766,16 +670,11 @@ export const deleteQuotation = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const archiveQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
     const { reason = 'Archived by sales/admin' } = req.body;
 
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -806,9 +705,7 @@ export const archiveQuotation = async (req, res) => {
       });
     }
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -816,7 +713,7 @@ export const archiveQuotation = async (req, res) => {
       quotation
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error archiving quotation' });
+    return sendErrorResponse(res, error, 'Unable to archive the quotation.');
   }
 };
 
@@ -828,15 +725,9 @@ export const archiveQuotation = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const sendQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
-
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -904,9 +795,7 @@ export const sendQuotation = async (req, res) => {
       timestamp: new Date()
     });
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -916,7 +805,7 @@ export const sendQuotation = async (req, res) => {
       quotation
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error sending quotation' });
+    return sendErrorResponse(res, error, 'Unable to send the quotation.');
   }
 };
 
@@ -928,16 +817,11 @@ export const sendQuotation = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const createQuotationRevision = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
     const { reason = 'Client requested modifications to itinerary / stay' } = req.body;
 
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -989,9 +873,7 @@ export const createQuotationRevision = async (req, res) => {
       });
     }
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -1000,7 +882,7 @@ export const createQuotationRevision = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Revision Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error creating quotation revision' });
+    return sendErrorResponse(res, error, 'Unable to create the quotation revision.');
   }
 };
 
@@ -1012,16 +894,11 @@ export const createQuotationRevision = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const approveQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
     const { reason = 'Approved by customer / sales' } = req.body;
 
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -1084,9 +961,7 @@ export const approveQuotation = async (req, res) => {
       timestamp: new Date()
     });
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -1094,7 +969,7 @@ export const approveQuotation = async (req, res) => {
       quotation
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error approving quotation' });
+    return sendErrorResponse(res, error, 'Unable to approve the quotation.');
   }
 };
 
@@ -1106,16 +981,11 @@ export const approveQuotation = async (req, res) => {
 // @access  Private (Sales/Admin)
 export const rejectQuotation = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
     const { reason = 'Customer declined quotation' } = req.body;
 
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -1143,9 +1013,7 @@ export const rejectQuotation = async (req, res) => {
       timestamp: new Date()
     });
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     res.json({
       success: true,
@@ -1153,7 +1021,7 @@ export const rejectQuotation = async (req, res) => {
       quotation
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error rejecting quotation' });
+    return sendErrorResponse(res, error, 'Unable to reject the quotation.');
   }
 };
 
@@ -1165,15 +1033,9 @@ export const rejectQuotation = async (req, res) => {
 // @access  Private (Admin/Operations)
 export const convertToTrip = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id } = req.params;
-
-    let quotation = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      quotation = await Quotation.findById(id);
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
 
     if (!quotation) return res.status(404).json({ message: 'Quotation not found.' });
 
@@ -1214,7 +1076,11 @@ export const convertToTrip = async (req, res) => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '') + '-' + Date.now().toString().slice(-4);
 
-    const perPaxPrice = quotation.pricing?.perPersonPrice || Math.round((quotation.pricing?.finalTotal || 35000) / (quotation.tripRequirements.totalTravelers || 2));
+    const finalTotal = Number(quotation.pricing?.finalTotal);
+    if (!Number.isFinite(finalTotal) || finalTotal <= 0) {
+      return res.status(409).json({ message: 'Quotation pricing is incomplete and cannot be converted.' });
+    }
+    const perPaxPrice = quotation.pricing?.perPersonPrice || Math.round(finalTotal / (quotation.tripRequirements.totalTravelers || 1));
     const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
     const selectedTransport = quotation.transportOptions?.find(t => t.selected) || quotation.transportOptions?.[0];
 
@@ -1251,41 +1117,24 @@ export const convertToTrip = async (req, res) => {
       }
     };
 
-    let createdTrip = null;
-    if (isDbConnected()) {
-      try {
-        createdTrip = await Trip.create(tripData);
-        quotation.convertedTripId = createdTrip._id;
-        quotation.status = 'CONVERTED';
-        quotation.statusHistory.push({
-          status: 'CONVERTED',
-          changedBy: userId,
-          changedByName: userName,
-          changedAt: new Date(),
-          reason: `Converted to Draft Catalog Trip "${createdTrip.title}" (${createdTrip.slug})`
-        });
-        quotation.auditTrail.push({
-          action: 'CONVERT_TO_TRIP',
-          performedBy: userId,
-          performedByName: userName,
-          details: { tripId: createdTrip._id, tripSlug: createdTrip.slug },
-          timestamp: new Date()
-        });
-        await quotation.save();
-      } catch (dbErr) {
-        console.warn('Trip Create DB error:', dbErr.message);
-      }
-    }
-
-    if (!createdTrip) {
-      createdTrip = {
-        _id: 'trip_' + Date.now(),
-        ...tripData,
-        createdAt: new Date()
-      };
-      quotation.convertedTripId = createdTrip._id;
-      quotation.status = 'CONVERTED';
-    }
+    const createdTrip = await Trip.create(tripData);
+    quotation.convertedTripId = createdTrip._id;
+    quotation.status = 'CONVERTED';
+    quotation.statusHistory.push({
+      status: 'CONVERTED',
+      changedBy: userId,
+      changedByName: userName,
+      changedAt: new Date(),
+      reason: `Converted to Draft Catalog Trip "${createdTrip.title}" (${createdTrip.slug})`
+    });
+    quotation.auditTrail.push({
+      action: 'CONVERT_TO_TRIP',
+      performedBy: userId,
+      performedByName: userName,
+      details: { tripId: createdTrip._id, tripSlug: createdTrip.slug },
+      timestamp: new Date()
+    });
+    await quotation.save();
 
     res.status(201).json({
       success: true,
@@ -1295,7 +1144,7 @@ export const convertToTrip = async (req, res) => {
     });
   } catch (error) {
     console.error('Convert to Trip Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error converting quotation to trip' });
+    return sendErrorResponse(res, error, 'Unable to convert the quotation to a trip.');
   }
 };
 
@@ -1492,7 +1341,7 @@ export const createBookingFromQuotation = async (req, res) => {
     });
   } catch (error) {
     console.error('Convert to Booking Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error creating booking from quotation' });
+    return sendErrorResponse(res, error, 'Unable to create a booking from the quotation.');
   }
 };
 
@@ -1504,18 +1353,9 @@ export const createBookingFromQuotation = async (req, res) => {
 // @access  Public
 export const getPublicQuotationByToken = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { token } = req.params;
-
-    let quotation = null;
-    if (isDbConnected()) {
-      try {
-        quotation = await Quotation.findOne({ 'publicShare.token': token });
-      } catch (e) {}
-    }
-
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
-    }
+    const quotation = await Quotation.findOne({ 'publicShare.token': token });
 
     if (!quotation) {
       return res.status(404).json({ message: 'Quotation proposal not found or link has expired.' });
@@ -1531,9 +1371,7 @@ export const getPublicQuotationByToken = async (req, res) => {
     quotation.publicShare.viewCount = (quotation.publicShare.viewCount || 0) + 1;
     quotation.publicShare.lastViewedAt = new Date();
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     const sanitized = sanitizeForCustomer(quotation);
 
@@ -1542,7 +1380,7 @@ export const getPublicQuotationByToken = async (req, res) => {
       quotation: sanitized
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error retrieving public quotation' });
+    return sendErrorResponse(res, error, 'Unable to retrieve the quotation.');
   }
 };
 
@@ -1551,19 +1389,11 @@ export const getPublicQuotationByToken = async (req, res) => {
 // @access  Public
 export const updatePublicSelectedOptions = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { token } = req.params;
     const { selectedHotelId, selectedHotelIds, selectedTransportId, selectedAddOnIds } = req.body;
 
-    let quotation = null;
-    if (isDbConnected()) {
-      try {
-        quotation = await Quotation.findOne({ 'publicShare.token': token });
-      } catch (e) {}
-    }
-
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
-    }
+    const quotation = await Quotation.findOne({ 'publicShare.token': token });
 
     if (!quotation) {
       return res.status(404).json({ message: 'Quotation proposal not found.' });
@@ -1609,9 +1439,7 @@ export const updatePublicSelectedOptions = async (req, res) => {
     quotation.addOns = computed.addOns;
     quotation.pricing = computed.pricing;
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     const sanitized = sanitizeForCustomer(quotation);
 
@@ -1621,7 +1449,7 @@ export const updatePublicSelectedOptions = async (req, res) => {
       quotation: sanitized
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error updating quotation options' });
+    return sendErrorResponse(res, error, 'Unable to update quotation options.');
   }
 };
 
@@ -1630,6 +1458,7 @@ export const updatePublicSelectedOptions = async (req, res) => {
 // @access  Public
 export const customerQuotationDecision = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { token } = req.params;
     const { decision, customerNotes } = req.body; // decision: 'APPROVE' | 'REJECT'
 
@@ -1637,16 +1466,7 @@ export const customerQuotationDecision = async (req, res) => {
       return res.status(400).json({ message: 'Valid decision ("APPROVE" or "REJECT") is required.' });
     }
 
-    let quotation = null;
-    if (isDbConnected()) {
-      try {
-        quotation = await Quotation.findOne({ 'publicShare.token': token });
-      } catch (e) {}
-    }
-
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => q.publicShare?.token === token);
-    }
+    const quotation = await Quotation.findOne({ 'publicShare.token': token });
 
     if (!quotation) {
       return res.status(404).json({ message: 'Quotation proposal not found.' });
@@ -1708,9 +1528,7 @@ export const customerQuotationDecision = async (req, res) => {
       reason: customerNotes || `Decision recorded directly by traveler (${targetStatus})`
     });
 
-    if (isDbConnected() && typeof quotation.save === 'function') {
-      await quotation.save();
-    }
+    await quotation.save();
 
     const sanitized = sanitizeForCustomer(quotation);
 
@@ -1722,7 +1540,7 @@ export const customerQuotationDecision = async (req, res) => {
       quotation: sanitized
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error processing customer decision' });
+    return sendErrorResponse(res, error, 'Unable to process the customer decision.');
   }
 };
 
@@ -1731,21 +1549,9 @@ export const customerQuotationDecision = async (req, res) => {
 // ============================================================================
 export const attachTransportDocument = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id, optionId } = req.params;
-    let quotation = null;
-    if (isDbConnected()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          quotation = await Quotation.findById(id);
-        }
-        if (!quotation) {
-          quotation = await Quotation.findOne({ quotationNumber: id });
-        }
-      } catch (e) {}
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
     if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
 
     if (!isUserAuthorizedForQuotation(req.user, quotation)) {
@@ -1766,7 +1572,7 @@ export const attachTransportDocument = async (req, res) => {
     if (!transport.documents) transport.documents = [];
 
     const newDoc = {
-      id: `tdoc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: `tdoc_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
       type: req.body.type || 'TRANSPORT_VOUCHER',
       title: req.body.title || req.body.fileName || 'Travel Document',
       fileName: req.body.fileName || 'document.pdf',
@@ -1797,11 +1603,7 @@ export const attachTransportDocument = async (req, res) => {
       details: `Attached ${newDoc.type} (${newDoc.fileName}) to transport ${optionId}`
     });
 
-    if (typeof quotation.save === 'function') {
-      await quotation.save();
-    } else {
-      quotation.updatedAt = new Date();
-    }
+    await quotation.save();
 
     res.status(201).json({
       success: true,
@@ -1811,27 +1613,15 @@ export const attachTransportDocument = async (req, res) => {
     });
   } catch (error) {
     console.error('Attach Transport Document Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to attach transport document' });
+    return sendErrorResponse(res, error, 'Unable to attach the transport document.');
   }
 };
 
 export const deleteTransportDocument = async (req, res) => {
   try {
+    if (!requireQuotationDatabase(res)) return;
     const { id, optionId, docId } = req.params;
-    let quotation = null;
-    if (isDbConnected()) {
-      try {
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          quotation = await Quotation.findById(id);
-        }
-        if (!quotation) {
-          quotation = await Quotation.findOne({ quotationNumber: id });
-        }
-      } catch (e) {}
-    }
-    if (!quotation) {
-      quotation = memoryQuotations.find(q => String(q._id) === String(id) || q.quotationNumber === id);
-    }
+    const quotation = await findQuotationRecord(id);
     if (!quotation) return res.status(404).json({ message: 'Quotation not found' });
 
     if (!isUserAuthorizedForQuotation(req.user, quotation)) {
@@ -1877,6 +1667,6 @@ export const deleteTransportDocument = async (req, res) => {
     });
   } catch (error) {
     console.error('Delete Transport Document Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to remove transport document' });
+    return sendErrorResponse(res, error, 'Unable to remove the transport document.');
   }
 };

@@ -18,6 +18,7 @@ import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas.js';
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine.js';
 import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory.js';
 import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine.js';
+import { API_BASE_URL } from '../services/apiConfig.js';
 
 const TripDetails = () => {
   const { id } = useParams();
@@ -32,7 +33,7 @@ const TripDetails = () => {
     const fetchLiveTrip = async () => {
       if (!id) return;
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips/${id}`);
+        const res = await fetch(`${API_BASE_URL}/trips/${id}`);
         if (!res.ok) throw new Error('Trip unavailable');
         const json = await res.json();
         if (!json.data) throw new Error('Trip unavailable');

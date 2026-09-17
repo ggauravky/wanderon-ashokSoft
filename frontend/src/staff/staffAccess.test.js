@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canAccessStaffRoute,
+  getActiveStaffModule,
   getStaffModuleById,
   getStaffRoleLabel,
   getVisibleStaffModules
@@ -50,4 +51,12 @@ test('role labels normalize existing backend values', () => {
   assert.equal(getStaffRoleLabel('sales'), 'Sales Specialist');
   assert.equal(getStaffRoleLabel('marketing'), 'Management');
   assert.equal(getStaffRoleLabel('user'), 'Staff Member');
+});
+
+test('nested staff routes select the most specific navigation module', () => {
+  const modules = getVisibleStaffModules('admin');
+  assert.equal(getActiveStaffModule(modules, '/staff/admin/trips/new')?.id, 'trips');
+  assert.equal(getActiveStaffModule(modules, '/staff/sales/quotations/quote-1/edit')?.id, 'quotations');
+  assert.equal(getActiveStaffModule(modules, '/staff/management/campaigns/new')?.id, 'management_campaigns');
+  assert.equal(getActiveStaffModule(modules, '/staff/administer')?.id, undefined);
 });

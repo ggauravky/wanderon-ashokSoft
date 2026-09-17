@@ -12,9 +12,7 @@ import * as apiService from '../services/api.js';
 import { loadRazorpayScript } from '../utils/razorpay.js';
 import SEOHead from '../components/SEOHead.jsx';
 
-const createBookingOrderApi = async (...args) => (apiService.createBookingOrderApi || apiService.default?.createBookingOrderApi)?.(...args);
-const verifyBookingPaymentApi = async (...args) => (apiService.verifyBookingPaymentApi || apiService.default?.verifyBookingPaymentApi)?.(...args);
-const calculateBookingPricingApi = async (...args) => (apiService.calculateBookingPricingApi || apiService.default?.calculateBookingPricingApi)?.(...args);
+const { createBookingOrderApi, verifyBookingPaymentApi, calculateBookingPricingApi } = apiService;
 
 // Helper to parse departure date and check partial deposit eligibility
 const checkPartialEligibility = (batchDateStr, balanceDueDays = 6) => {

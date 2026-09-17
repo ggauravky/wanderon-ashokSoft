@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowRight, CalendarClock, Image, Megaphone, RefreshCw } from 'lucide-react';
 import { getMarketingDashboardApi } from '../../../services/api';
+import { getApiErrorMessage } from '../../../services/apiConfig';
 import { formatDate, StatusBadge } from './managementHelpers';
 
 const Metric = ({ label, value, hint }) => <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-medium text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{value ?? '—'}</p><p className="mt-1 text-xs text-slate-400">{hint}</p></div>;
@@ -9,7 +10,7 @@ const QuickLink = ({ to, icon: Icon, title, description }) => to ? <Link to={to}
 
 export default function ManagementOverview() {
   const [dashboard, setDashboard] = useState(null); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  const load = useCallback(async () => { setLoading(true); setError(''); try { const data = await getMarketingDashboardApi(); setDashboard(data.dashboard); } catch (err) { setError(err.message); } finally { setLoading(false); } }, []);
+  const load = useCallback(async () => { setLoading(true); setError(''); try { const data = await getMarketingDashboardApi(); setDashboard(data.dashboard); } catch (err) { setError(getApiErrorMessage(err, 'Unable to load the Management overview.')); } finally { setLoading(false); } }, []);
   useEffect(() => { load(); }, [load]);
   const recent = [...(dashboard?.recentCampaigns || []).map((item) => ({ ...item, kind: 'Campaign' })), ...(dashboard?.recentBanners || []).map((item) => ({ ...item, kind: 'Banner' }))].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 6);
   return <div className="space-y-7">

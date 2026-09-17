@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, BookOpen, ChevronLeft, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { getAdminBookingsApi } from '../../../../services/api.js';
+import useDebouncedValue from '../../../../hooks/useDebouncedValue.js';
 import AdminBookingFilters from './components/AdminBookingFilters.jsx';
 import AdminBookingTable from './components/AdminBookingTable.jsx';
 import AdminBookingCard from './components/AdminBookingCard.jsx';
@@ -9,7 +10,7 @@ const initialFilters = { search: '', bookingStatus: 'all', paymentStatus: 'all',
 const AdminBookingsWorkspace = () => {
   const [bookings, setBookings] = useState([]);
   const [filters, setFilters] = useState(initialFilters);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(filters.search.trim());
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
@@ -17,7 +18,7 @@ const AdminBookingsWorkspace = () => {
   const [error, setError] = useState('');
   const { bookingStatus, paymentStatus, source, dateFrom, dateTo, sort } = filters;
 
-  useEffect(() => { const timer = window.setTimeout(() => { setDebouncedSearch(filters.search.trim()); setPage(1); }, 300); return () => window.clearTimeout(timer); }, [filters.search]);
+  useEffect(() => { setPage(1); }, [debouncedSearch]);
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);
     setError('');

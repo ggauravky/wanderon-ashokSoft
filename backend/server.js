@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
@@ -22,9 +23,11 @@ import salesRoutes from './routes/salesRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
 import { getAllowedOrigins, validateRuntimeConfig } from './config/environment.js';
 
+const environment = process.env.NODE_ENV || 'development';
+
 try {
   validateRuntimeConfig();
-  await connectDB();
+  if (environment === 'production') await connectDB();
 } catch (error) {
   console.error(`Startup validation failed: ${error.message}`);
   process.exit(1);
@@ -40,8 +43,8 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     
-    // Allow any localhost / 127.0.0.1 port
-    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    // Localhost is a development convenience, never a production CORS origin.
+    if (environment !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
     if (allowVercelPreviews && /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/.test(origin)) {
@@ -66,22 +69,17 @@ app.use((req, res, next) => {
 });
 
 // Dedicated Production Health Check Endpoints (For Render / Monitoring)
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    service: 'WanderLuxe REST Backend API',
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString() 
-  });
+const healthPayload = () => ({
+  status: 'ok',
+  environment,
+  databaseConnected: mongoose.connection.readyState === 1,
+  timestamp: new Date().toISOString()
 });
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    service: 'WanderLuxe REST Backend API',
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString() 
-  });
+app.get(['/health', '/api/health'], (req, res) => res.status(200).json(healthPayload()));
+app.get('/api/readiness', (req, res) => {
+  const ready = mongoose.connection.readyState === 1;
+  res.status(ready ? 200 : 503).json({ ...healthPayload(), status: ready ? 'ready' : 'not_ready' });
 });
 
 // Routes
@@ -121,18 +119,22 @@ app.get('/', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   if (err.message === 'Origin is not allowed by CORS policy.') {
-    return res.status(403).json({ message: err.message });
+    return res.status(403).json({ success: false, message: err.message });
   }
-  console.error('Unhandled Server Error:', err.stack);
+  console.error('Unhandled Server Error:', environment === 'production' ? err.message : err.stack);
   res.status(500).json({
-    message: err.message || 'Internal Server Error'
+    success: false,
+    message: environment === 'production' ? 'Internal Server Error' : (err.message || 'Internal Server Error')
   });
 });
 
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
-  console.log(`🚀 WanderLuxe Backend Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`🚀 WanderLuxe Backend Server running on port ${PORT} in ${environment} mode`);
+  if (environment !== 'production') {
+    void connectDB().catch((error) => console.error(`Development database connection failed: ${error.message}`));
+  }
 });
 
 server.on('error', (error) => {

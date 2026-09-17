@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, Grid2X2, Image, List, Loader2, RefreshCw, Upload } from 'lucide-react';
 import { deleteMediaAssetApi, getMediaAssetByIdApi, getMediaCoverageReportApi, listMediaAssetsApi, updateMediaAssetApi } from '../../../../services/api.js';
+import useDebouncedValue from '../../../../hooks/useDebouncedValue.js';
 import MediaFilters from './components/MediaFilters.jsx';
 import MediaGrid from './components/MediaGrid.jsx';
 import MediaList from './components/MediaList.jsx';
@@ -15,7 +16,7 @@ const initialFilters = { search: '', type: 'all', destination: 'all', category: 
 const MediaWorkspace = () => {
   const [assets, setAssets] = useState([]);
   const [filters, setFilters] = useState(initialFilters);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(filters.search.trim());
   const [facets, setFacets] = useState({ destinations: [], categories: [], sources: [], types: [] });
   const [pagination, setPagination] = useState({ page: 1, pages: 0, total: 0, limit: 24 });
   const [page, setPage] = useState(1);
@@ -31,7 +32,7 @@ const MediaWorkspace = () => {
   const [preview, setPreview] = useState(null);
   const { type, destination, category, source, active } = filters;
 
-  useEffect(() => { const timer = window.setTimeout(() => { setDebouncedSearch(filters.search.trim()); setPage(1); }, 300); return () => window.clearTimeout(timer); }, [filters.search]);
+  useEffect(() => { setPage(1); }, [debouncedSearch]);
   const loadCoverage = useCallback(async () => { try { setCoverage(await getMediaCoverageReportApi()); } catch { setCoverage(null); } }, []);
   const load = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);

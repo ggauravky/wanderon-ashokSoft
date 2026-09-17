@@ -716,9 +716,7 @@ async function runExpertRequestsTestSuite() {
     // -------------------------------------------------------------
     {
       const prevEnv = process.env.NODE_ENV;
-      const prevFallback = process.env.ALLOW_IN_MEMORY_FALLBACK;
       process.env.NODE_ENV = 'production';
-      delete process.env.ALLOW_IN_MEMORY_FALLBACK;
 
       // Test sales controller fallback gating in production
       const { req, res, getStatusCode, getData } = createMockReqRes();
@@ -728,7 +726,6 @@ async function runExpertRequestsTestSuite() {
       const noFakeRevenue = metrics?.totalRevenue !== 145000 && metrics?.totalLeads !== 12;
 
       process.env.NODE_ENV = prevEnv;
-      if (prevFallback) process.env.ALLOW_IN_MEMORY_FALLBACK = prevFallback;
 
       assert(
         noFakeRevenue,

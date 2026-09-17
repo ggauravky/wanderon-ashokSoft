@@ -1,17 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import * as apiService from '../services/api.js';
-
-const loginApi = async (...args) => (apiService.loginApi || apiService.default?.loginApi)?.(...args);
-const registerApi = async (...args) => (apiService.registerApi || apiService.default?.registerApi)?.(...args);
-const influencerLoginApi = async (...args) => (apiService.influencerLoginApi || apiService.default?.influencerLoginApi)?.(...args);
-const influencerApplyApi = async (...args) => (apiService.influencerApplyApi || apiService.default?.influencerApplyApi)?.(...args);
-const getMeApi = async (...args) => (apiService.getMeApi || apiService.default?.getMeApi)?.(...args);
-const updateProfileApi = async (...args) => (apiService.updateProfileApi || apiService.default?.updateProfileApi)?.(...args);
-const addBookingApi = async (...args) => (apiService.addBookingApi || apiService.default?.addBookingApi)?.(...args);
-const cancelBookingApi = async (...args) => (apiService.cancelBookingApi || apiService.default?.cancelBookingApi)?.(...args);
-const getInfluencerApplicationsApi = async (...args) => (apiService.getInfluencerApplicationsApi || apiService.default?.getInfluencerApplicationsApi)?.(...args);
-const approveInfluencerApplicationApi = async (...args) => (apiService.approveInfluencerApplicationApi || apiService.default?.approveInfluencerApplicationApi)?.(...args);
-const rejectInfluencerApplicationApi = async (...args) => (apiService.rejectInfluencerApplicationApi || apiService.default?.rejectInfluencerApplicationApi)?.(...args);
+import {
+  approveInfluencerApplicationApi,
+  getInfluencerApplicationsApi,
+  getMeApi,
+  influencerApplyApi,
+  influencerLoginApi,
+  loginApi,
+  registerApi,
+  rejectInfluencerApplicationApi,
+  updateProfileApi
+} from '../services/api.js';
 
 const AuthContext = createContext();
 
@@ -181,34 +179,6 @@ export const AuthProvider = ({ children }) => {
     return true;
   };
 
-  const addBooking = async (bookingData) => {
-    const saved = await addBookingApi(bookingData);
-    setUser((prevUser) => {
-      if (!prevUser) return null;
-      const updatedBookings = [saved, ...(prevUser.bookedTrips || [])];
-      return {
-        ...prevUser,
-        bookedTrips: updatedBookings,
-        wanderCoins: (prevUser.wanderCoins || 500) + 200
-      };
-    });
-    return saved;
-  };
-
-  const cancelBooking = async (bookingId) => {
-    await cancelBookingApi(bookingId);
-    setUser((prevUser) => {
-      if (!prevUser) return null;
-      const updatedBookings = (prevUser.bookedTrips || []).map((b) =>
-        b.id === bookingId ? { ...b, status: 'Cancelled' } : b
-      );
-      return {
-        ...prevUser,
-        bookedTrips: updatedBookings
-      };
-    });
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -221,8 +191,6 @@ export const AuthProvider = ({ children }) => {
         signup,
         logout,
         updateProfile,
-        addBooking,
-        cancelBooking,
         influencerApplications,
         fetchInfluencerApplications,
         applyInfluencer,

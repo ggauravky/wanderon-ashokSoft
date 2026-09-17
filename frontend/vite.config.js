@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    sourcemap: false
+  },
   server: {
     port: 5173,
     strictPort: true, // Fail immediately if 5173 is occupied so no stale port confusion occurs

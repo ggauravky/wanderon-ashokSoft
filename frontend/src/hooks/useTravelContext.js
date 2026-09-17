@@ -5,6 +5,7 @@ import {
 } from '../utils/travelContextEngine.js';
 import { getCurrentSeason, getDestinationWeather } from '../utils/weatherSeasonEngine.js';
 import { getRecentlyViewedTrips, getWishlistIds, getSavedAIItineraries } from '../utils/userHistory.js';
+import { API_BASE_URL } from '../services/apiConfig.js';
 
 export const useTravelContext = (customTrips) => {
   const [liveTrips, setLiveTrips] = useState([]);
@@ -12,7 +13,7 @@ export const useTravelContext = (customTrips) => {
   useEffect(() => {
     const fetchLiveCatalog = async () => {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips`);
+        const res = await fetch(`${API_BASE_URL}/trips`);
         if (res.ok) {
           const json = await res.json();
           setLiveTrips(Array.isArray(json.data) ? json.data.map((trip) => ({ ...trip, availableBatches: Array.isArray(trip.batches) ? trip.batches : [] })) : []);

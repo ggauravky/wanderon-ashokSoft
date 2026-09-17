@@ -59,7 +59,6 @@ export const uploadImageController = async (req, res) => {
 
     const response = results.length === 1 ? results[0] : results;
 
-    console.log(`✅ Image(s) uploaded: ${results.map(r => r.secure_url || r.url).join(', ')}`);
 
     res.status(201).json({
       success: true,
@@ -84,7 +83,6 @@ export const uploadVideoController = async (req, res) => {
     const folder = req.body.folder || 'wanderluxe/videos';
     const result = await uploadVideo(req.file.buffer, req.file.originalname, folder);
 
-    console.log(`✅ Video uploaded: ${result.secure_url || result.url}`);
 
     res.status(201).json({
       success: true,
@@ -114,7 +112,6 @@ export const uploadBase64Controller = async (req, res) => {
       resourceType || 'image'
     );
 
-    console.log(`✅ Base64 media uploaded: ${result.secure_url || result.url}`);
 
     res.status(201).json({
       success: true,
@@ -140,7 +137,6 @@ export const deleteMediaController = async (req, res) => {
 
     const result = await deleteMedia(publicId, resourceType || 'image');
 
-    console.log(`🗑️  Media deleted: ${publicId}`);
 
     res.json({
       success: true,

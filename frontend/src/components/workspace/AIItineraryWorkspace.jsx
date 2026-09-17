@@ -13,8 +13,7 @@ import AIItineraryDocument from '../AIItineraryDocument';
 import { exportElementToPdf } from '../../utils/pdfGenerator';
 import * as apiService from '../../services/api.js';
 
-const saveAIItineraryApi = async (...args) => (apiService.saveAIItineraryApi || apiService.default?.saveAIItineraryApi)?.(...args);
-const updateAIItineraryApi = async (...args) => (apiService.updateAIItineraryApi || apiService.default?.updateAIItineraryApi)?.(...args);
+const { saveAIItineraryApi, updateAIItineraryApi } = apiService;
 
 const TABS = [
   { id: 'overview', label: 'Overview' },

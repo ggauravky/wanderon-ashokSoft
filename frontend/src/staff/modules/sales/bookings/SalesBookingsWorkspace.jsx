@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, BookOpen, Loader2, RefreshCw } from 'lucide-react';
 import { getSalesBookingsApi } from '../../../../services/api.js';
+import useDebouncedValue from '../../../../hooks/useDebouncedValue.js';
 import BookingFilters from './components/BookingFilters.jsx';
 import SalesBookingCard from './components/SalesBookingCard.jsx';
 import SalesBookingTable from './components/SalesBookingTable.jsx';
@@ -8,12 +9,11 @@ import SalesBookingTable from './components/SalesBookingTable.jsx';
 const SalesBookingsWorkspace = () => {
   const [bookings, setBookings] = useState([]);
   const [filters, setFilters] = useState({ search: '', paymentStatus: 'all', bookingStatus: 'all', dateFrom: '', dateTo: '' });
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(filters.search.trim());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => { const timer = window.setTimeout(() => setDebouncedSearch(filters.search.trim()), 300); return () => window.clearTimeout(timer); }, [filters.search]);
   const loadBookings = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true); else setLoading(true);
     setError('');

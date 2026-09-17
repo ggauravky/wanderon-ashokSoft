@@ -9,7 +9,7 @@ import QRCode from 'qrcode';
 import BoardingPassDocument from './BoardingPassDocument.jsx';
 import * as apiService from '../services/api.js';
 
-const getBoardingPassApi = async (...args) => (apiService.getBoardingPassApi || apiService.default?.getBoardingPassApi)?.(...args);
+const { getBoardingPassApi } = apiService;
 
 export const BoardingPassModal = ({ isOpen, onClose, bookingId, initialBookingData = null }) => {
   const documentRef = useRef(null);

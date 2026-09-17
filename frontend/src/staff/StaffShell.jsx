@@ -1,10 +1,11 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getStaffRoleLabel, getVisibleStaffModules } from './staffAccess';
+import { getActiveStaffModule, getStaffRoleLabel, getVisibleStaffModules } from './staffAccess';
 import StaffMobileNav from './components/StaffMobileNav';
 import StaffSidebar from './components/StaffSidebar';
 import StaffTopbar from './components/StaffTopbar';
+import RouteLoader from '../components/RouteLoader';
 
 const StaffShell = () => {
   const { user, logout } = useAuth();
@@ -15,11 +16,7 @@ const StaffShell = () => {
 
   const roleLabel = getStaffRoleLabel(user?.role);
   const visibleModules = getVisibleStaffModules(user?.role);
-  const activeModule = [...visibleModules]
-    .sort((a, b) => b.path.length - a.path.length)
-    .find((module) => (
-    module.exact ? location.pathname === module.path : location.pathname.startsWith(module.path)
-    ));
+  const activeModule = getActiveStaffModule(visibleModules, location.pathname);
 
   const closeMobileNav = useCallback(() => setIsMobileNavOpen(false), []);
 
@@ -59,7 +56,9 @@ const StaffShell = () => {
         />
         <main className="px-4 py-6 sm:px-6 sm:py-8 lg:px-8" id="staff-main-content">
           <div className={`mx-auto w-full ${activeModule?.id === 'overview' ? 'max-w-6xl' : 'max-w-[1440px]'}`}>
-            <Outlet context={{ user, roleLabel, visibleModules }} />
+            <Suspense fallback={<RouteLoader compact />}>
+              <Outlet context={{ user, roleLabel, visibleModules }} />
+            </Suspense>
           </div>
         </main>
       </div>

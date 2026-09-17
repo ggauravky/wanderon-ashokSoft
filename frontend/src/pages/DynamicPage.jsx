@@ -6,7 +6,7 @@ import {
 import { motion } from 'framer-motion';
 import * as apiService from '../services/api.js';
 
-const getPageBySlugApi = async (...args) => (apiService.getPageBySlugApi || apiService.default?.getPageBySlugApi)?.(...args);
+const { getPageBySlugApi } = apiService;
 
 const DynamicPage = () => {
   const { slug } = useParams();

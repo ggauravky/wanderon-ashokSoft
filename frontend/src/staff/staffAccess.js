@@ -25,6 +25,14 @@ export const getVisibleStaffModules = (role) => (
   STAFF_MODULES.filter((module) => canViewStaffModule(role, module))
 );
 
+export const getActiveStaffModule = (modules, pathname) => (
+  [...modules]
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((module) => (
+      module.exact ? pathname === module.path : pathname.startsWith(`${module.path}/`) || pathname === module.path
+    ))
+);
+
 export const getStaffRoleLabel = (role) => {
   const normalizedRole = normalizeStaffRole(role);
   return STAFF_ROLE_LABELS[normalizedRole] || 'Staff Member';

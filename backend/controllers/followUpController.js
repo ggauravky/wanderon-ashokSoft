@@ -2,8 +2,18 @@ import mongoose from 'mongoose';
 import FollowUp from '../models/FollowUp.js';
 import Lead from '../models/Lead.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
+
+const syncLeadNextFollowUp = async (leadId) => {
+  if (!leadId || !mongoose.Types.ObjectId.isValid(leadId)) return;
+  const next = await FollowUp.findOne({
+    leadId,
+    status: { $in: ['pending', 'missed'] }
+  }).sort({ scheduledAt: 1 }).select('scheduledAt').lean();
+  await Lead.findByIdAndUpdate(leadId, { nextFollowUpAt: next?.scheduledAt || null });
+};
 
 // @desc    Get follow-ups (RBAC scoped to sales agent or all for admin)
 // @route   GET /api/follow-ups
@@ -48,7 +58,7 @@ export const getFollowUps = async (req, res) => {
     });
   } catch (error) {
     console.error('getFollowUps Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching follow-ups' });
+    return sendErrorResponse(res, error, 'Unable to fetch follow-ups.');
   }
 };
 
@@ -67,7 +77,7 @@ export const getFollowUpById = async (req, res) => {
 
     res.json({ success: true, followUp });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching follow-up' });
+    return sendErrorResponse(res, error, 'Unable to fetch the follow-up.');
   }
 };
 
@@ -132,15 +142,16 @@ export const createFollowUp = async (req, res) => {
     };
 
     const newFollowUp = await FollowUp.create(followUpData);
-        // Sync Lead document
-        if (mongoose.Types.ObjectId.isValid(leadId)) {
-          const lead = await Lead.findById(leadId);
-          if (lead) {
-            lead.nextFollowUpAt = newFollowUp.scheduledAt;
-            if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
-            await lead.save();
-          }
-        }
+
+    // Sync the Lead so the derived priority reflects this persisted action.
+    if (mongoose.Types.ObjectId.isValid(leadId)) {
+      const lead = await Lead.findById(leadId);
+      if (lead) {
+        if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
+        await lead.save();
+        await syncLeadNextFollowUp(lead._id);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -149,7 +160,7 @@ export const createFollowUp = async (req, res) => {
     });
   } catch (error) {
     console.error('createFollowUp Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error creating follow-up' });
+    return sendErrorResponse(res, error, 'Unable to create the follow-up.');
   }
 };
 
@@ -177,6 +188,7 @@ export const updateFollowUp = async (req, res) => {
     if (status) followUp.status = status;
 
     await followUp.save();
+    await syncLeadNextFollowUp(followUp.leadId);
 
     res.json({
       success: true,
@@ -184,7 +196,7 @@ export const updateFollowUp = async (req, res) => {
       followUp
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error updating follow-up' });
+    return sendErrorResponse(res, error, 'Unable to update the follow-up.');
   }
 };
 
@@ -209,6 +221,7 @@ export const completeFollowUp = async (req, res) => {
     followUp.completedBy = (req.user?._id && isValidMongoObjectId(req.user._id)) ? toObjectIdOrNull(req.user._id) : null;
 
     await followUp.save();
+    await syncLeadNextFollowUp(followUp.leadId);
 
     // Optional: update parent lead status if provided
     if (leadStatusUpdate && followUp.leadId && isDbConnected()) {
@@ -223,7 +236,7 @@ export const completeFollowUp = async (req, res) => {
       followUp
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error completing follow-up' });
+    return sendErrorResponse(res, error, 'Unable to complete the follow-up.');
   }
 };
 
@@ -237,6 +250,7 @@ export const deleteFollowUp = async (req, res) => {
     if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Follow-up storage is unavailable.' });
     const deleted = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findByIdAndDelete(id) : null;
     if (!deleted) return res.status(404).json({ success: false, message: 'Follow-up not found.' });
+    await syncLeadNextFollowUp(deleted.leadId);
 
     res.json({
       success: true,
@@ -244,6 +258,6 @@ export const deleteFollowUp = async (req, res) => {
       id
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error deleting follow-up' });
+    return sendErrorResponse(res, error, 'Unable to delete the follow-up.');
   }
 };

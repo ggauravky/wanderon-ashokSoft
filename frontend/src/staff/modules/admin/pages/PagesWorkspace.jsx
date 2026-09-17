@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight, FileText, Loader2, Plus, RefreshCw, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { deletePageApi, getAllAdminPagesApi } from '../../../../services/api.js';
+import useDebouncedValue from '../../../../hooks/useDebouncedValue.js';
 import PageFilters from './components/PageFilters.jsx';
 import PagesTable from './components/PagesTable.jsx';
 import PagesMobileCard from './components/PagesMobileCard.jsx';
@@ -10,7 +11,7 @@ const initialFilters = { search: '', status: 'all', sort: 'updated_desc' };
 const PagesWorkspace = () => {
   const [pages, setPages] = useState([]);
   const [filters, setFilters] = useState(initialFilters);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(filters.search.trim());
   const [pageNumber, setPageNumber] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, pages: 0, total: 0, limit: 25 });
   const [loading, setLoading] = useState(true);
@@ -20,7 +21,7 @@ const PagesWorkspace = () => {
   const [notice, setNotice] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
   const { status, sort } = filters;
-  useEffect(() => { const timer = window.setTimeout(() => { setDebouncedSearch(filters.search.trim()); setPageNumber(1); }, 300); return () => window.clearTimeout(timer); }, [filters.search]);
+  useEffect(() => { setPageNumber(1); }, [debouncedSearch]);
   const load = useCallback(async (silent = false) => { if (silent) setRefreshing(true); else setLoading(true); setError(''); try { const response = await getAllAdminPagesApi({ search: debouncedSearch, status, sort, page: pageNumber, limit: 25, envelope: true }); setPages(Array.isArray(response.pages) ? response.pages : []); setPagination(response.pagination || { page: pageNumber, pages: 0, total: 0, limit: 25 }); } catch (loadError) { setPages([]); setError(loadError.message || 'Unable to load pages.'); } finally { setLoading(false); setRefreshing(false); } }, [debouncedSearch, pageNumber, sort, status]);
   useEffect(() => { load(); }, [load]);
   const updateFilter = (key, value) => { setFilters((current) => ({ ...current, [key]: value })); if (key !== 'search') setPageNumber(1); };
@@ -29,4 +30,3 @@ const PagesWorkspace = () => {
 };
 
 export default PagesWorkspace;
-

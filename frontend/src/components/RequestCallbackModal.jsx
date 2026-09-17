@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import * as apiService from '../services/api.js';
 
-const createLeadApi = async (...args) => (apiService.createLeadApi || apiService.default?.createLeadApi)?.(...args);
+const { createLeadApi } = apiService;
 
 const TIME_WINDOWS = [
   { id: 'Morning', label: 'Morning', time: '10:00 AM - 1:00 PM', icon: '🌅' },

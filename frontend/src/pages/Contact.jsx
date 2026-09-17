@@ -7,7 +7,7 @@ import { getFAQSchema } from '../utils/seoSchemas';
 import { useAuth } from '../contexts/AuthContext';
 import * as apiService from '../services/api.js';
 
-const createLeadApi = async (...args) => (apiService.createLeadApi || apiService.default?.createLeadApi)?.(...args);
+const { createLeadApi } = apiService;
 
 const Contact = () => {
   const { user } = useAuth();

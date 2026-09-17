@@ -13,7 +13,7 @@ import AIPlannerModal from '../components/AIPlannerModal';
 import ItineraryDayGallery from '../components/ItineraryDayGallery';
 import * as apiService from '../services/api.js';
 
-const getPublicSharedItineraryApi = async (...args) => (apiService.getPublicSharedItineraryApi || apiService.default?.getPublicSharedItineraryApi)?.(...args);
+const { getPublicSharedItineraryApi } = apiService;
 import { generateAIItinerary } from '../utils/aiPlannerEngine';
 
 const SharedItinerary = () => {

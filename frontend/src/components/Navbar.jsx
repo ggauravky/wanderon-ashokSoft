@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Menu, X, Search, ChevronDown, LogOut, Compass, 
@@ -9,7 +9,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { getWishlistIds } from '../utils/userHistory.js';
-import AIPlannerModal from './AIPlannerModal.jsx';
+
+const AIPlannerModal = lazy(() => import('./AIPlannerModal.jsx'));
 
 const INDIA_DESTINATIONS = [
   { name: 'Himachal Pradesh', count: '12 Packages', path: '/trips/himachal-pradesh', vibe: 'Spiti Circuit, Kasol, Manali & Jibhi Cafe Trails' },
@@ -118,11 +119,15 @@ const Navbar = () => {
 
   return (
     <>
-      <AIPlannerModal
-        isOpen={isPlannerOpen}
-        onClose={() => setIsPlannerOpen(false)}
-        initialDestination="Meghalaya"
-      />
+      {isPlannerOpen && (
+        <Suspense fallback={null}>
+          <AIPlannerModal
+            isOpen
+            onClose={() => setIsPlannerOpen(false)}
+            initialDestination="Meghalaya"
+          />
+        </Suspense>
+      )}
 
       <nav
         className={`fixed top-0 left-0 right-0 w-full z-40 transition-all duration-300 ${

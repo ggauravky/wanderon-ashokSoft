@@ -9,12 +9,9 @@ import {
 import SEOHead from '../components/SEOHead.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
 import * as apiService from '../services/api.js';
+import { API_BASE_URL } from '../services/apiConfig.js';
 
-const calculateBookingPricingApi = async (...args) => {
-  const fn = apiService.calculateBookingPricingApi || apiService.default?.calculateBookingPricingApi;
-  if (typeof fn === 'function') return fn(...args);
-  throw new Error('calculateBookingPricingApi is not available');
-};
+const { calculateBookingPricingApi } = apiService;
 
 const BookingDates = () => {
   const { tripSlug } = useParams();
@@ -33,7 +30,7 @@ const BookingDates = () => {
     const fetchLiveTrip = async () => {
       if (!tripSlug) return;
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips/${tripSlug}`);
+        const res = await fetch(`${API_BASE_URL}/trips/${tripSlug}`);
         if (!res.ok) throw new Error('Trip unavailable');
         const json = await res.json();
         if (!json.data) throw new Error('Trip unavailable');

@@ -13,11 +13,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
 import * as apiService from '../services/api.js';
 
-const getMyBookingsApi = async (...args) => (apiService.getMyBookingsApi || apiService.default?.getMyBookingsApi)?.(...args);
-const getMySavedItinerariesApi = async (...args) => (apiService.getMySavedItinerariesApi || apiService.default?.getMySavedItinerariesApi)?.(...args);
-const deleteSavedItineraryApi = async (...args) => (apiService.deleteSavedItineraryApi || apiService.default?.deleteSavedItineraryApi)?.(...args);
-const payRemainingBalanceApi = async (...args) => (apiService.payRemainingBalanceApi || apiService.default?.payRemainingBalanceApi)?.(...args);
-const verifyRemainingBalanceApi = async (...args) => (apiService.verifyRemainingBalanceApi || apiService.default?.verifyRemainingBalanceApi)?.(...args);
+const { getMyBookingsApi, getMySavedItinerariesApi, deleteSavedItineraryApi,
+  payRemainingBalanceApi, verifyRemainingBalanceApi } = apiService;
 import { 
   getSavedAIItineraries, deleteSavedAIItinerary, 
   getWishlistIds, toggleWishlistItem, getRecentlyViewedTrips 
@@ -34,7 +31,7 @@ import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import { loadRazorpayScript } from '../utils/razorpay.js';
 
 const Profile = () => {
-  const { user, logout, updateProfile, cancelBooking } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('bookings');

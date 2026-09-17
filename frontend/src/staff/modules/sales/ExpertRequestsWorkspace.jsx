@@ -9,6 +9,7 @@ import {
   logLeadContactApi,
   updateLeadStatusApi
 } from '../../../services/api.js';
+import useDebouncedValue from '../../../hooks/useDebouncedValue.js';
 import ContactOutcomeModal from './components/ContactOutcomeModal.jsx';
 import ExpertRequestDrawer from './components/ExpertRequestDrawer.jsx';
 import ExpertRequestFilters from './components/ExpertRequestFilters.jsx';
@@ -41,7 +42,7 @@ const ExpertRequestsWorkspace = () => {
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [metricsError, setMetricsError] = useState(false);
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
   const [priority, setPriority] = useState('all');
   const [callbackTiming, setCallbackTiming] = useState('all');
@@ -53,11 +54,6 @@ const ExpertRequestsWorkspace = () => {
   const [activeModal, setActiveModal] = useState(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [search]);
 
   useEffect(() => {
     if (requestedView !== view) {
@@ -92,7 +88,7 @@ const ExpertRequestsWorkspace = () => {
         priority,
         search: debouncedSearch,
         limit: 100,
-        sortBy: 'newest'
+        sortBy: 'effective_priority'
       });
       setLeads(Array.isArray(data?.items) ? data.items : []);
     } catch (loadError) {

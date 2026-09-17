@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -12,7 +12,6 @@ import TripCard from '../components/TripCard.jsx';
 import DestinationCard from '../components/DestinationCard.jsx';
 import CallbackForm from '../components/CallbackForm.jsx';
 import SEOHead from '../components/SEOHead.jsx';
-import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import HomeTripSection from '../components/HomeTripSection.jsx';
 import { HOME_SECTION_LIMITS, HOME_SECTIONS_META } from '../config/homeConfig.js';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas.js';
@@ -20,6 +19,8 @@ import { DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../const
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import { getActiveMarketingBannersApi } from '../services/api.js';
+
+const AIPlannerModal = lazy(() => import('../components/AIPlannerModal.jsx'));
 
 const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
@@ -222,11 +223,15 @@ const Home = () => {
       />
 
       {/* AI Planner Modal */}
-      <AIPlannerModal
-        isOpen={isPlannerOpen}
-        onClose={() => setIsPlannerOpen(false)}
-        initialDestination={plannerDestination}
-      />
+      {isPlannerOpen && (
+        <Suspense fallback={null}>
+          <AIPlannerModal
+            isOpen
+            onClose={() => setIsPlannerOpen(false)}
+            initialDestination={plannerDestination}
+          />
+        </Suspense>
+      )}
 
       {/* ========================================================================= */}
       {/* 1. CINEMATIC TRAVEL HERO & DISCOVERY SEARCH */}

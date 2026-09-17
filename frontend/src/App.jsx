@@ -1,66 +1,69 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import TripDetails from './pages/TripDetails';
-import BookingDates from './pages/BookingDates';
-import Checkout from './pages/Checkout';
-import Profile from './pages/Profile';
-import BookingConfirmation from './pages/BookingConfirmation';
-import BookingVerify from './pages/BookingVerify';
-import Destinations from './pages/Destinations';
-import Contact from './pages/Contact';
-import Blog from './pages/Blog';
-import About from './pages/About';
-import AdminLogin from './pages/AdminLogin';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
-import InfluencerDashboard from './pages/InfluencerDashboard';
-import InfluencerLanding from './pages/InfluencerLanding';
-import InfluencerSignup from './pages/InfluencerSignup';
-import InfluencerLogin from './pages/InfluencerLogin';
 import InfluencerRoute from './components/InfluencerRoute';
-import CreatorTrip from './pages/CreatorTrip';
-import CreatorStorefront from './pages/CreatorStorefront';
-import SharedItinerary from './pages/SharedItinerary';
-import DynamicPage from './pages/DynamicPage';
-import PublicQuotationView from './pages/PublicQuotationView';
-import NotFound from './pages/NotFound';
-import PlaceholderPage from './pages/PlaceholderPage';
-import AIPlannerPage from './pages/AIPlannerPage';
+import RouteLoader from './components/RouteLoader';
 import ScrollToTop from './components/ScrollToTop';
 import StaffShell from './staff/StaffShell';
-import StaffOverview from './staff/StaffOverview';
 import StaffModuleRoute from './staff/components/StaffModuleRoute';
-import AdminWorkspace from './staff/workspaces/AdminWorkspace';
-import ManagementOverview from './staff/modules/management/ManagementOverview';
-import CampaignsWorkspace from './staff/modules/management/campaigns/CampaignsWorkspace';
-import CampaignEditor from './staff/modules/management/campaigns/CampaignEditor';
-import BannersWorkspace from './staff/modules/management/banners/BannersWorkspace';
-import BannerEditor from './staff/modules/management/banners/BannerEditor';
-import SalesOverview from './staff/modules/sales/SalesOverview';
-import ExpertRequestsWorkspace from './staff/modules/sales/ExpertRequestsWorkspace';
-import QuotationsWorkspace from './staff/modules/sales/quotations/QuotationsWorkspace';
-import QuotationBuilderPage from './staff/modules/sales/quotations/QuotationBuilderPage';
-import QuotationDetailPage from './staff/modules/sales/quotations/QuotationDetailPage';
-import SalesBookingsWorkspace from './staff/modules/sales/bookings/SalesBookingsWorkspace';
-import SalesBookingDetail from './staff/modules/sales/bookings/SalesBookingDetail';
-import TripsWorkspace from './staff/modules/admin/trips/TripsWorkspace';
-import TripEditor from './staff/modules/admin/trips/TripEditor';
-import AdminBookingsWorkspace from './staff/modules/admin/bookings/AdminBookingsWorkspace';
-import AdminBookingDetail from './staff/modules/admin/bookings/AdminBookingDetail';
-import MediaWorkspace from './staff/modules/admin/media/MediaWorkspace';
-import PagesWorkspace from './staff/modules/admin/pages/PagesWorkspace';
-import PageEditor from './staff/modules/admin/pages/PageEditor';
-import UsersWorkspace from './staff/modules/admin/users/UsersWorkspace';
-import UserDetail from './staff/modules/admin/users/UserDetail';
-import CreatorApplicationsWorkspace from './staff/modules/admin/creators/CreatorApplicationsWorkspace';
-import CreatorApplicationDetail from './staff/modules/admin/creators/CreatorApplicationDetail';
-import PayoutsWorkspace from './staff/modules/admin/payouts/PayoutsWorkspace';
-import PayoutDetail from './staff/modules/admin/payouts/PayoutDetail';
-import DiscountsWorkspace from './staff/modules/admin/discounts/DiscountsWorkspace';
+
+const Login = lazy(() => import('./pages/Login'));
+const Home = lazy(() => import('./pages/Home'));
+const Signup = lazy(() => import('./pages/Signup'));
+const TripDetails = lazy(() => import('./pages/TripDetails'));
+const BookingDates = lazy(() => import('./pages/BookingDates'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Profile = lazy(() => import('./pages/Profile'));
+const BookingConfirmation = lazy(() => import('./pages/BookingConfirmation'));
+const BookingVerify = lazy(() => import('./pages/BookingVerify'));
+const Destinations = lazy(() => import('./pages/Destinations'));
+const Contact = lazy(() => import('./pages/Contact'));
+const Blog = lazy(() => import('./pages/Blog'));
+const About = lazy(() => import('./pages/About'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const InfluencerDashboard = lazy(() => import('./pages/InfluencerDashboard'));
+const InfluencerLanding = lazy(() => import('./pages/InfluencerLanding'));
+const InfluencerSignup = lazy(() => import('./pages/InfluencerSignup'));
+const InfluencerLogin = lazy(() => import('./pages/InfluencerLogin'));
+const CreatorTrip = lazy(() => import('./pages/CreatorTrip'));
+const CreatorStorefront = lazy(() => import('./pages/CreatorStorefront'));
+const SharedItinerary = lazy(() => import('./pages/SharedItinerary'));
+const DynamicPage = lazy(() => import('./pages/DynamicPage'));
+const PublicQuotationView = lazy(() => import('./pages/PublicQuotationView'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
+const AIPlannerPage = lazy(() => import('./pages/AIPlannerPage'));
+
+const StaffOverview = lazy(() => import('./staff/StaffOverview'));
+const AdminWorkspace = lazy(() => import('./staff/workspaces/AdminWorkspace'));
+const ManagementOverview = lazy(() => import('./staff/modules/management/ManagementOverview'));
+const CampaignsWorkspace = lazy(() => import('./staff/modules/management/campaigns/CampaignsWorkspace'));
+const CampaignEditor = lazy(() => import('./staff/modules/management/campaigns/CampaignEditor'));
+const BannersWorkspace = lazy(() => import('./staff/modules/management/banners/BannersWorkspace'));
+const BannerEditor = lazy(() => import('./staff/modules/management/banners/BannerEditor'));
+const SalesOverview = lazy(() => import('./staff/modules/sales/SalesOverview'));
+const ExpertRequestsWorkspace = lazy(() => import('./staff/modules/sales/ExpertRequestsWorkspace'));
+const QuotationsWorkspace = lazy(() => import('./staff/modules/sales/quotations/QuotationsWorkspace'));
+const QuotationBuilderPage = lazy(() => import('./staff/modules/sales/quotations/QuotationBuilderPage'));
+const QuotationDetailPage = lazy(() => import('./staff/modules/sales/quotations/QuotationDetailPage'));
+const SalesBookingsWorkspace = lazy(() => import('./staff/modules/sales/bookings/SalesBookingsWorkspace'));
+const SalesBookingDetail = lazy(() => import('./staff/modules/sales/bookings/SalesBookingDetail'));
+const TripsWorkspace = lazy(() => import('./staff/modules/admin/trips/TripsWorkspace'));
+const TripEditor = lazy(() => import('./staff/modules/admin/trips/TripEditor'));
+const AdminBookingsWorkspace = lazy(() => import('./staff/modules/admin/bookings/AdminBookingsWorkspace'));
+const AdminBookingDetail = lazy(() => import('./staff/modules/admin/bookings/AdminBookingDetail'));
+const MediaWorkspace = lazy(() => import('./staff/modules/admin/media/MediaWorkspace'));
+const PagesWorkspace = lazy(() => import('./staff/modules/admin/pages/PagesWorkspace'));
+const PageEditor = lazy(() => import('./staff/modules/admin/pages/PageEditor'));
+const UsersWorkspace = lazy(() => import('./staff/modules/admin/users/UsersWorkspace'));
+const UserDetail = lazy(() => import('./staff/modules/admin/users/UserDetail'));
+const CreatorApplicationsWorkspace = lazy(() => import('./staff/modules/admin/creators/CreatorApplicationsWorkspace'));
+const CreatorApplicationDetail = lazy(() => import('./staff/modules/admin/creators/CreatorApplicationDetail'));
+const PayoutsWorkspace = lazy(() => import('./staff/modules/admin/payouts/PayoutsWorkspace'));
+const PayoutDetail = lazy(() => import('./staff/modules/admin/payouts/PayoutDetail'));
+const DiscountsWorkspace = lazy(() => import('./staff/modules/admin/discounts/DiscountsWorkspace'));
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -78,6 +81,7 @@ function App() {
     <AuthProvider>
       <Router>
         <ScrollToTop />
+        <Suspense fallback={<RouteLoader />}>
         <Routes>
           <Route path="/staff/login" element={<AdminLogin />} />
           <Route path="/admin/login" element={<Navigate to="/staff/login" replace />} />
@@ -199,6 +203,7 @@ function App() {
             <Route path="management/banners" element={<StaffModuleRoute moduleId="management_banners"><BannersWorkspace /></StaffModuleRoute>} />
             <Route path="management/banners/new" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
             <Route path="management/banners/:id/edit" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
+            <Route path="*" element={<Navigate to="/staff" replace />} />
           </Route>
 
           <Route path="/" element={<MainLayout />}>
@@ -220,7 +225,6 @@ function App() {
             <Route path="quotations/:token" element={<PublicQuotationView />} />
             <Route path="profile" element={<Profile />} />
             
-            {/* Legacy deep Admin routes remain compatible until their modules are extracted. */}
             {/* Creator / Influencer Routes */}
             <Route path="influencer/program" element={<InfluencerLanding />} />
             <Route path="influencer/signup" element={<InfluencerSignup />} />
@@ -271,6 +275,7 @@ function App() {
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
+        </Suspense>
       </Router>
     </AuthProvider>
   );

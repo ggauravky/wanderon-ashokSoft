@@ -7,7 +7,7 @@ import {
 import jsPDF from 'jspdf';
 import * as apiService from '../services/api.js';
 
-const getProvisionalLetterApi = async (...args) => (apiService.getProvisionalLetterApi || apiService.default?.getProvisionalLetterApi)?.(...args);
+const { getProvisionalLetterApi } = apiService;
 
 export const ProvisionalBookingModal = ({ 
   isOpen, 

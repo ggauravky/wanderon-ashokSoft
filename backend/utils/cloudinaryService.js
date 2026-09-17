@@ -4,9 +4,11 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-// Ensure local upload fallback directory exists
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Local storage is a development-only convenience.
 const LOCAL_UPLOAD_DIR = path.resolve('./uploads');
-if (!fs.existsSync(LOCAL_UPLOAD_DIR)) {
+if (!isProduction && !fs.existsSync(LOCAL_UPLOAD_DIR)) {
   fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true });
 }
 
@@ -23,8 +25,16 @@ if (isCloudinaryConfigured()) {
   });
   console.log('☁️  Cloudinary SDK configured and ready.');
 } else {
-  console.warn('⚠️  Cloudinary credentials not set. Running in Local Fallback Upload Mode.');
+  console.warn(isProduction
+    ? 'Cloudinary credentials are not configured. Media mutations will fail closed.'
+    : 'Cloudinary credentials are not set. Using development-only local upload storage.');
 }
+
+const assertMediaStorageAvailable = () => {
+  if (!isCloudinaryConfigured() && isProduction) {
+    throw new Error('Media storage is not configured.');
+  }
+};
 
 // ─── Local Fallback Save ────────────────────────────────────────────
 const saveLocalFallback = (buffer, originalName, subfolder = 'misc') => {
@@ -48,8 +58,8 @@ const saveLocalFallback = (buffer, originalName, subfolder = 'misc') => {
 
 // ─── Upload Image ────────────────────────────────────────────────────
 export const uploadImage = async (buffer, originalName = 'image', folder = 'wanderluxe/images') => {
+  assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
-    console.log(`[LOCAL UPLOAD] Saving image: ${originalName}`);
     return saveLocalFallback(buffer, originalName, 'images');
   }
 
@@ -87,8 +97,8 @@ export const uploadImage = async (buffer, originalName = 'image', folder = 'wand
 
 // ─── Upload Video ────────────────────────────────────────────────────
 export const uploadVideo = async (buffer, originalName = 'video', folder = 'wanderluxe/videos') => {
+  assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
-    console.log(`[LOCAL UPLOAD] Saving video: ${originalName}`);
     return saveLocalFallback(buffer, originalName, 'videos');
   }
 
@@ -125,6 +135,7 @@ export const uploadVideo = async (buffer, originalName = 'video', folder = 'wand
 
 // ─── Upload from Base64 / Data URI ──────────────────────────────────
 export const uploadBase64Media = async (base64Data, folder = 'wanderluxe/misc', resourceType = 'image') => {
+  assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
     // Decode base64 and store locally
     const matches = base64Data.match(/^data:(.+);base64,(.+)$/);
@@ -161,6 +172,7 @@ export const uploadBase64Media = async (base64Data, folder = 'wanderluxe/misc', 
 
 // ─── Delete Media by Public ID ───────────────────────────────────────
 export const deleteMedia = async (publicId, resourceType = 'image') => {
+  assertMediaStorageAvailable();
   if (!isCloudinaryConfigured() || String(publicId).startsWith('local/')) {
     // Handle local file deletion
     const localPath = path.join(LOCAL_UPLOAD_DIR, String(publicId).replace('local/', ''));
@@ -182,8 +194,8 @@ export const deleteMedia = async (publicId, resourceType = 'image') => {
 
 // ─── Upload Document / PDF ──────────────────────────────────────────
 export const uploadDocument = async (buffer, originalName = 'document.pdf', folder = 'wanderluxe/documents', mimeType = 'application/pdf') => {
+  assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
-    console.log(`[LOCAL UPLOAD] Saving document: ${originalName}`);
     return saveLocalFallback(buffer, originalName, 'documents');
   }
 

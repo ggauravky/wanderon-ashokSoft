@@ -1,6 +1,5 @@
 import 'dotenv/config';
-import { 
-  memoryQuotations,
+import {
   createQuotation,
   getQuotations,
   getQuotationById,

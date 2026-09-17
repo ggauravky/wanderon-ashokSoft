@@ -13,10 +13,7 @@ import { generateAIItinerary } from '../utils/aiPlannerEngine';
 import { saveAIItinerary } from '../utils/userHistory';
 import * as apiService from '../services/api.js';
 
-const generateAIItineraryApi = async (...args) => (apiService.generateAIItineraryApi || apiService.default?.generateAIItineraryApi)?.(...args);
-const saveAIItineraryApi = async (...args) => (apiService.saveAIItineraryApi || apiService.default?.saveAIItineraryApi)?.(...args);
-const updateAIItineraryApi = async (...args) => (apiService.updateAIItineraryApi || apiService.default?.updateAIItineraryApi)?.(...args);
-const regenerateDayApi = async (...args) => (apiService.regenerateDayApi || apiService.default?.regenerateDayApi)?.(...args);
+const { generateAIItineraryApi, saveAIItineraryApi, updateAIItineraryApi, regenerateDayApi } = apiService;
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 
 const getDestinations = () => (travelKnowledgeService.getDestinations || travelKnowledgeService.default?.getDestinations)?.() || [];

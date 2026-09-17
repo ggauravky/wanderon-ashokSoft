@@ -13,7 +13,6 @@ import {
   resolveItineraryMediaController
 } from './controllers/mediaAssetController.js';
 import {
-  memoryQuotations,
   createQuotation,
   getQuotationById,
   approveQuotation,

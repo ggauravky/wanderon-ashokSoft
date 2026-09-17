@@ -23,7 +23,7 @@ const connectDB = async () => {
       console.warn("DNS override notice:", dnsErr.message);
     }
 
-    // Disable Mongoose bufferCommands so queries fail-fast to in-memory store if DB is unreachable
+    // Disable buffering so database-backed features fail closed when MongoDB is unreachable.
     mongoose.set("bufferCommands", false);
 
     await mongoose.connect(mongoUri, {

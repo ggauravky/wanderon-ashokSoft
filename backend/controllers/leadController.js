@@ -3,11 +3,10 @@ import Lead, { generateLeadReferenceId } from '../models/Lead.js';
 import User from '../models/User.js';
 import FollowUp from '../models/FollowUp.js';
 import { resolveCustomerUserObjectId, isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
+import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
-
-// Offline resilient memory fallback (ONLY for local offline dev when DB is not reachable)
-let memoryLeads = [];
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -19,6 +18,9 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // @access  Public / Optional Auth
 export const createLead = async (req, res) => {
   try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
+    }
     const {
       name,
       email,
@@ -105,52 +107,25 @@ export const createLead = async (req, res) => {
     // 2. Duplicate / Spam Throttling (15-minute cool-down window per user/trip)
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
 
-    if (isDbConnected()) {
-      const queryFilter = {
-        createdAt: { $gte: fifteenMinutesAgo },
-        $or: [
-          { email: cleanEmail },
-          { phone: formattedPhone },
-          { phone: cleanPhone }
-        ]
-      };
+    const queryFilter = {
+      createdAt: { $gte: fifteenMinutesAgo },
+      $or: [
+        { email: cleanEmail },
+        { phone: formattedPhone },
+        { phone: cleanPhone }
+      ]
+    };
 
-      if (tripId) {
-        queryFilter.tripId = String(tripId);
-      }
+    if (tripId) queryFilter.tripId = String(tripId);
 
-      const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
-
-      if (existingLead) {
-        console.log(`ℹ️ [Lead Throttled] Duplicate callback/lead prevented for ${cleanEmail} (Lead: ${existingLead.referenceId || existingLead._id})`);
-        return res.status(200).json({
-          success: true,
-          isDuplicateThrottled: true,
-          message: 'We already received your inquiry for this journey! Our certified travel specialist is preparing your details and will connect with you shortly.',
-          lead: existingLead
-        });
-      }
-    } else {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
-        return res.status(503).json({
-          message: 'Database service is currently unavailable. Please try again later.'
-        });
-      }
-      // In-Memory Duplicate Check for offline dev
-      const recentMemLead = memoryLeads.find(l =>
-        (l.email === cleanEmail || l.phone === formattedPhone) &&
-        (!tripId || l.tripId === String(tripId)) &&
-        new Date(l.createdAt) >= fifteenMinutesAgo
-      );
-
-      if (recentMemLead) {
-        return res.status(200).json({
-          success: true,
-          isDuplicateThrottled: true,
-          message: 'We already received your inquiry for this journey! Our certified travel specialist is preparing your details and will connect with you shortly.',
-          lead: recentMemLead
-        });
-      }
+    const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
+    if (existingLead) {
+      return res.status(200).json({
+        success: true,
+        isDuplicateThrottled: true,
+        message: 'We already received your inquiry for this journey! Our certified travel specialist is preparing your details and will connect with you shortly.',
+        lead: existingLead
+      });
     }
 
     // 3. Create and Persist Lead (With Reference ID retry)
@@ -201,35 +176,19 @@ export const createLead = async (req, res) => {
     };
 
     let newLead = null;
-    if (isDbConnected()) {
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          newLead = await Lead.create(leadPayload);
-          break;
-        } catch (dbErr) {
-          if (dbErr.code === 11000 && retries > 1) {
-            retries--;
-            leadPayload.referenceId = generateLeadReferenceId();
-            continue;
-          }
-          throw dbErr;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        newLead = await Lead.create(leadPayload);
+        break;
+      } catch (dbErr) {
+        if (dbErr.code === 11000 && retries > 1) {
+          retries--;
+          leadPayload.referenceId = generateLeadReferenceId();
+          continue;
         }
+        throw dbErr;
       }
-    } else {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
-        return res.status(503).json({
-          message: 'Database service is currently unavailable. Please try again later.'
-        });
-      }
-      // Memory fallback only when DB is completely offline in development
-      newLead = {
-        _id: 'lead_' + Date.now(),
-        ...leadPayload,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryLeads.unshift(newLead);
     }
 
     if (!newLead || (!newLead._id && !newLead.referenceId)) {
@@ -238,14 +197,6 @@ export const createLead = async (req, res) => {
         message: 'Unable to schedule callback right now. Please try again.'
       });
     }
-
-    console.log(`\n======================================================`);
-    console.log(`📞 [CRM NEW LEAD CAPTURED: ${determinedLeadType.toUpperCase()}]`);
-    console.log(`Ref: ${newLead.referenceId} | Traveler: ${newLead.name} (${newLead.email} • ${newLead.phone})`);
-    console.log(`Expedition: ${newLead.tripTitle || newLead.destination} | Priority: ${newLead.priority}`);
-    console.log(`Preferred Call: ${newLead.preferredCallDate} [${newLead.preferredCallWindow}]`);
-    console.log(`Topics: ${cleanTopics.join(', ') || 'None'}`);
-    console.log(`======================================================\n`);
 
     const confirmationMsg = determinedLeadType === 'callback_request'
       ? `Thank you, ${newLead.name.split(' ')[0]}! Your callback request has been scheduled for ${newLead.preferredCallDate} (${newLead.preferredCallWindow} window). Our travel specialist will call you directly.`
@@ -283,6 +234,7 @@ export const createLead = async (req, res) => {
 // @access  Private (Super Admin, Admin, Operations, Sales, Marketing)
 export const getLeads = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const userRole = (req.user?.role || 'admin').toLowerCase();
     const userId = req.user?._id || req.user?.id;
     const userName = req.user?.name || '';
@@ -403,9 +355,11 @@ export const getLeads = async (req, res) => {
       andConditions.push({ status });
     }
 
-    // Priority filter
-    if (priority && priority !== 'all') {
-      andConditions.push({ priority });
+    // The shared Expert Requests queue filters by the derived, time-aware
+    // priority after enrichment. Other CRM consumers retain the persisted
+    // priority filter for backwards compatibility.
+    if (priority && priority !== 'all' && userRole !== 'sales' && leadType !== 'callback_request') {
+      andConditions.push({ priority: String(priority).toUpperCase() });
     }
 
     // Destination filter
@@ -429,59 +383,57 @@ export const getLeads = async (req, res) => {
     }
 
     const filter = andConditions.length > 0 ? { $and: andConditions } : {};
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.min(200, Math.max(1, Number(limit) || 100));
+    const usesEffectivePriority = userRole === 'sales' || leadType === 'callback_request';
+    let total;
+    let leads;
 
-    let sortObj = { createdAt: -1 };
-    if (sortBy === 'priority') {
-      sortObj = { priority: 1, createdAt: -1 };
-    } else if (sortBy === 'updated') {
-      sortObj = { updatedAt: -1 };
-    } else if (sortBy === 'oldest') {
-      sortObj = { createdAt: 1 };
-    }
-
-    let leads = [];
-    let total = 0;
-
-    if (isDbConnected()) {
-      total = await Lead.countDocuments(filter);
-      leads = await Lead.find(filter)
-        .sort(sortObj)
-        .skip((Number(page) - 1) * Number(limit))
-        .limit(Number(limit))
+    if (usesEffectivePriority) {
+      const candidates = await Lead.find(filter)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
         .populate('quotations', 'quotationNumber status pricing createdAt')
-        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing');
-    } else {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
-        return res.status(503).json({ message: 'Database service is currently unavailable.' });
-      }
-      // Memory fallback for offline dev
-      leads = memoryLeads.filter(l => {
-        if (userRole === 'sales' && !isSuperOrAdmin) {
-          if (l.leadType !== 'callback_request') return false;
-        } else if (leadType && leadType !== 'all' && l.leadType !== leadType) {
-          return false;
-        }
-        if (quickFilter === 'due_today' && l.preferredCallDate !== todayStr) return false;
-        if (quickFilter === 'overdue' && (l.preferredCallDate >= todayStr || ['CONVERTED', 'LOST'].includes(l.status))) return false;
-        if (quickFilter === 'new' && l.status !== 'NEW') return false;
-        if (quickFilter === 'in_progress' && !['IN_PROGRESS', 'CONTACTED'].includes(l.status)) return false;
-        if (quickFilter === 'qualified' && l.status !== 'QUALIFIED') return false;
-        if (quickFilter === 'unassigned' && isSuperOrAdmin && l.assignedToUser && l.assignedTo !== 'Sales Concierge Team') return false;
-        if (status && status !== 'all' && l.status !== status) return false;
-        if (priority && priority !== 'all' && l.priority !== priority) return false;
-        if (search) {
-          const s = search.toLowerCase();
-          return (l.name || '').toLowerCase().includes(s) ||
-            (l.email || '').toLowerCase().includes(s) ||
-            (l.phone || '').includes(s) ||
-            (l.referenceId || '').toLowerCase().includes(s) ||
-            (l.tripTitle || '').toLowerCase().includes(s);
-        }
-        return true;
+        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
+        .lean();
+      const leadIds = candidates.map((lead) => lead._id).filter(Boolean);
+      const followUps = leadIds.length
+        ? await FollowUp.find({ leadId: { $in: leadIds }, status: { $in: ['pending', 'missed'] } }).select('leadId scheduledAt status').lean()
+        : [];
+      const followUpsByLead = new Map();
+      followUps.forEach((followUp) => {
+        const key = String(followUp.leadId);
+        const entries = followUpsByLead.get(key) || [];
+        entries.push(followUp);
+        followUpsByLead.set(key, entries);
       });
-      total = leads.length;
+      let prioritized = candidates.map((lead) => withLeadPriority(lead, {
+        followUps: followUpsByLead.get(String(lead._id)) || []
+      }));
+      if (priority && priority !== 'all') {
+        prioritized = prioritized.filter((lead) => lead.effectivePriority === String(priority).toUpperCase());
+      }
+      if (sortBy === 'oldest') prioritized.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      else if (sortBy === 'newest') prioritized.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      else if (sortBy === 'updated') prioritized.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      else prioritized.sort(compareLeadPriority);
+      total = prioritized.length;
+      leads = prioritized.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+    } else {
+      let sortObj = { createdAt: -1 };
+      if (sortBy === 'updated') sortObj = { updatedAt: -1 };
+      else if (sortBy === 'oldest') sortObj = { createdAt: 1 };
+      total = await Lead.countDocuments(filter);
+      leads = await Lead.find(filter)
+        .sort(sortObj)
+        .skip((pageNumber - 1) * pageSize)
+        .limit(pageSize)
+        .populate('assignedToUser', 'name email role avatar phone')
+        .populate('tripRef', 'title slug price destination location')
+        .populate('quotations', 'quotationNumber status pricing createdAt')
+        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
+        .lean();
+      leads = leads.map((lead) => withLeadPriority(lead));
     }
 
     // Marketing role: Privacy masking on customer contact data
@@ -504,16 +456,16 @@ export const getLeads = async (req, res) => {
         items: leads,
         leads,
         total,
-        page: Number(page),
-        limit: Number(limit),
-        totalPages: Math.ceil(total / Number(limit))
+        page: pageNumber,
+        limit: pageSize,
+        totalPages: Math.ceil(total / pageSize)
       });
     }
 
     res.json(leads);
   } catch (error) {
     console.error('Get leads error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching leads' });
+    return sendErrorResponse(res, error, 'Unable to fetch leads.');
   }
 };
 
@@ -525,34 +477,28 @@ export const getLeads = async (req, res) => {
 // @access  Private (Super Admin, Admin, Operations, Sales)
 export const getLeadById = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const { id } = req.params;
     const userRole = (req.user?.role || 'admin').toLowerCase();
     const userId = req.user?._id || req.user?.id;
     const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
     let lead = null;
-    if (isDbConnected()) {
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        lead = await Lead.findById(id)
-          .populate('assignedToUser', 'name email role avatar phone')
-          .populate('tripRef', 'title slug price destination location image')
-          .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
-          .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
-          .populate('userId', 'name email phone avatar');
-      }
-      if (!lead) {
-        lead = await Lead.findOne({ referenceId: id })
-          .populate('assignedToUser', 'name email role avatar phone')
-          .populate('tripRef', 'title slug price destination location image')
-          .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
-          .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
-          .populate('userId', 'name email phone avatar');
-      }
-    } else {
-      if (process.env.NODE_ENV === 'production' || process.env.ALLOW_IN_MEMORY_FALLBACK === 'false') {
-        return res.status(503).json({ message: 'Database service is currently unavailable.' });
-      }
-      lead = memoryLeads.find(l => String(l._id) === String(id) || l.referenceId === id);
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      lead = await Lead.findById(id)
+        .populate('assignedToUser', 'name email role avatar phone')
+        .populate('tripRef', 'title slug price destination location image')
+        .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
+        .populate('userId', 'name email phone avatar');
+    }
+    if (!lead) {
+      lead = await Lead.findOne({ referenceId: id })
+        .populate('assignedToUser', 'name email role avatar phone')
+        .populate('tripRef', 'title slug price destination location image')
+        .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
+        .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
+        .populate('userId', 'name email phone avatar');
     }
 
     if (!lead) {
@@ -568,13 +514,18 @@ export const getLeadById = async (req, res) => {
       }
     }
 
+    const followUps = await FollowUp.find({
+      leadId: lead._id,
+      status: { $in: ['pending', 'missed'] }
+    }).select('leadId scheduledAt status').lean();
+
     res.json({
       success: true,
-      lead
+      lead: withLeadPriority(lead, { followUps })
     });
   } catch (error) {
     console.error('Get lead by ID error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching lead details' });
+    return sendErrorResponse(res, error, 'Unable to fetch lead details.');
   }
 };
 
@@ -586,6 +537,7 @@ export const getLeadById = async (req, res) => {
 // @access  Private (Sales, Operations, Admin)
 export const claimLead = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const { id } = req.params;
     const userId = req.user?._id || req.user?.id;
     const userName = req.user?.name || 'Sales Specialist';
@@ -594,17 +546,8 @@ export const claimLead = async (req, res) => {
       return res.status(401).json({ message: 'Authentication required to claim lead.' });
     }
 
-    let targetLead = null;
-    if (isDbConnected()) {
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        targetLead = await Lead.findById(id);
-      }
-      if (!targetLead) {
-        targetLead = await Lead.findOne({ referenceId: id });
-      }
-    } else {
-      targetLead = memoryLeads.find(l => String(l._id) === String(id) || l.referenceId === id);
-    }
+    let targetLead = mongoose.Types.ObjectId.isValid(id) ? await Lead.findById(id) : null;
+    if (!targetLead) targetLead = await Lead.findOne({ referenceId: id });
 
     if (!targetLead) {
       return res.status(404).json({ message: 'Lead not found.' });
@@ -618,7 +561,7 @@ export const claimLead = async (req, res) => {
     }
 
     let lead = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+    if (mongoose.Types.ObjectId.isValid(id)) {
       // Atomic find and update: only update if currently unassigned or assigned to generic team
       lead = await Lead.findOneAndUpdate(
         {
@@ -657,25 +600,7 @@ export const claimLead = async (req, res) => {
         }
         return res.status(404).json({ message: 'Lead not found.' });
       }
-    } else {
-      const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
-      if (memIndex !== -1) {
-        const mem = memoryLeads[memIndex];
-        if (mem.assignedToUser && String(mem.assignedToUser) !== String(userId) && mem.assignedTo !== 'Sales Concierge Team') {
-          return res.status(409).json({
-            message: `Lead has already been claimed by ${mem.assignedToUserName || mem.assignedTo}.`
-          });
-        }
-        mem.assignedToUser = userId;
-        mem.assignedToUserName = userName;
-        mem.assignedTo = userName;
-        mem.assignedAt = new Date();
-        mem.status = 'IN_PROGRESS';
-        lead = mem;
-      } else {
-        return res.status(404).json({ message: 'Lead not found.' });
-      }
-    }
+    } else return res.status(400).json({ message: 'A valid database lead ID is required.' });
 
     res.json({
       success: true,
@@ -684,7 +609,7 @@ export const claimLead = async (req, res) => {
     });
   } catch (error) {
     console.error('Claim lead error:', error);
-    res.status(500).json({ message: error.message || 'Server Error claiming lead' });
+    return sendErrorResponse(res, error, 'Unable to claim the lead.');
   }
 };
 
@@ -696,6 +621,7 @@ export const claimLead = async (req, res) => {
 // @access  Private (Super Admin, Admin, Operations)
 export const assignLead = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const { id } = req.params;
     const assignedToName = req.body.assignedToName || req.body.assignedTo;
     const assignedToUserId = req.body.assignedToUserId || req.body.assignedToId || req.body.assignedToUser;
@@ -708,7 +634,7 @@ export const assignLead = async (req, res) => {
     }
 
     let targetUser = null;
-    if (assignedToUserId && isDbConnected() && mongoose.Types.ObjectId.isValid(assignedToUserId)) {
+    if (assignedToUserId && mongoose.Types.ObjectId.isValid(assignedToUserId)) {
       try {
         targetUser = await User.findById(assignedToUserId).select('name email role avatar');
       } catch (e) {}
@@ -718,7 +644,7 @@ export const assignLead = async (req, res) => {
     const finalUserName = targetUser ? targetUser.name : (assignedToName || 'Sales Specialist');
 
     let lead = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
+    if (mongoose.Types.ObjectId.isValid(id)) {
       lead = await Lead.findById(id);
       if (!lead) return res.status(404).json({ message: 'Lead not found.' });
 
@@ -742,31 +668,7 @@ export const assignLead = async (req, res) => {
       if (lead.assignedToUser) {
         await lead.populate('assignedToUser', 'name email role avatar phone');
       }
-    } else {
-      const memIndex = memoryLeads.findIndex(l => String(l._id) === String(id));
-      if (memIndex !== -1) {
-        if (memoryLeads[memIndex].leadType === 'callback_request') {
-          return res.status(400).json({
-            success: false,
-            message: 'Expert Requests use the shared Sales queue and cannot be assigned.'
-          });
-        }
-        memoryLeads[memIndex] = {
-          ...memoryLeads[memIndex],
-          assignedToUser: finalUserId,
-          assignedToUserName: finalUserName,
-          assignedTo: finalUserName,
-          assignedAt: new Date(),
-          assignedBy: assignerId,
-          assignedByName: assignerName,
-          notes: notes !== undefined ? notes : memoryLeads[memIndex].notes,
-          status: memoryLeads[memIndex].status === 'NEW' ? 'IN_PROGRESS' : memoryLeads[memIndex].status
-        };
-        lead = memoryLeads[memIndex];
-      } else {
-        return res.status(404).json({ message: 'Lead not found.' });
-      }
-    }
+    } else return res.status(400).json({ message: 'A valid database lead ID is required.' });
 
     res.json({
       success: true,
@@ -775,7 +677,7 @@ export const assignLead = async (req, res) => {
     });
   } catch (error) {
     console.error('Assign lead error:', error);
-    res.status(500).json({ message: error.message || 'Server Error assigning lead' });
+    return sendErrorResponse(res, error, 'Unable to assign the lead.');
   }
 };
 
@@ -787,6 +689,7 @@ export const assignLead = async (req, res) => {
 // @access  Private (Sales, Operations, Admin)
 export const logLeadContact = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const { id } = req.params;
     const {
       outcome,
@@ -822,12 +725,7 @@ export const logLeadContact = async (req, res) => {
     const userRole = (req.user?.role || 'sales').toLowerCase();
     const isSuperOrAdmin = ['admin', 'super_admin', 'operations'].includes(userRole);
 
-    let lead = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      lead = await Lead.findById(id);
-    } else {
-      lead = memoryLeads.find(l => String(l._id) === String(id));
-    }
+    const lead = mongoose.Types.ObjectId.isValid(id) ? await Lead.findById(id) : null;
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
 
@@ -884,9 +782,8 @@ export const logLeadContact = async (req, res) => {
       if (!isNaN(scheduledDate.getTime())) {
         lead.nextFollowUpAt = scheduledDate;
 
-        if (isDbConnected()) {
-          try {
-            createdFollowUp = await FollowUp.create({
+        try {
+          createdFollowUp = await FollowUp.create({
               leadId: lead._id,
               customerId: (lead.userId && mongoose.Types.ObjectId.isValid(lead.userId)) ? lead.userId : null,
               salesUserId: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null,
@@ -898,28 +795,25 @@ export const logLeadContact = async (req, res) => {
               channel: channel === 'whatsapp' ? 'whatsapp' : 'call',
               priority: lead.priority === 'HIGH' || lead.priority === 'URGENT' ? 'high' : 'medium',
               status: 'pending'
-            });
-          } catch (fuErr) {
-            console.warn('FollowUp DB create notice:', fuErr.message);
-          }
+          });
+        } catch (fuErr) {
+          console.warn('FollowUp DB create notice:', fuErr.message);
         }
       }
     }
 
-    if (isDbConnected() && typeof lead.save === 'function') {
-      await lead.save();
-      await lead.populate('assignedToUser', 'name email role avatar phone');
-    }
+    await lead.save();
+    await lead.populate('assignedToUser', 'name email role avatar phone');
 
     res.json({
       success: true,
       message: `Contact outcome "${outcome}" logged successfully.`,
-      lead,
+      lead: withLeadPriority(lead, { followUps: createdFollowUp ? [createdFollowUp] : [] }),
       followUp: createdFollowUp
     });
   } catch (error) {
     console.error('Log contact error:', error);
-    res.status(500).json({ message: error.message || 'Server Error logging contact' });
+    return sendErrorResponse(res, error, 'Unable to log the contact.');
   }
 };
 
@@ -931,6 +825,7 @@ export const logLeadContact = async (req, res) => {
 // @access  Private (Sales, Operations, Admin)
 export const updateLeadStatus = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     const { id } = req.params;
     const { status, priority, notes, lostReason, lostReasonDetail } = req.body;
     const userId = req.user?._id || req.user?.id;
@@ -947,12 +842,7 @@ export const updateLeadStatus = async (req, res) => {
       return res.status(400).json({ message: 'A reason is required when marking a lead as LOST (e.g. Budget Mismatch, Date Unavailable, Booked Elsewhere).' });
     }
 
-    let lead = null;
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      lead = await Lead.findById(id);
-    } else {
-      lead = memoryLeads.find(l => String(l._id) === String(id));
-    }
+    const lead = mongoose.Types.ObjectId.isValid(id) ? await Lead.findById(id) : null;
 
     if (!lead) return res.status(404).json({ message: 'Lead record not found.' });
 
@@ -977,19 +867,17 @@ export const updateLeadStatus = async (req, res) => {
     if (lostReason) lead.lostReason = lostReason;
     if (lostReasonDetail) lead.lostReasonDetail = lostReasonDetail;
 
-    if (isDbConnected() && typeof lead.save === 'function') {
-      await lead.save();
-      await lead.populate('assignedToUser', 'name email role avatar phone');
-    }
+    await lead.save();
+    await lead.populate('assignedToUser', 'name email role avatar phone');
 
     res.json({
       success: true,
       message: `Lead updated to status ${lead.status}.`,
-      lead
+      lead: withLeadPriority(lead)
     });
   } catch (error) {
     console.error('Update lead status error:', error);
-    res.status(500).json({ message: error.message || 'Server Error updating lead status' });
+    return sendErrorResponse(res, error, 'Unable to update the lead status.');
   }
 };
 
@@ -1001,8 +889,8 @@ export const updateLeadStatus = async (req, res) => {
 // @access  Private (Admin, Operations, Sales)
 export const getSalesUsers = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Lead service is temporarily unavailable.' });
     let salesUsers = [];
-    if (isDbConnected()) {
       const queryRole = req.query.role;
       const roleFilter = queryRole 
         ? { role: queryRole } 
@@ -1043,10 +931,6 @@ export const getSalesUsers = async (req, res) => {
         phone: u.phone,
         activeLeadsCount: countMap[String(u._id)] || 0
       }));
-    } else {
-      return res.status(503).json({ message: 'Database service is currently unavailable.' });
-    }
-
     res.json({
       success: true,
       count: salesUsers.length,
@@ -1054,6 +938,6 @@ export const getSalesUsers = async (req, res) => {
     });
   } catch (error) {
     console.error('Get sales users error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching sales users' });
+    return sendErrorResponse(res, error, 'Unable to fetch sales users.');
   }
 };

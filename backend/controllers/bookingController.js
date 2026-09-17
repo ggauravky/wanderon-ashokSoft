@@ -12,6 +12,8 @@ import WalletLedger from '../models/WalletLedger.js';
 import { validateCouponForAmount } from '../services/couponService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
+import { buildCreatedAtRange } from '../utils/dateFilters.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -547,7 +549,7 @@ export const createBookingOrder = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Booking Order Error:', error);
-    res.status(error.status || 500).json({ message: error.message || 'Server Error creating payment order' });
+    return sendErrorResponse(res, error, 'Unable to create the payment order.');
   }
 };
 
@@ -730,7 +732,7 @@ export const verifyBookingPayment = async (req, res) => {
     });
   } catch (error) {
     console.error('Verify Payment Error:', error);
-    res.status(error.status || 500).json({ message: error.message || 'Server Error verifying payment' });
+    return sendErrorResponse(res, error, 'Unable to verify the payment.');
   }
 };
 
@@ -825,7 +827,7 @@ export const cancelBooking = async (req, res) => {
     });
   } catch (error) {
     console.error('Cancel Booking Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error cancelling booking' });
+    return sendErrorResponse(res, error, 'Unable to cancel the booking.');
   }
 };
 
@@ -885,7 +887,7 @@ export const payRemainingBalance = async (req, res) => {
     });
   } catch (error) {
     console.error('Pay Remaining Balance Error:', error);
-    res.status(error.status || 500).json({ message: error.message || 'Error initializing balance payment order' });
+    return sendErrorResponse(res, error, 'Unable to initialize the balance payment order.');
   }
 };
 
@@ -991,7 +993,7 @@ export const verifyRemainingBalance = async (req, res) => {
     });
   } catch (error) {
     console.error('Verify Balance Payment Error:', error);
-    res.status(error.status || 500).json({ message: error.message || 'Error verifying balance payment' });
+    return sendErrorResponse(res, error, 'Unable to verify the balance payment.');
   }
 };
 
@@ -1010,7 +1012,7 @@ export const getMyBookings = async (req, res) => {
 
     res.json(bookings);
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error fetching user bookings' });
+    return sendErrorResponse(res, error, 'Unable to fetch user bookings.');
   }
 };
 
@@ -1036,12 +1038,8 @@ export const getSalesBookings = async (req, res) => {
     }
     if (paymentStatus && paymentStatus !== 'all') andConditions.push({ paymentStatus });
     if (bookingStatus && bookingStatus !== 'all') andConditions.push({ bookingStatus });
-    if (dateFrom || dateTo) {
-      const createdAt = {};
-      if (dateFrom) createdAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
-      if (dateTo) createdAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
-      andConditions.push({ createdAt });
-    }
+    const createdAt = buildCreatedAtRange(dateFrom, dateTo, 'booking');
+    if (createdAt) andConditions.push({ createdAt });
     if (search) {
       const pattern = new RegExp(escapeRegex(search.trim()), 'i');
       andConditions.push({
@@ -1081,7 +1079,7 @@ export const getSalesBookings = async (req, res) => {
     });
   } catch (error) {
     console.error('Get Sales Bookings Error:', error);
-    return res.status(500).json({ message: error.message || 'Server Error fetching Sales bookings' });
+    return sendErrorResponse(res, error, 'Unable to fetch sales bookings.');
   }
 };
 
@@ -1112,7 +1110,7 @@ export const getBookingById = async (req, res) => {
 
     res.json(booking);
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server Error fetching booking details' });
+    return sendErrorResponse(res, error, 'Unable to fetch booking details.');
   }
 };
 
@@ -1145,7 +1143,7 @@ export const verifyBookingToken = async (req, res) => {
       confirmedAt: booking.payment?.paidAt || booking.updatedAt || new Date()
     });
   } catch (error) {
-    res.status(500).json({ valid: false, message: error.message || 'Server Error verifying token' });
+    return sendErrorResponse(res, error, 'Unable to verify the booking token.', 500, { valid: false });
   }
 };
 
@@ -1178,7 +1176,7 @@ export const resendWhatsAppTicket = async (req, res) => {
     });
   } catch (error) {
     console.error('Resend WhatsApp Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to send WhatsApp notification.' });
+    return sendErrorResponse(res, error, 'Unable to send the WhatsApp notification.');
   }
 };
 
@@ -1272,7 +1270,7 @@ export const getBoardingPassData = async (req, res) => {
     });
   } catch (error) {
     console.error('Get Boarding Pass Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching boarding pass' });
+    return sendErrorResponse(res, error, 'Unable to fetch the boarding pass.');
   }
 };
 
@@ -1352,6 +1350,6 @@ export const getProvisionalLetterData = async (req, res) => {
     });
   } catch (error) {
     console.error('Get Provisional Letter Error:', error);
-    res.status(500).json({ message: error.message || 'Server Error fetching provisional letter' });
+    return sendErrorResponse(res, error, 'Unable to fetch the provisional letter.');
   }
 };

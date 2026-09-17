@@ -3,6 +3,7 @@ import Lead from '../models/Lead.js';
 import Quotation from '../models/Quotation.js';
 import FollowUp from '../models/FollowUp.js';
 import Booking from '../models/Booking.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -190,6 +191,6 @@ export const getSalesDashboard = async (req, res) => {
     });
   } catch (error) {
     console.error('getSalesDashboard Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error generating sales dashboard' });
+    return sendErrorResponse(res, error, 'Unable to generate the sales dashboard.');
   }
 };

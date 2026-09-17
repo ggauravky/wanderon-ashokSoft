@@ -1,7 +1,6 @@
 import * as apiService from './api.js';
 
-const saveAIItineraryApi = async (...args) => (apiService.saveAIItineraryApi || apiService.default?.saveAIItineraryApi)?.(...args);
-const toggleShareItineraryApi = async (...args) => (apiService.toggleShareItineraryApi || apiService.default?.toggleShareItineraryApi)?.(...args);
+const { saveAIItineraryApi, toggleShareItineraryApi } = apiService;
 
 /**
  * Robust Centralized Share Service for AI Travel Itineraries
@@ -115,4 +114,3 @@ export default {
   copyToClipboard,
   getWhatsAppShareUrl
 };
-

@@ -63,7 +63,8 @@ const ExpertRequestTable = ({ leads, onView }) => (
                   <Badge classes={getStatusClasses(lead.status)}>{(lead.status || 'NEW').replaceAll('_', ' ')}</Badge>
                 </td>
                 <td className="px-4 py-4">
-                  <span className={`text-xs font-semibold ${getPriorityClasses(lead.priority)}`}>{lead.priority || 'MEDIUM'}</span>
+                  <span className={`text-xs font-semibold ${getPriorityClasses(lead.effectivePriority)}`} title={(lead.priorityReasons || []).join(' · ')}>{lead.effectivePriority || lead.priority || 'MEDIUM'}</span>
+                  <p className="mt-1 max-w-40 text-[11px] leading-4 text-slate-500">{(lead.priorityReasons || ['No immediate action due']).slice(0, 2).join(' · ')}</p>
                 </td>
                 <td className="px-4 py-4">
                   <div className="flex items-center gap-2">

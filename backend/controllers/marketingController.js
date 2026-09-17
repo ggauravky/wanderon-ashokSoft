@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Banner from '../models/Banner.js';
 import Campaign from '../models/Campaign.js';
 import MediaAsset from '../models/MediaAsset.js';
+import { sendErrorResponse } from '../utils/httpResponse.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -76,7 +77,7 @@ export const getMarketingDashboard = async (req, res) => {
       populateBanner(Banner.find().sort({ updatedAt: -1 }).limit(5))
     ]);
     res.json({ success: true, dashboard: { totalCampaigns, activeCampaigns, scheduledCampaigns, totalBanners, activeBanners, scheduledBanners, expiredPromotions, recentCampaigns: recentCampaigns.map(serializeCampaign), recentBanners: recentBanners.map(serializeBanner) } });
-  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load Management overview.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load the Management overview.'); }
 };
 
 export const getCampaigns = async (req, res) => {
@@ -96,7 +97,7 @@ export const getCampaigns = async (req, res) => {
     const pageNumber = Math.max(1, Number(page) || 1); const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
     const [campaigns, total] = await Promise.all([populateCampaign(Campaign.find(filter).sort({ updatedAt: -1 }).skip((pageNumber - 1) * pageSize).limit(pageSize)), Campaign.countDocuments(filter)]);
     res.json({ success: true, campaigns: campaigns.map(serializeCampaign), types: Campaign.schema.path('type').enumValues, statuses: Campaign.schema.path('status').enumValues, pagination: { page: pageNumber, limit: pageSize, total, pages: Math.ceil(total / pageSize) } });
-  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to load campaigns.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load campaigns.'); }
 };
 
 export const getCampaignById = async (req, res) => {
@@ -105,7 +106,7 @@ export const getCampaignById = async (req, res) => {
     const campaign = mongoose.Types.ObjectId.isValid(req.params.id) ? await populateCampaign(Campaign.findById(req.params.id)) : null;
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     res.json({ success: true, campaign: serializeCampaign(campaign) });
-  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load campaign.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load the campaign.'); }
 };
 
 const campaignInput = (body, existing = {}) => {
@@ -131,7 +132,7 @@ export const createCampaign = async (req, res) => {
     if (await Campaign.exists({ code: input.code })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
     const campaign = await Campaign.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) });
     res.status(201).json({ success: true, message: 'Campaign configured.', campaign: serializeCampaign(campaign) });
-  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to create campaign.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to create the campaign.'); }
 };
 
 export const updateCampaign = async (req, res) => {
@@ -143,7 +144,7 @@ export const updateCampaign = async (req, res) => {
     if (await Campaign.exists({ code: input.code, _id: { $ne: campaign._id } })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
     Object.assign(campaign, input, { updatedBy: actorMongoId(req) }); await campaign.save();
     res.json({ success: true, message: 'Campaign updated.', campaign: serializeCampaign(campaign) });
-  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to update campaign.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to update the campaign.'); }
 };
 
 export const deleteCampaign = async (req, res) => {
@@ -152,7 +153,7 @@ export const deleteCampaign = async (req, res) => {
     const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Campaign.findByIdAndDelete(req.params.id) : null;
     if (!deleted) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     res.json({ success: true, id: deleted._id, message: 'Campaign deleted.' });
-  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to delete campaign.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to delete the campaign.'); }
 };
 
 export const getBanners = async (req, res) => {
@@ -167,7 +168,7 @@ export const getBanners = async (req, res) => {
     const filter = conditions.length ? { $and: conditions } : {}; const pageNumber = Math.max(1, Number(page) || 1); const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
     const [banners, total] = await Promise.all([populateBanner(Banner.find(filter).sort({ priorityOrder: 1, updatedAt: -1 }).skip((pageNumber - 1) * pageSize).limit(pageSize)), Banner.countDocuments(filter)]);
     res.json({ success: true, banners: banners.map(serializeBanner), placements: Banner.schema.path('placement').enumValues, statuses: [...Banner.schema.path('status').enumValues, 'expired'], pagination: { page: pageNumber, limit: pageSize, total, pages: Math.ceil(total / pageSize) } });
-  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to load banners.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load banners.'); }
 };
 
 export const getActiveBanners = async (req, res) => {
@@ -180,7 +181,7 @@ export const getActiveBanners = async (req, res) => {
     }
     const banners = await Banner.find(filter).sort({ priorityOrder: 1, updatedAt: -1 }).select('title subtitle tag imageUrl mobileImageUrl ctaText ctaLink placement priorityOrder startDate endDate');
     res.json({ success: true, banners, count: banners.length });
-  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load promotional content.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load promotional content.'); }
 };
 
 export const getBannerById = async (req, res) => {
@@ -189,7 +190,7 @@ export const getBannerById = async (req, res) => {
     const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await populateBanner(Banner.findById(req.params.id)) : null;
     if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' });
     res.json({ success: true, banner: serializeBanner(banner) });
-  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load banner.' }); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load the banner.'); }
 };
 
 const bannerInput = async (body, existing = {}) => {
@@ -216,15 +217,15 @@ const bannerInput = async (body, existing = {}) => {
 
 export const createBanner = async (req, res) => {
   try { if (!requireDatabase(res)) return; const input = await bannerInput(req.body); const banner = await Banner.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) }); res.status(201).json({ success: true, message: 'Banner configured.', banner: serializeBanner(banner) }); }
-  catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to create banner.' }); }
+  catch (error) { return sendErrorResponse(res, error, 'Unable to create the banner.'); }
 };
 
 export const updateBanner = async (req, res) => {
   try { if (!requireDatabase(res)) return; const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findById(req.params.id) : null; if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' }); const input = await bannerInput(req.body, banner.toObject()); Object.assign(banner, input, { updatedBy: actorMongoId(req) }); await banner.save(); res.json({ success: true, message: 'Banner updated.', banner: serializeBanner(banner) }); }
-  catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to update banner.' }); }
+  catch (error) { return sendErrorResponse(res, error, 'Unable to update the banner.'); }
 };
 
 export const deleteBanner = async (req, res) => {
   try { if (!requireDatabase(res)) return; const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findByIdAndDelete(req.params.id) : null; if (!deleted) return res.status(404).json({ success: false, message: 'Banner not found.' }); res.json({ success: true, id: deleted._id, message: 'Banner deleted.' }); }
-  catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to delete banner.' }); }
+  catch (error) { return sendErrorResponse(res, error, 'Unable to delete the banner.'); }
 };

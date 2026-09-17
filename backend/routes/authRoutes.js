@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
-  registerUser, loginUser, influencerLogin, getMe, 
-  updateUserProfile, applyInfluencer, addBooking, cancelUserBooking 
+  registerUser, loginUser, influencerLogin, getMe,
+  updateUserProfile, applyInfluencer
 } from '../controllers/authController.js';
 import { protect } from '../middlewares/authMiddleware.js';
 import { loginRateLimit } from '../middlewares/authRateLimit.js';
@@ -15,7 +15,5 @@ router.post('/influencer-apply', protect, applyInfluencer);
 router.post('/influencer-signup', protect, applyInfluencer);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateUserProfile);
-router.post('/booking', protect, addBooking);
-router.put('/booking/cancel', protect, cancelUserBooking);
 
 export default router;

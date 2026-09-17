@@ -75,15 +75,3 @@
     background-position: -200% 0;
   }
 }
-
-/* Swiper Equal Height Fix */
-.swiper-wrapper {
-  align-items: stretch;
-}
-.swiper-slide {
-  height: auto;
-  display: flex;
-}
-.swiper-slide > * {
-  width: 100%;
-}

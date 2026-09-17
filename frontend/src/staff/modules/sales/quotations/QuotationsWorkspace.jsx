@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import QuotationPreviewModal from '../../../../components/QuotationPreviewModal.jsx';
 import ShareQuotationModal from '../../../../components/ShareQuotationModal.jsx';
 import { getQuotationByIdApi, getQuotationsApi, sendQuotationApi } from '../../../../services/quotationService.js';
+import useDebouncedValue from '../../../../hooks/useDebouncedValue.js';
 import QuotationFilters from './components/QuotationFilters.jsx';
 import QuotationMobileCard from './components/QuotationMobileCard.jsx';
 import QuotationTable from './components/QuotationTable.jsx';
@@ -12,7 +13,7 @@ import { getQuotationId } from './quotationHelpers.js';
 const QuotationsWorkspace = () => {
   const [quotations, setQuotations] = useState([]);
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -23,11 +24,6 @@ const QuotationsWorkspace = () => {
   const [previewQuotation, setPreviewQuotation] = useState(null);
   const [shareQuotation, setShareQuotation] = useState(null);
   const [notice, setNotice] = useState('');
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [search]);
 
   const loadQuotations = useCallback(async (silent = false) => {
     if (silent) setRefreshing(true);

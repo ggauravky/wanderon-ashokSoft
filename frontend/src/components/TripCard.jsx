@@ -7,10 +7,9 @@ import { getDestinationWeather } from '../utils/weatherSeasonEngine.js';
 import { getWishlistIds, toggleWishlistItem } from '../utils/userHistory.js';
 
 const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
-  if (!trip || typeof trip !== 'object') return null;
-
   const [isWishlisted, setIsWishlisted] = useState(false);
-  const tripKey = trip.id || trip._id || trip.slug;
+  const validTrip = trip && typeof trip === 'object' ? trip : null;
+  const tripKey = validTrip?.id || validTrip?._id || validTrip?.slug;
 
   useEffect(() => {
     try {
@@ -28,30 +27,32 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
     setIsWishlisted(updated.some(id => String(id) === String(tripKey)));
   };
 
-  const weather = trip.weather || getDestinationWeather(trip.location || '');
-  const price = Number(trip.price) || 0;
-  const originalPrice = Number(trip.originalPrice) || (price ? Math.round(price * 1.2) : 0);
+  const weather = validTrip?.weather || getDestinationWeather(validTrip?.location || '');
+  const price = Number(validTrip?.price) || 0;
+  const originalPrice = Number(validTrip?.originalPrice) || (price ? Math.round(price * 1.2) : 0);
   const discountPct = (originalPrice > price && originalPrice > 0)
     ? Math.round(((originalPrice - price) / originalPrice) * 100)
     : null;
 
   // Determine top priority single explainable badge
-  const primaryBadge = customBadge || trip.explainableBadge || (Array.isArray(trip.tags) && trip.tags[0]) || trip.category || 'Curated';
+  const primaryBadge = customBadge || validTrip?.explainableBadge || (Array.isArray(validTrip?.tags) && validTrip.tags[0]) || validTrip?.category || 'Curated';
 
   // Batch awareness: extract next 1-2 departure dates
   const batchDatesList = React.useMemo(() => {
-    if (Array.isArray(trip.availableBatches) && trip.availableBatches.length > 0) {
-      return trip.availableBatches.map(b => {
+    if (Array.isArray(validTrip?.availableBatches) && validTrip.availableBatches.length > 0) {
+      return validTrip.availableBatches.map(b => {
         // e.g. "20 Aug - 26 Aug, 2026" -> extract "20 Aug"
         const m = (b.dates || '').match(/^(\d{1,2}\s+[A-Za-z]{3})/);
         return m ? m[1] : (b.dates ? b.dates.split('-')[0].trim() : '');
       }).filter(Boolean);
     }
-    if (trip.nextBatch) {
-      return [trip.nextBatch];
+    if (validTrip?.nextBatch) {
+      return [validTrip.nextBatch];
     }
     return [];
-  }, [trip.availableBatches, trip.nextBatch]);
+  }, [validTrip?.availableBatches, validTrip?.nextBatch]);
+
+  if (!validTrip) return null;
 
   const displayedBatches = batchDatesList.slice(0, 2);
   const extraBatchesCount = Math.max(0, batchDatesList.length - 2);

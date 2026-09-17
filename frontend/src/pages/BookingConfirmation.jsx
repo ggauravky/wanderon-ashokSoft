@@ -8,9 +8,7 @@ import {
 import * as apiService from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext';
 
-const getBookingByIdApi = async (...args) => (apiService.getBookingByIdApi || apiService.default?.getBookingByIdApi)?.(...args);
-const payRemainingBalanceApi = async (...args) => (apiService.payRemainingBalanceApi || apiService.default?.payRemainingBalanceApi)?.(...args);
-const verifyRemainingBalanceApi = async (...args) => (apiService.verifyRemainingBalanceApi || apiService.default?.verifyRemainingBalanceApi)?.(...args);
+const { getBookingByIdApi, payRemainingBalanceApi, verifyRemainingBalanceApi } = apiService;
 import BoardingPassModal from '../components/BoardingPassModal.jsx';
 import ProvisionalBookingModal from '../components/ProvisionalBookingModal.jsx';
 import { loadRazorpayScript } from '../utils/razorpay.js';

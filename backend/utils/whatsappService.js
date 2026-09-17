@@ -1,7 +1,9 @@
 /**
  * WanderLuxe WhatsApp E-Ticket & Receipt Notification Service
- * Supports Twilio WhatsApp API & Graceful Simulation Mode
+ * Sends through Twilio when explicitly configured and otherwise fails closed.
  */
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 export const formatWhatsAppMessage = (booking, frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in') => {
   const customerName = booking.customer?.name || 'Valued Traveler';
@@ -68,7 +70,7 @@ export const sendWhatsAppTicketAndReceipt = async (booking) => {
 
   const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-  const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+  const twilioWhatsAppNumber = process.env.TWILIO_WHATSAPP_NUMBER;
 
   let recipientPhone = String(phone).replace(/\D/g, '');
   if (recipientPhone.length === 10) {
@@ -77,9 +79,8 @@ export const sendWhatsAppTicketAndReceipt = async (booking) => {
   const formattedTo = `whatsapp:+${recipientPhone}`;
 
   // Check if Twilio API credentials exist
-  if (twilioAccountSid && twilioAuthToken) {
+  if (twilioAccountSid && twilioAuthToken && twilioWhatsAppNumber) {
     try {
-      console.log(`📱 Sending real WhatsApp E-Ticket to ${formattedTo} via Twilio API...`);
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`;
       const authHeader = 'Basic ' + Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString('base64');
 
@@ -103,7 +104,6 @@ export const sendWhatsAppTicketAndReceipt = async (booking) => {
         throw new Error(resData.message || `Twilio Error ${resData.code || response.status}`);
       }
 
-      console.log(`✅ WhatsApp E-Ticket successfully dispatched! Message SID: ${resData.sid}`);
       return {
         sent: true,
         sentAt: new Date(),
@@ -117,27 +117,18 @@ export const sendWhatsAppTicketAndReceipt = async (booking) => {
         sent: false,
         sentAt: new Date(),
         status: 'FAILED',
-        error: error.message,
+        error: isProduction ? 'WhatsApp delivery failed.' : error.message,
         phone: recipientPhone
       };
     }
   }
 
-  // Graceful Fallback / Simulation Mode
-  const simulatedSid = 'SIM_WA_' + Math.floor(100000 + Math.random() * 900000);
-  console.log('\n======================================================');
-  console.log('📱 [WHATSAPP NOTIFICATION SERVICE - SIMULATION MODE]');
-  console.log(`Recipient Phone: +${recipientPhone}`);
-  console.log(`Message SID: ${simulatedSid}`);
-  console.log('------------------------------------------------------');
-  console.log(messageBody);
-  console.log('======================================================\n');
-
   return {
-    sent: true,
-    sentAt: new Date(),
-    status: 'SIMULATED_SENT',
-    messageSid: simulatedSid,
-    phone: recipientPhone
+    sent: false,
+    sentAt: null,
+    status: 'NOT_CONFIGURED',
+    messageSid: null,
+    phone: recipientPhone,
+    error: 'WhatsApp delivery is not configured.'
   };
 };

@@ -1,5 +1,40 @@
 import mongoose from 'mongoose';
 
+const quotationAttachmentSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    category: {
+      type: String,
+      enum: [
+        'HOTEL_VOUCHER', 'HOTEL_CONFIRMATION', 'FLIGHT_TICKET', 'TRAIN_TICKET',
+        'BUS_TICKET', 'TRANSPORT_VOUCHER', 'ACTIVITY_TICKET', 'ACTIVITY_VOUCHER',
+        'PERMIT', 'INSURANCE', 'INVOICE', 'GENERAL', 'OTHER'
+      ],
+      default: 'GENERAL'
+    },
+    sectionType: { type: String, enum: ['GENERAL', 'HOTEL', 'TRANSPORT', 'ACTIVITY', 'ADD_ON'], default: 'GENERAL' },
+    sectionId: { type: String, default: '' },
+    title: { type: String, required: true, trim: true },
+    fileName: { type: String, default: '' },
+    mimeType: { type: String, required: true },
+    size: { type: Number, default: 0, min: 0 },
+    storageProvider: { type: String, default: 'cloudinary' },
+    publicId: { type: String, default: '' },
+    secureUrl: { type: String, required: true },
+    visibility: {
+      type: String,
+      enum: ['INTERNAL_ONLY', 'CUSTOMER_VISIBLE', 'CUSTOMER_VISIBLE_AFTER_APPROVAL', 'CUSTOMER_VISIBLE_AFTER_BOOKING'],
+      default: 'INTERNAL_ONLY'
+    },
+    bookingReference: { type: String, default: '' },
+    passengerName: { type: String, default: '' },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    uploadedByName: { type: String, default: '' },
+    uploadedAt: { type: Date, default: Date.now }
+  },
+  { _id: false }
+);
+
 const hotelOptionSchema = new mongoose.Schema(
   {
     optionId: { type: String, required: true },
@@ -39,6 +74,9 @@ const hotelOptionSchema = new mongoose.Schema(
     imageUrl: { type: String, default: '' },
     amenities: { type: [String], default: [] },
     notes: { type: String, default: '' },
+    gallery: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    documents: { type: [quotationAttachmentSchema], default: [] },
+    recommendationType: { type: String, enum: ['RECOMMENDED', 'ALTERNATIVE', 'CUSTOM'], default: 'CUSTOM' },
     selected: { type: Boolean, default: false }
   },
   { _id: false }
@@ -200,6 +238,7 @@ const activitySchema = new mongoose.Schema(
     totalPrice: { type: Number, default: 0, min: 0 },
     isIncluded: { type: Boolean, default: true },
     isOptional: { type: Boolean, default: false },
+    attachments: { type: [quotationAttachmentSchema], default: [] },
     selected: { type: Boolean, default: true }
   },
   { _id: false }
@@ -225,6 +264,7 @@ const addOnSchema = new mongoose.Schema(
     unitPrice: { type: Number, default: 0, min: 0 },
     totalCost: { type: Number, default: 0, min: 0 },
     totalPrice: { type: Number, default: 0, min: 0 },
+    attachments: { type: [quotationAttachmentSchema], default: [] },
     selected: { type: Boolean, default: false }
   },
   { _id: false }
@@ -280,6 +320,7 @@ const itineraryDaySchema = new mongoose.Schema(
 
 const quotationSchema = new mongoose.Schema(
   {
+    schemaVersion: { type: Number, default: 1, index: true },
     quotationNumber: {
       type: String,
       required: true,
@@ -429,6 +470,55 @@ const quotationSchema = new mongoose.Schema(
       ] 
     },
 
+    policies: {
+      paymentTerms: { type: String, default: '' },
+      cancellationPolicy: { type: String, default: '' },
+      refundNotes: { type: String, default: '' },
+      importantInformation: { type: String, default: '' },
+      travelRequirements: { type: String, default: '' },
+      termsAndConditions: { type: String, default: '' }
+    },
+
+    personalNote: { type: String, default: '' },
+    attachments: { type: [quotationAttachmentSchema], default: [] },
+
+    presentationSettings: {
+      template: { type: String, enum: ['minimal', 'journey', 'signature_luxe'], default: 'journey' },
+      showComponentPrices: { type: Boolean, default: false },
+      showPaymentSchedule: { type: Boolean, default: true },
+      showAttachments: { type: Boolean, default: true },
+      showAdvisor: { type: Boolean, default: true },
+      showTerms: { type: Boolean, default: true },
+      showItineraryGallery: { type: Boolean, default: true }
+    },
+
+    commercialState: {
+      type: String,
+      enum: ['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'READY_TO_SHARE', 'SHARED', 'APPROVED', 'CHANGES_REQUESTED', 'REJECTED', 'EXPIRED'],
+      default: 'DRAFT',
+      index: true
+    },
+
+    manualPricing: {
+      currency: { type: String, default: 'INR' },
+      componentReference: { type: Number, default: 0, min: 0 },
+      finalCustomerPrice: { type: Number, default: 0, min: 0 },
+      depositAmount: { type: Number, default: 0, min: 0 },
+      balanceAmount: { type: Number, default: 0, min: 0 },
+      adjustments: {
+        type: [{ label: { type: String, default: '' }, amount: { type: Number, default: 0, min: 0 }, type: { type: String, enum: ['ADD', 'REDUCE'], default: 'ADD' } }],
+        default: []
+      },
+      paymentSchedule: {
+        type: [{ label: { type: String, default: '' }, amount: { type: Number, default: 0, min: 0 }, dueDate: { type: Date, default: null }, notes: { type: String, default: '' } }],
+        default: []
+      },
+      priceNotes: { type: String, default: '' },
+      finalizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      finalizedByName: { type: String, default: '' },
+      finalizedAt: { type: Date, default: null }
+    },
+
     paymentTerms: {
       depositPercent: { type: Number, default: 10, min: 5, max: 100 },
       balanceDueDays: { type: Number, default: 6, min: 1, max: 30 },
@@ -508,7 +598,7 @@ const quotationSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'REJECTED', 'EXPIRED', 'CONVERTED', 'ARCHIVED'],
+      enum: ['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'READY_TO_SHARE', 'SENT', 'SHARED', 'VIEWED', 'CHANGES_REQUESTED', 'APPROVED', 'REJECTED', 'EXPIRED', 'CONVERTED', 'ARCHIVED'],
       default: 'DRAFT',
       index: true
     },
@@ -536,6 +626,10 @@ const quotationSchema = new mongoose.Schema(
       customerDecisionAt: { type: Date },
       customerNotes: { type: String, default: '' }
     },
+
+    currentRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null, index: true },
+    latestSharedRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null },
+    approvedRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null },
 
     sourceTripId: { type: String, default: null },
     convertedTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },

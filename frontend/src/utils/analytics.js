@@ -9,11 +9,6 @@
 export const trackGA4Event = (eventName, eventParams = {}) => {
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', eventName, eventParams);
-  } else {
-    // Log to console in development environment for verification
-    if (import.meta.env.DEV) {
-      console.log(`[GA4 Event Logged]: ${eventName}`, eventParams);
-    }
   }
 };
 

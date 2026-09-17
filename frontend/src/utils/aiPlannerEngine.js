@@ -7,7 +7,7 @@ import { UPCOMING_TRIPS } from '../constants/mockData';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import * as apiService from '../services/api.js';
 
-const generateAIItineraryApi = async (...args) => (apiService.generateAIItineraryApi || apiService.default?.generateAIItineraryApi)?.(...args);
+const { generateAIItineraryApi } = apiService;
 
 const getDestinationBySlug = (s) => (travelKnowledgeService.getDestinationBySlug || travelKnowledgeService.default?.getDestinationBySlug)?.(s);
 const getSeasonContext = (d) => (travelKnowledgeService.getSeasonContext || travelKnowledgeService.default?.getSeasonContext)?.(d);
