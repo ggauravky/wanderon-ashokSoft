@@ -1465,6 +1465,39 @@ export async function getSalesDashboardApi() {
   return data;
 }
 
+// ================================================================
+// MANAGEMENT / MARKETING API HELPERS
+// ================================================================
+
+const managementRequest = async (path, options = {}) => {
+  const { public: publicRead = false, ...requestOptions } = options;
+  const response = await fetch(`${API_BASE_URL}/marketing${path}`, {
+    ...requestOptions,
+    headers: publicRead ? { 'Content-Type': 'application/json' } : getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Management request failed');
+  return data;
+};
+
+const managementQuery = (params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all')).toString();
+  return query ? `?${query}` : '';
+};
+
+export const getMarketingDashboardApi = () => managementRequest('/dashboard');
+export const getCampaignsApi = (params = {}) => managementRequest(`/campaigns${managementQuery(params)}`);
+export const getCampaignByIdApi = (id) => managementRequest(`/campaigns/${encodeURIComponent(id)}`);
+export const createCampaignApi = (payload) => managementRequest('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
+export const updateCampaignApi = (id, payload) => managementRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const deleteCampaignApi = (id) => managementRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getBannersApi = (params = {}) => managementRequest(`/banners${managementQuery(params)}`);
+export const getBannerByIdApi = (id) => managementRequest(`/banners/${encodeURIComponent(id)}`);
+export const createBannerApi = (payload) => managementRequest('/banners', { method: 'POST', body: JSON.stringify(payload) });
+export const updateBannerApi = (id, payload) => managementRequest(`/banners/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const deleteBannerApi = (id) => managementRequest(`/banners/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getActiveMarketingBannersApi = (placement) => managementRequest(`/banners/active${managementQuery({ placement })}`, { public: true });
+
 export default {
   getHeaders,
   registerApi,
@@ -1579,5 +1612,17 @@ export default {
   updateMediaAssetApi,
   deleteMediaAssetApi,
   getMediaHealthApi,
-  getSalesDashboardApi
+  getSalesDashboardApi,
+  getMarketingDashboardApi,
+  getCampaignsApi,
+  getCampaignByIdApi,
+  createCampaignApi,
+  updateCampaignApi,
+  deleteCampaignApi,
+  getBannersApi,
+  getBannerByIdApi,
+  createBannerApi,
+  updateBannerApi,
+  deleteBannerApi,
+  getActiveMarketingBannersApi
 };

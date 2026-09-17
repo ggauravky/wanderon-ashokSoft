@@ -1,582 +1,230 @@
 import mongoose from 'mongoose';
-import Campaign from '../models/Campaign.js';
 import Banner from '../models/Banner.js';
-import Lead from '../models/Lead.js';
-import Booking from '../models/Booking.js';
-import Coupon from '../models/Coupon.js';
-import Trip from '../models/Trip.js';
+import Campaign from '../models/Campaign.js';
+import MediaAsset from '../models/MediaAsset.js';
 
-const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
+const isDbConnected = () => mongoose.connection?.readyState === 1;
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const actorMongoId = (req) => req.authContext?.source === 'database' && mongoose.Types.ObjectId.isValid(req.authContext.mongoUserId)
+  ? req.authContext.mongoUserId : undefined;
+const requireDatabase = (res, publicRead = false) => {
+  if (isDbConnected()) return true;
+  res.status(503).json({ success: false, message: publicRead ? 'Promotional content is temporarily unavailable.' : 'Management data is unavailable while the database is disconnected.' });
+  return false;
+};
+const parseDate = (value, label, { endOfDay = false } = {}) => {
+  if (value === '' || value == null) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw Object.assign(new Error(`Enter a valid ${label}.`), { status: 400 });
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(String(value))) date.setUTCHours(23, 59, 59, 999);
+  return date;
+};
+const validateSchedule = (startDate, endDate) => {
+  if (startDate && endDate && endDate < startDate) throw Object.assign(new Error('End date must be on or after the start date.'), { status: 400 });
+};
+const normalizeCampaignStatus = (status, startDate, endDate, now = new Date()) => {
+  if (['draft', 'paused', 'completed', 'cancelled'].includes(status)) return status;
+  if (endDate && endDate < now) return 'completed';
+  if (startDate && startDate > now) return 'scheduled';
+  return status === 'scheduled' ? 'active' : status;
+};
+const campaignDisplayStatus = (campaign, now = new Date()) => normalizeCampaignStatus(campaign.status, campaign.startDate, campaign.endDate, now);
+const bannerDisplayStatus = (banner, now = new Date()) => {
+  if (banner.endDate && banner.endDate < now) return 'expired';
+  if (banner.status === 'inactive') return 'inactive';
+  if (banner.startDate && banner.startDate > now) return 'scheduled';
+  return banner.status === 'scheduled' ? 'active' : banner.status;
+};
+const currentScheduleFilter = (now = new Date()) => ({ $and: [
+  { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
+  { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] }
+] });
+const serializeCampaign = (document) => { const value = document?.toObject ? document.toObject() : document; return { ...value, displayStatus: campaignDisplayStatus(value) }; };
+const serializeBanner = (document) => { const value = document?.toObject ? document.toObject() : document; return { ...value, displayStatus: bannerDisplayStatus(value) }; };
+const populateCampaign = (query) => query.populate('createdBy', 'name email').populate('updatedBy', 'name email');
+const populateBanner = (query) => query.populate('createdBy', 'name email').populate('updatedBy', 'name email').populate('mediaAssetId', 'title altText storage.secureUrl');
 
-export let memoryCampaigns = [
-  {
-    _id: 'camp_1',
-    name: 'Autumn Himalayan Escapes 2026',
-    code: 'AUTUMN_HIMALAYA_26',
-    utmSource: 'meta',
-    utmMedium: 'cpc',
-    utmCampaign: 'autumn_himalaya',
-    type: 'meta_ads',
-    status: 'active',
-    startDate: new Date('2026-08-15'),
-    endDate: new Date('2026-10-31'),
-    budget: 50000,
-    spend: 22400,
-    targetAudience: 'Adventure Travelers (Age 22-38)',
-    targetDestinations: ['Spiti Valley', 'Meghalaya'],
-    featuredTrips: ['spiti-valley-circuit-roadtrip', 'meghalaya-backpacking'],
-    metrics: {
-      impressions: 48500,
-      clicks: 3420,
-      leadsCount: 142,
-      conversionsCount: 28,
-      revenueGenerated: 616000
-    },
-    notes: 'Primary acquisition campaign for Q3 backpacking batches.',
-    createdAt: new Date('2026-08-15')
-  },
-  {
-    _id: 'camp_2',
-    name: 'Diwali Festive Long Weekend Special',
-    code: 'DIWALI_FESTIVE_26',
-    utmSource: 'google_ads',
-    utmMedium: 'search',
-    utmCampaign: 'diwali_getaways',
-    type: 'google_ads',
-    status: 'active',
-    startDate: new Date('2026-09-01'),
-    endDate: new Date('2026-11-10'),
-    budget: 35000,
-    spend: 11200,
-    targetAudience: 'Working Professionals, Couples',
-    targetDestinations: ['Goa', 'Bali'],
-    featuredTrips: ['goa-sun-beach', 'bali-island-escape'],
-    metrics: {
-      impressions: 29000,
-      clicks: 1890,
-      leadsCount: 68,
-      conversionsCount: 14,
-      revenueGenerated: 395000
-    },
-    notes: 'Search intent targeting for long weekend travel packages.',
-    createdAt: new Date('2026-09-01')
-  }
-];
+const campaignStatusQuery = (status, now = new Date()) => {
+  const current = currentScheduleFilter(now);
+  if (status === 'active') return { status: { $in: ['active', 'scheduled'] }, ...current };
+  if (status === 'scheduled') return { status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } };
+  if (status === 'completed') return { $or: [{ status: 'completed' }, { status: { $in: ['active', 'scheduled'] }, endDate: { $lt: now } }] };
+  return { status };
+};
+const bannerStatusQuery = (status, now = new Date()) => {
+  const current = currentScheduleFilter(now);
+  if (status === 'active') return { status: { $in: ['active', 'scheduled'] }, ...current };
+  if (status === 'scheduled') return { status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } };
+  if (status === 'expired') return { endDate: { $lt: now } };
+  return { status };
+};
 
-export let memoryBanners = [
-  {
-    _id: 'ban_1',
-    title: 'Spiti Valley Autumn Circuit 2026',
-    subtitle: 'Limited departures before the mountain passes close. Flat 15% Early Bird discount.',
-    tag: 'Trending Adventure',
-    imageUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&q=80&w=1200',
-    mobileImageUrl: 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&q=80&w=600',
-    ctaText: 'Explore Spiti Expeditions',
-    ctaLink: '/trip/spiti-valley-circuit-high-altitude-roadtrip',
-    placement: 'home_hero',
-    status: 'active',
-    priorityOrder: 1,
-    targetAudience: 'All',
-    createdAt: new Date()
-  },
-  {
-    _id: 'ban_2',
-    title: 'Meghalaya Living Root Bridges & Waterfalls',
-    subtitle: 'Experience the wettest place on Earth with verified local captains.',
-    tag: 'Monsoon Magic',
-    imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=1200',
-    mobileImageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=600',
-    ctaText: 'Book Meghalaya Batch',
-    ctaLink: '/trip/meghalaya-backpacking-living-root-bridges',
-    placement: 'offer_strip',
-    status: 'active',
-    priorityOrder: 2,
-    targetAudience: 'All',
-    createdAt: new Date()
-  }
-];
-
-// ============================================================================
-// 1. MARKETING DASHBOARD & ANALYTICS
-// ============================================================================
-// @desc    Get marketing metrics, lead sources, campaign ROI, coupon stats
-// @route   GET /api/marketing/dashboard
-// @access  Private (Marketing, Admin)
 export const getMarketingDashboard = async (req, res) => {
   try {
-    let campaigns = [];
-    let totalLeads = 0;
-    let leadsBySource = [];
-    let totalSpend = 0;
-    let totalRevenueGenerated = 0;
-    let totalConversions = 0;
-    let activeBannersCount = 0;
-
-    if (isDbConnected()) {
-      try {
-        campaigns = await Campaign.find().sort({ createdAt: -1 });
-        totalLeads = await Lead.countDocuments();
-        activeBannersCount = await Banner.countDocuments({ status: 'active' });
-
-        // Lead source aggregation
-        const sourceAgg = await Lead.aggregate([
-          { $group: { _id: '$source', count: { $sum: 1 } } },
-          { $sort: { count: -1 } }
-        ]);
-        leadsBySource = sourceAgg.map(s => ({
-          source: s._id || 'direct_website',
-          count: s.count
-        }));
-      } catch (e) {
-        console.warn('Marketing aggregate DB fallback:', e.message);
-      }
-    }
-
-    if (campaigns.length === 0) {
-      campaigns = memoryCampaigns;
-      totalLeads = 210;
-      activeBannersCount = memoryBanners.filter(b => b.status === 'active').length;
-      leadsBySource = [
-        { source: 'meta_ads', count: 112 },
-        { source: 'trip_page', count: 54 },
-        { source: 'google_search', count: 32 },
-        { source: 'contact_page', count: 12 }
-      ];
-    }
-
-    for (const c of campaigns) {
-      totalSpend += Number(c.spend || 0);
-      totalRevenueGenerated += Number(c.metrics?.revenueGenerated || 0);
-      totalConversions += Number(c.metrics?.conversionsCount || 0);
-    }
-
-    const estimatedRoi = totalSpend > 0 
-      ? Number((((totalRevenueGenerated - totalSpend) / totalSpend) * 100).toFixed(1))
-      : 0;
-
-    const conversionRate = totalLeads > 0 
-      ? Number(((totalConversions / totalLeads) * 100).toFixed(1)) 
-      : 0;
-
-    res.json({
-      success: true,
-      dashboard: {
-        totalCampaigns: campaigns.length,
-        activeCampaigns: campaigns.filter(c => c.status === 'active').length,
-        activeBannersCount,
-        totalLeads,
-        totalConversions,
-        conversionRate: `${conversionRate}%`,
-        totalSpend,
-        totalRevenueGenerated,
-        estimatedRoi: `${estimatedRoi}%`,
-        leadsBySource,
-        topCampaigns: campaigns.slice(0, 5)
-      }
-    });
-  } catch (error) {
-    console.error('getMarketingDashboard Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error generating marketing dashboard' });
-  }
+    if (!requireDatabase(res)) return;
+    const now = new Date();
+    const current = currentScheduleFilter(now);
+    const [totalCampaigns, activeCampaigns, scheduledCampaigns, totalBanners, activeBanners, scheduledBanners, expiredPromotions, recentCampaigns, recentBanners] = await Promise.all([
+      Campaign.countDocuments(),
+      Campaign.countDocuments({ status: { $in: ['active', 'scheduled'] }, ...current }),
+      Campaign.countDocuments({ status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } }),
+      Banner.countDocuments(),
+      Banner.countDocuments({ status: { $in: ['active', 'scheduled'] }, ...current }),
+      Banner.countDocuments({ status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } }),
+      Banner.countDocuments({ endDate: { $lt: now } }),
+      populateCampaign(Campaign.find().sort({ updatedAt: -1 }).limit(5)),
+      populateBanner(Banner.find().sort({ updatedAt: -1 }).limit(5))
+    ]);
+    res.json({ success: true, dashboard: { totalCampaigns, activeCampaigns, scheduledCampaigns, totalBanners, activeBanners, scheduledBanners, expiredPromotions, recentCampaigns: recentCampaigns.map(serializeCampaign), recentBanners: recentBanners.map(serializeBanner) } });
+  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load Management overview.' }); }
 };
 
-// ============================================================================
-// 2. CAMPAIGN MANAGEMENT CRUD
-// ============================================================================
-// @desc    Get all campaigns
-// @route   GET /api/marketing/campaigns
-// @access  Private (Marketing, Admin)
 export const getCampaigns = async (req, res) => {
   try {
-    const { status, type } = req.query;
-    const filter = {};
-    if (status && status !== 'All') filter.status = status;
-    if (type && type !== 'All') filter.type = type;
-
-    let campaigns = [];
-    if (isDbConnected()) {
-      try {
-        campaigns = await Campaign.find(filter).sort({ createdAt: -1 });
-      } catch (e) {}
+    if (!requireDatabase(res)) return;
+    const { search = '', status = 'all', type = 'all', from, to, page = 1, limit = 25 } = req.query;
+    const conditions = [];
+    if (search.trim()) { const pattern = new RegExp(escapeRegex(search.trim()), 'i'); conditions.push({ $or: [{ name: pattern }, { code: pattern }, { targetAudience: pattern }] }); }
+    if (status !== 'all') conditions.push(campaignStatusQuery(status));
+    if (type !== 'all') conditions.push({ type });
+    if (from || to) {
+      const start = parseDate(from || '1970-01-01', 'campaign filter start');
+      const end = parseDate(to || '9999-12-31', 'campaign filter end', { endOfDay: true });
+      conditions.push({ $or: [{ startDate: { $gte: start, $lte: end } }, { endDate: { $gte: start, $lte: end } }, { startDate: { $lte: start }, endDate: { $gte: end } }] });
     }
-
-    if (campaigns.length === 0) {
-      campaigns = memoryCampaigns.filter(c => {
-        if (status && status !== 'All' && c.status !== status) return false;
-        if (type && type !== 'All' && c.type !== type) return false;
-        return true;
-      });
-    }
-
-    res.json({ success: true, count: campaigns.length, campaigns });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching campaigns' });
-  }
+    const filter = conditions.length ? { $and: conditions } : {};
+    const pageNumber = Math.max(1, Number(page) || 1); const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
+    const [campaigns, total] = await Promise.all([populateCampaign(Campaign.find(filter).sort({ updatedAt: -1 }).skip((pageNumber - 1) * pageSize).limit(pageSize)), Campaign.countDocuments(filter)]);
+    res.json({ success: true, campaigns: campaigns.map(serializeCampaign), types: Campaign.schema.path('type').enumValues, statuses: Campaign.schema.path('status').enumValues, pagination: { page: pageNumber, limit: pageSize, total, pages: Math.ceil(total / pageSize) } });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to load campaigns.' }); }
 };
 
-// @desc    Get single campaign by ID
-// @route   GET /api/marketing/campaigns/:id
-// @access  Private (Marketing, Admin)
 export const getCampaignById = async (req, res) => {
   try {
-    const { id } = req.params;
-    let campaign = null;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        campaign = await Campaign.findById(id);
-      } catch (e) {}
-    }
-    if (!campaign) {
-      campaign = memoryCampaigns.find(c => String(c._id) === String(id) || c.code === id);
-    }
-
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found.' });
-    }
-
-    res.json({ success: true, campaign });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching campaign' });
-  }
+    if (!requireDatabase(res)) return;
+    const campaign = mongoose.Types.ObjectId.isValid(req.params.id) ? await populateCampaign(Campaign.findById(req.params.id)) : null;
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
+    res.json({ success: true, campaign: serializeCampaign(campaign) });
+  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load campaign.' }); }
 };
 
-// @desc    Create a new marketing campaign
-// @route   POST /api/marketing/campaigns
-// @access  Private (Marketing, Admin)
+const campaignInput = (body, existing = {}) => {
+  const name = String(body.name ?? existing.name ?? '').trim(); const code = String(body.code ?? existing.code ?? '').trim().toUpperCase();
+  if (!name || !code) throw Object.assign(new Error('Campaign name and code are required.'), { status: 400 });
+  const startDate = parseDate(body.startDate === '' ? null : body.startDate ?? existing.startDate, 'campaign start date');
+  const endDate = parseDate(body.endDate === '' ? null : body.endDate ?? existing.endDate, 'campaign end date', { endOfDay: true });
+  validateSchedule(startDate, endDate);
+  const requestedStatus = String(body.status ?? existing.status ?? 'draft');
+  if (!Campaign.schema.path('status').enumValues.includes(requestedStatus)) throw Object.assign(new Error('Unsupported campaign status.'), { status: 400 });
+  const type = String(body.type ?? existing.type ?? 'other');
+  if (!Campaign.schema.path('type').enumValues.includes(type)) throw Object.assign(new Error('Unsupported campaign type.'), { status: 400 });
+  const budget = Number(body.budget ?? existing.budget ?? 0);
+  if (!Number.isFinite(budget) || budget < 0) throw Object.assign(new Error('Campaign budget must be zero or greater.'), { status: 400 });
+  const asList = (value) => Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+  return { name, code, type, status: normalizeCampaignStatus(requestedStatus, startDate, endDate), startDate, endDate, budget, utmSource: String(body.utmSource ?? existing.utmSource ?? '').trim(), utmMedium: String(body.utmMedium ?? existing.utmMedium ?? '').trim(), utmCampaign: String(body.utmCampaign ?? existing.utmCampaign ?? '').trim(), targetAudience: String(body.targetAudience ?? existing.targetAudience ?? '').trim(), targetDestinations: asList(body.targetDestinations ?? existing.targetDestinations), featuredTrips: asList(body.featuredTrips ?? existing.featuredTrips), notes: String(body.notes ?? existing.notes ?? '').trim() };
+};
+
 export const createCampaign = async (req, res) => {
   try {
-    const {
-      name,
-      code,
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      type,
-      status,
-      startDate,
-      endDate,
-      budget,
-      spend,
-      targetAudience,
-      targetDestinations,
-      featuredTrips,
-      notes
-    } = req.body;
-
-    if (!name || !code) {
-      return res.status(400).json({ success: false, message: 'Campaign name and unique code are required.' });
-    }
-
-    const cleanCode = code.toUpperCase().trim();
-    const campaignData = {
-      name: name.trim(),
-      code: cleanCode,
-      utmSource: utmSource || 'meta',
-      utmMedium: utmMedium || 'cpc',
-      utmCampaign: utmCampaign || cleanCode.toLowerCase(),
-      type: type || 'meta_ads',
-      status: status || 'draft',
-      startDate: startDate ? new Date(startDate) : new Date(),
-      endDate: endDate ? new Date(endDate) : null,
-      budget: budget ? Number(budget) : 0,
-      spend: spend ? Number(spend) : 0,
-      targetAudience: targetAudience || '',
-      targetDestinations: Array.isArray(targetDestinations) ? targetDestinations : [],
-      featuredTrips: Array.isArray(featuredTrips) ? featuredTrips : [],
-      metrics: { impressions: 0, clicks: 0, leadsCount: 0, conversionsCount: 0, revenueGenerated: 0 },
-      notes: notes || '',
-      createdBy: req.user?._id
-    };
-
-    let newCampaign = null;
-    if (isDbConnected()) {
-      try {
-        const existing = await Campaign.findOne({ code: cleanCode });
-        if (existing) {
-          return res.status(400).json({ success: false, message: `Campaign code "${cleanCode}" already exists.` });
-        }
-        newCampaign = await Campaign.create(campaignData);
-      } catch (e) {
-        console.warn('Campaign create DB warning:', e.message);
-      }
-    }
-
-    if (!newCampaign) {
-      newCampaign = {
-        _id: 'camp_' + Date.now(),
-        ...campaignData,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryCampaigns.unshift(newCampaign);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: `Campaign "${newCampaign.name}" created successfully.`,
-      campaign: newCampaign
-    });
-  } catch (error) {
-    console.error('createCampaign Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error creating campaign' });
-  }
+    if (!requireDatabase(res)) return;
+    const input = campaignInput(req.body);
+    if (await Campaign.exists({ code: input.code })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
+    const campaign = await Campaign.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) });
+    res.status(201).json({ success: true, message: 'Campaign configured.', campaign: serializeCampaign(campaign) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to create campaign.' }); }
 };
 
-// @desc    Update marketing campaign
-// @route   PUT /api/marketing/campaigns/:id
-// @access  Private (Marketing, Admin)
 export const updateCampaign = async (req, res) => {
   try {
-    const { id } = req.params;
-    let campaign = null;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        campaign = await Campaign.findById(id);
-      } catch (e) {}
-    }
-    if (!campaign) {
-      const memIndex = memoryCampaigns.findIndex(c => String(c._id) === String(id) || c.code === id);
-      if (memIndex !== -1) campaign = memoryCampaigns[memIndex];
-    }
-
-    if (!campaign) {
-      return res.status(404).json({ success: false, message: 'Campaign not found.' });
-    }
-
-    const fields = ['name', 'utmSource', 'utmMedium', 'utmCampaign', 'type', 'status', 'budget', 'spend', 'targetAudience', 'targetDestinations', 'featuredTrips', 'notes'];
-    for (const f of fields) {
-      if (req.body[f] !== undefined) campaign[f] = req.body[f];
-    }
-    if (req.body.startDate) campaign.startDate = new Date(req.body.startDate);
-    if (req.body.endDate !== undefined) campaign.endDate = req.body.endDate ? new Date(req.body.endDate) : null;
-    if (req.body.metrics) {
-      campaign.metrics = { ...(campaign.metrics || {}), ...req.body.metrics };
-    }
-    campaign.updatedBy = req.user?._id;
-
-    if (isDbConnected() && typeof campaign.save === 'function') {
-      await campaign.save();
-    }
-
-    res.json({
-      success: true,
-      message: `Campaign "${campaign.name}" updated successfully.`,
-      campaign
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error updating campaign' });
-  }
+    if (!requireDatabase(res)) return;
+    const campaign = mongoose.Types.ObjectId.isValid(req.params.id) ? await Campaign.findById(req.params.id) : null;
+    if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
+    const input = campaignInput(req.body, campaign.toObject());
+    if (await Campaign.exists({ code: input.code, _id: { $ne: campaign._id } })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
+    Object.assign(campaign, input, { updatedBy: actorMongoId(req) }); await campaign.save();
+    res.json({ success: true, message: 'Campaign updated.', campaign: serializeCampaign(campaign) });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to update campaign.' }); }
 };
 
-// @desc    Delete marketing campaign
-// @route   DELETE /api/marketing/campaigns/:id
-// @access  Private (Marketing, Admin)
 export const deleteCampaign = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        await Campaign.findByIdAndDelete(id);
-      } catch (e) {}
-    }
-
-    memoryCampaigns = memoryCampaigns.filter(c => String(c._id) !== String(id) && c.code !== id);
-
-    res.json({ success: true, message: 'Campaign deleted successfully.', id });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error deleting campaign' });
-  }
+    if (!requireDatabase(res)) return;
+    const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Campaign.findByIdAndDelete(req.params.id) : null;
+    if (!deleted) return res.status(404).json({ success: false, message: 'Campaign not found.' });
+    res.json({ success: true, id: deleted._id, message: 'Campaign deleted.' });
+  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to delete campaign.' }); }
 };
 
-// ============================================================================
-// 3. WEBSITE CONTENT & BANNER MANAGEMENT
-// ============================================================================
-// @desc    Get all website promotional banners (Admin/Marketing)
-// @route   GET /api/marketing/banners
-// @access  Private (Marketing, Admin)
 export const getBanners = async (req, res) => {
   try {
-    const { placement, status } = req.query;
-    const filter = {};
-    if (placement && placement !== 'All') filter.placement = placement;
-    if (status && status !== 'All') filter.status = status;
-
-    let banners = [];
-    if (isDbConnected()) {
-      try {
-        banners = await Banner.find(filter).sort({ priorityOrder: 1, createdAt: -1 });
-      } catch (e) {}
-    }
-
-    if (banners.length === 0) {
-      banners = memoryBanners.filter(b => {
-        if (placement && placement !== 'All' && b.placement !== placement) return false;
-        if (status && status !== 'All' && b.status !== status) return false;
-        return true;
-      });
-    }
-
-    res.json({ success: true, count: banners.length, banners });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching banners' });
-  }
+    if (!requireDatabase(res)) return;
+    const { search = '', status = 'all', placement = 'all', from, to, page = 1, limit = 25 } = req.query;
+    const conditions = [];
+    if (search.trim()) { const pattern = new RegExp(escapeRegex(search.trim()), 'i'); conditions.push({ $or: [{ title: pattern }, { subtitle: pattern }, { tag: pattern }] }); }
+    if (status !== 'all') conditions.push(bannerStatusQuery(status));
+    if (placement !== 'all') conditions.push({ placement });
+    if (from || to) { const start = parseDate(from || '1970-01-01', 'banner filter start'); const end = parseDate(to || '9999-12-31', 'banner filter end', { endOfDay: true }); conditions.push({ $or: [{ startDate: { $gte: start, $lte: end } }, { endDate: { $gte: start, $lte: end } }, { startDate: { $lte: start }, endDate: { $gte: end } }] }); }
+    const filter = conditions.length ? { $and: conditions } : {}; const pageNumber = Math.max(1, Number(page) || 1); const pageSize = Math.min(100, Math.max(1, Number(limit) || 25));
+    const [banners, total] = await Promise.all([populateBanner(Banner.find(filter).sort({ priorityOrder: 1, updatedAt: -1 }).skip((pageNumber - 1) * pageSize).limit(pageSize)), Banner.countDocuments(filter)]);
+    res.json({ success: true, banners: banners.map(serializeBanner), placements: Banner.schema.path('placement').enumValues, statuses: [...Banner.schema.path('status').enumValues, 'expired'], pagination: { page: pageNumber, limit: pageSize, total, pages: Math.ceil(total / pageSize) } });
+  } catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to load banners.' }); }
 };
 
-// @desc    Get active banners for public website display
-// @route   GET /api/marketing/banners/active
-// @access  Public
 export const getActiveBanners = async (req, res) => {
   try {
-    const { placement } = req.query;
-    const filter = { status: 'active' };
-    if (placement && placement !== 'All') filter.placement = placement;
-
-    let banners = [];
-    if (isDbConnected()) {
-      try {
-        banners = await Banner.find(filter).sort({ priorityOrder: 1 });
-      } catch (e) {}
+    if (!requireDatabase(res, true)) return;
+    const placement = String(req.query.placement || '').trim(); const filter = { status: { $in: ['active', 'scheduled'] }, ...currentScheduleFilter() };
+    if (placement) {
+      if (!Banner.schema.path('placement').enumValues.includes(placement)) return res.status(400).json({ success: false, message: 'Unsupported banner placement.' });
+      filter.placement = placement;
     }
-
-    if (banners.length === 0) {
-      banners = memoryBanners.filter(b => b.status === 'active' && (!placement || placement === 'All' || b.placement === placement));
-    }
-
-    res.json({ success: true, count: banners.length, banners });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error fetching active banners' });
-  }
+    const banners = await Banner.find(filter).sort({ priorityOrder: 1, updatedAt: -1 }).select('title subtitle tag imageUrl mobileImageUrl ctaText ctaLink placement priorityOrder startDate endDate');
+    res.json({ success: true, banners, count: banners.length });
+  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load promotional content.' }); }
 };
 
-// @desc    Create a promotional banner
-// @route   POST /api/marketing/banners
-// @access  Private (Marketing, Admin)
+export const getBannerById = async (req, res) => {
+  try {
+    if (!requireDatabase(res)) return;
+    const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await populateBanner(Banner.findById(req.params.id)) : null;
+    if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' });
+    res.json({ success: true, banner: serializeBanner(banner) });
+  } catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to load banner.' }); }
+};
+
+const bannerInput = async (body, existing = {}) => {
+  const title = String(body.title ?? existing.title ?? '').trim();
+  if (!title) throw Object.assign(new Error('Banner title is required.'), { status: 400 });
+  const placement = String(body.placement ?? existing.placement ?? 'home_hero'); const requestedStatus = String(body.status ?? existing.status ?? 'inactive');
+  if (!Banner.schema.path('placement').enumValues.includes(placement)) throw Object.assign(new Error('Unsupported banner placement.'), { status: 400 });
+  if (!Banner.schema.path('status').enumValues.includes(requestedStatus)) throw Object.assign(new Error('Unsupported banner status.'), { status: 400 });
+  const startDate = parseDate(body.startDate === '' ? null : body.startDate ?? existing.startDate, 'banner start date'); const endDate = parseDate(body.endDate === '' ? null : body.endDate ?? existing.endDate, 'banner end date', { endOfDay: true }); validateSchedule(startDate, endDate);
+  let mediaAssetId = body.mediaAssetId === '' ? null : body.mediaAssetId ?? existing.mediaAssetId ?? null; let imageUrl = String(body.imageUrl ?? existing.imageUrl ?? '').trim();
+  if (mediaAssetId) {
+    if (!mongoose.Types.ObjectId.isValid(mediaAssetId)) throw Object.assign(new Error('Selected media asset is invalid.'), { status: 400 });
+    const asset = await MediaAsset.findOne({ _id: mediaAssetId, active: true, type: 'IMAGE' });
+    if (!asset) throw Object.assign(new Error('Selected media asset is unavailable.'), { status: 409 });
+    imageUrl = asset.storage.secureUrl;
+  }
+  if (!imageUrl) throw Object.assign(new Error('Select a banner image.'), { status: 400 });
+  const priorityOrder = Number(body.priorityOrder ?? existing.priorityOrder ?? 1); if (!Number.isInteger(priorityOrder) || priorityOrder < 0) throw Object.assign(new Error('Priority must be a non-negative whole number.'), { status: 400 });
+  let status = requestedStatus; const now = new Date(); if (status === 'active' && startDate && startDate > now) status = 'scheduled'; if (status === 'scheduled' && (!startDate || startDate <= now)) status = 'active'; if (endDate && endDate < now) status = 'inactive';
+  const ctaLink = String(body.ctaLink ?? existing.ctaLink ?? '/trips').trim();
+  if (ctaLink && !ctaLink.startsWith('/') && !/^https?:\/\//i.test(ctaLink)) throw Object.assign(new Error('CTA link must be a site path or an HTTP(S) URL.'), { status: 400 });
+  return { title, subtitle: String(body.subtitle ?? existing.subtitle ?? '').trim(), tag: String(body.tag ?? existing.tag ?? '').trim(), imageUrl, mediaAssetId, mobileImageUrl: String(body.mobileImageUrl ?? existing.mobileImageUrl ?? '').trim(), ctaText: String(body.ctaText ?? existing.ctaText ?? '').trim(), ctaLink, placement, status, priorityOrder, startDate, endDate, targetAudience: String(body.targetAudience ?? existing.targetAudience ?? 'All').trim() };
+};
+
 export const createBanner = async (req, res) => {
-  try {
-    const {
-      title,
-      subtitle,
-      tag,
-      imageUrl,
-      mobileImageUrl,
-      ctaText,
-      ctaLink,
-      placement,
-      status,
-      priorityOrder,
-      startDate,
-      endDate,
-      targetAudience
-    } = req.body;
-
-    if (!title || !imageUrl) {
-      return res.status(400).json({ success: false, message: 'Banner title and image URL are required.' });
-    }
-
-    const bannerData = {
-      title: title.trim(),
-      subtitle: subtitle || '',
-      tag: tag || 'Special Offer',
-      imageUrl: imageUrl.trim(),
-      mobileImageUrl: mobileImageUrl || '',
-      ctaText: ctaText || 'Explore Expeditions',
-      ctaLink: ctaLink || '/trips',
-      placement: placement || 'home_hero',
-      status: status || 'active',
-      priorityOrder: priorityOrder ? Number(priorityOrder) : 1,
-      startDate: startDate ? new Date(startDate) : null,
-      endDate: endDate ? new Date(endDate) : null,
-      targetAudience: targetAudience || 'All',
-      createdBy: req.user?._id
-    };
-
-    let newBanner = null;
-    if (isDbConnected()) {
-      try {
-        newBanner = await Banner.create(bannerData);
-      } catch (e) {}
-    }
-
-    if (!newBanner) {
-      newBanner = {
-        _id: 'ban_' + Date.now(),
-        ...bannerData,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryBanners.push(newBanner);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: `Banner "${newBanner.title}" created successfully.`,
-      banner: newBanner
-    });
-  } catch (error) {
-    console.error('createBanner Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Server Error creating banner' });
-  }
+  try { if (!requireDatabase(res)) return; const input = await bannerInput(req.body); const banner = await Banner.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) }); res.status(201).json({ success: true, message: 'Banner configured.', banner: serializeBanner(banner) }); }
+  catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to create banner.' }); }
 };
 
-// @desc    Update a promotional banner
-// @route   PUT /api/marketing/banners/:id
-// @access  Private (Marketing, Admin)
 export const updateBanner = async (req, res) => {
-  try {
-    const { id } = req.params;
-    let banner = null;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        banner = await Banner.findById(id);
-      } catch (e) {}
-    }
-    if (!banner) {
-      const memIndex = memoryBanners.findIndex(b => String(b._id) === String(id));
-      if (memIndex !== -1) banner = memoryBanners[memIndex];
-    }
-
-    if (!banner) {
-      return res.status(404).json({ success: false, message: 'Banner not found.' });
-    }
-
-    const fields = ['title', 'subtitle', 'tag', 'imageUrl', 'mobileImageUrl', 'ctaText', 'ctaLink', 'placement', 'status', 'priorityOrder', 'targetAudience'];
-    for (const f of fields) {
-      if (req.body[f] !== undefined) banner[f] = req.body[f];
-    }
-    if (req.body.startDate !== undefined) banner.startDate = req.body.startDate ? new Date(req.body.startDate) : null;
-    if (req.body.endDate !== undefined) banner.endDate = req.body.endDate ? new Date(req.body.endDate) : null;
-
-    if (isDbConnected() && typeof banner.save === 'function') {
-      await banner.save();
-    }
-
-    res.json({ success: true, message: 'Banner updated successfully.', banner });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error updating banner' });
-  }
+  try { if (!requireDatabase(res)) return; const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findById(req.params.id) : null; if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' }); const input = await bannerInput(req.body, banner.toObject()); Object.assign(banner, input, { updatedBy: actorMongoId(req) }); await banner.save(); res.json({ success: true, message: 'Banner updated.', banner: serializeBanner(banner) }); }
+  catch (error) { res.status(error.status || 500).json({ success: false, message: error.message || 'Unable to update banner.' }); }
 };
 
-// @desc    Delete a promotional banner
-// @route   DELETE /api/marketing/banners/:id
-// @access  Private (Marketing, Admin)
 export const deleteBanner = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (isDbConnected() && mongoose.Types.ObjectId.isValid(id)) {
-      try {
-        await Banner.findByIdAndDelete(id);
-      } catch (e) {}
-    }
-
-    memoryBanners = memoryBanners.filter(b => String(b._id) !== String(id));
-
-    res.json({ success: true, message: 'Banner deleted successfully.', id });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message || 'Server Error deleting banner' });
-  }
+  try { if (!requireDatabase(res)) return; const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findByIdAndDelete(req.params.id) : null; if (!deleted) return res.status(404).json({ success: false, message: 'Banner not found.' }); res.json({ success: true, id: deleted._id, message: 'Banner deleted.' }); }
+  catch (error) { res.status(500).json({ success: false, message: error.message || 'Unable to delete banner.' }); }
 };

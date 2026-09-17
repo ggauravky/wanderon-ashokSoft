@@ -34,7 +34,9 @@ const ICONS = {
   expert_requests: PhoneCall,
   quotations: FileText,
   bookings: BookOpen,
-  management: Megaphone
+  management: Megaphone,
+  management_campaigns: Megaphone,
+  management_banners: Image
 };
 
 const StaffSidebar = ({ modules, user, roleLabel, onLogout, onNavigate }) => {

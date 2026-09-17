@@ -7,6 +7,7 @@ import {
   updateCampaign,
   deleteCampaign,
   getBanners,
+  getBannerById,
   getActiveBanners,
   createBanner,
   updateBanner,
@@ -34,6 +35,7 @@ router.delete('/campaigns/:id', checkPermission('marketing:manage_campaigns'), d
 // Banner Management Routes
 router.get('/banners', checkPermission('marketing:manage_banners'), getBanners);
 router.post('/banners', checkPermission('marketing:manage_banners'), createBanner);
+router.get('/banners/:id', checkPermission('marketing:manage_banners'), getBannerById);
 router.put('/banners/:id', checkPermission('marketing:manage_banners'), updateBanner);
 router.delete('/banners/:id', checkPermission('marketing:manage_banners'), deleteBanner);
 

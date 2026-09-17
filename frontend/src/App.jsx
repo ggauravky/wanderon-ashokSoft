@@ -35,7 +35,11 @@ import StaffShell from './staff/StaffShell';
 import StaffOverview from './staff/StaffOverview';
 import StaffModuleRoute from './staff/components/StaffModuleRoute';
 import AdminWorkspace from './staff/workspaces/AdminWorkspace';
-import ManagementWorkspace from './staff/workspaces/ManagementWorkspace';
+import ManagementOverview from './staff/modules/management/ManagementOverview';
+import CampaignsWorkspace from './staff/modules/management/campaigns/CampaignsWorkspace';
+import CampaignEditor from './staff/modules/management/campaigns/CampaignEditor';
+import BannersWorkspace from './staff/modules/management/banners/BannersWorkspace';
+import BannerEditor from './staff/modules/management/banners/BannerEditor';
 import SalesOverview from './staff/modules/sales/SalesOverview';
 import ExpertRequestsWorkspace from './staff/modules/sales/ExpertRequestsWorkspace';
 import QuotationsWorkspace from './staff/modules/sales/quotations/QuotationsWorkspace';
@@ -186,9 +190,15 @@ function App() {
             } />
             <Route path="management" element={
               <StaffModuleRoute moduleId="management">
-                <ManagementWorkspace />
+                <ManagementOverview />
               </StaffModuleRoute>
             } />
+            <Route path="management/campaigns" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignsWorkspace /></StaffModuleRoute>} />
+            <Route path="management/campaigns/new" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignEditor /></StaffModuleRoute>} />
+            <Route path="management/campaigns/:id/edit" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignEditor /></StaffModuleRoute>} />
+            <Route path="management/banners" element={<StaffModuleRoute moduleId="management_banners"><BannersWorkspace /></StaffModuleRoute>} />
+            <Route path="management/banners/new" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
+            <Route path="management/banners/:id/edit" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
           </Route>
 
           <Route path="/" element={<MainLayout />}>

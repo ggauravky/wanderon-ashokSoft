@@ -19,6 +19,11 @@ const bannerSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Banner image URL is required']
     },
+    mediaAssetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MediaAsset',
+      default: null
+    },
     mobileImageUrl: {
       type: String,
       default: ''
@@ -34,18 +39,17 @@ const bannerSchema = new mongoose.Schema(
     placement: {
       type: String,
       enum: ['home_hero', 'top_bar', 'destination_highlight', 'offer_strip', 'popup'],
-      default: 'home_hero',
-      index: true
+      default: 'home_hero'
     },
     status: {
       type: String,
       enum: ['active', 'inactive', 'scheduled'],
-      default: 'active',
-      index: true
+      default: 'active'
     },
     priorityOrder: {
       type: Number,
-      default: 1
+      default: 1,
+      min: 0
     },
     startDate: {
       type: Date
@@ -60,9 +64,16 @@ const bannerSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
+    },
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
     }
   },
   { timestamps: true }
 );
+
+bannerSchema.index({ placement: 1, status: 1, priorityOrder: 1 });
+bannerSchema.index({ status: 1, startDate: 1, endDate: 1 });
 
 export default mongoose.model('Banner', bannerSchema);

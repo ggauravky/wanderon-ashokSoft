@@ -12,8 +12,7 @@ const campaignSchema = new mongoose.Schema(
       required: [true, 'Campaign code is required'],
       unique: true,
       uppercase: true,
-      trim: true,
-      index: true
+      trim: true
     },
     utmSource: {
       type: String,
@@ -34,9 +33,8 @@ const campaignSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['draft', 'active', 'paused', 'completed'],
-      default: 'draft',
-      index: true
+      enum: ['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled'],
+      default: 'draft'
     },
     startDate: {
       type: Date
@@ -88,5 +86,8 @@ const campaignSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+campaignSchema.index({ status: 1, startDate: 1, endDate: 1 });
+campaignSchema.index({ type: 1, updatedAt: -1 });
 
 export default mongoose.model('Campaign', campaignSchema);

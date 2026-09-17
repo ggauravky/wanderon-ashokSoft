@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -19,6 +19,7 @@ import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchema
 import { DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+import { getActiveMarketingBannersApi } from '../services/api.js';
 
 const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
@@ -84,6 +85,15 @@ const Home = () => {
   const [selectedMonth, setSelectedMonth] = useState("SEP '26");
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
+  const [homeHeroBanner, setHomeHeroBanner] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    getActiveMarketingBannersApi('home_hero')
+      .then((data) => { if (active) setHomeHeroBanner(data.banners?.[0] || null); })
+      .catch(() => { if (active) setHomeHeroBanner(null); });
+    return () => { active = false; };
+  }, []);
 
   // Dynamic active catalog (excludes inactive/draft trips, merges live with knowledge base)
   const activeCatalog = useMemo(() => {
@@ -224,11 +234,14 @@ const Home = () => {
       <section className="relative min-h-[90vh] flex items-center justify-center pt-28 pb-20 overflow-hidden bg-slate-950">
         {/* Cinematic Backdrop Image */}
         <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop" 
-            alt="WanderLuxe mountain group travel landscape" 
-            className="w-full h-full object-cover opacity-45 scale-105 transition-transform duration-1000"
-          />
+          <picture className="block h-full w-full">
+            {homeHeroBanner?.mobileImageUrl && <source media="(max-width: 640px)" srcSet={homeHeroBanner.mobileImageUrl} />}
+            <img
+              src={homeHeroBanner?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop'}
+              alt={homeHeroBanner?.title || 'WanderLuxe mountain group travel landscape'}
+              className="w-full h-full object-cover opacity-45 scale-105 transition-transform duration-1000"
+            />
+          </picture>
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/50 to-[#f8fafc]" />
         </div>
 
@@ -241,7 +254,7 @@ const Home = () => {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-xs font-black text-emerald-300 mb-6 shadow-xl"
           >
             <CloudSun size={15} className="text-emerald-400" />
-            <span>{season.heroTag || 'Autumn Clear Skies'}</span>
+            <span>{homeHeroBanner?.tag || season.heroTag || 'Autumn Clear Skies'}</span>
             <span className="text-white/30">•</span>
             <span className="text-white/90 font-medium">{timeContext.greeting || 'Welcome Explorer'}</span>
           </motion.div>
@@ -253,7 +266,7 @@ const Home = () => {
             transition={{ duration: 0.5 }}
             className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight mb-4 max-w-5xl mx-auto leading-[1.1]"
           >
-            Explore India & The World <span className="text-emerald-400">In Community.</span>
+            {homeHeroBanner?.title || <>Explore India & The World <span className="text-emerald-400">In Community.</span></>}
           </motion.h1>
 
           <motion.p 
@@ -262,8 +275,14 @@ const Home = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-sm sm:text-base md:text-lg text-slate-200 max-w-2xl mx-auto mb-8 font-medium"
           >
-            Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.
+            {homeHeroBanner?.subtitle || 'Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.'}
           </motion.p>
+
+          {homeHeroBanner?.ctaText && homeHeroBanner?.ctaLink && (
+            /^https?:\/\//i.test(homeHeroBanner.ctaLink)
+              ? <a href={homeHeroBanner.ctaLink} className="mb-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg hover:bg-emerald-400">{homeHeroBanner.ctaText}<ArrowRight size={16}/></a>
+              : <Link to={homeHeroBanner.ctaLink} className="mb-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg hover:bg-emerald-400">{homeHeroBanner.ctaText}<ArrowRight size={16}/></Link>
+          )}
 
           {/* Contextual Discovery Search Card */}
           <motion.div 

@@ -151,12 +151,33 @@ export const STAFF_MODULES = Object.freeze([
   }),
   Object.freeze({
     id: 'management',
-    label: 'Management Workspace',
+    label: 'Management Overview',
     cardLabel: 'Management',
     path: '/staff/management',
     icon: 'management',
     roles: Object.freeze(['super_admin', 'admin', 'marketing']),
     section: 'management',
-    description: 'Prepare campaigns, promotions, content, and reporting.'
+    description: 'Monitor campaigns, promotions, and operational marketing records.',
+    exact: true
+  }),
+  Object.freeze({
+    id: 'management_campaigns',
+    label: 'Campaigns',
+    path: '/staff/management/campaigns',
+    icon: 'management_campaigns',
+    roles: Object.freeze(['super_admin', 'admin', 'marketing']),
+    section: 'management',
+    description: 'Plan and maintain campaign records.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'management_banners',
+    label: 'Banners & Promotions',
+    path: '/staff/management/banners',
+    icon: 'management_banners',
+    roles: Object.freeze(['super_admin', 'admin', 'marketing']),
+    section: 'management',
+    description: 'Schedule eligible website promotions.',
+    navigationOnly: true
   })
 ]);
