@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <!-- Homepage -->
+  <url>
+    <loc>https://wanderluxe.in/</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Main Destinations Hub -->
+  <url>
+    <loc>https://wanderluxe.in/destinations</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Specific Destination Pages & Category Filters -->
+  <url>
+    <loc>https://wanderluxe.in/weekend-trips</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/community-trips</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/fixed-departures</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/custom-trip</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Package Detail Pages -->
+  <url>
+    <loc>https://wanderluxe.in/trip/1</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&amp;fit=crop&amp;q=80&amp;w=1000</image:loc>
+      <image:title>Meghalaya Backpacking Living Root Bridges</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/trip/2</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?auto=format&amp;fit=crop&amp;q=80&amp;w=1000</image:loc>
+      <image:title>Spiti Valley Circuit High Altitude Roadtrip</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/trip/3</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&amp;fit=crop&amp;q=80&amp;w=1000</image:loc>
+      <image:title>Goa Sun Beach and Party Getaway</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/trip/4</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&amp;fit=crop&amp;q=80&amp;w=1000</image:loc>
+      <image:title>Bali Island Escape Beaches and Culture</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/trip/5</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/trip/6</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Programmatic Creator Landing Pages -->
+  <url>
+    <loc>https://wanderluxe.in/creators/gaurav/meghalaya-expedition</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Informational & Content Pages -->
+  <url>
+    <loc>https://wanderluxe.in/blog</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/about</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://wanderluxe.in/contact</loc>
+    <lastmod>2026-08-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>

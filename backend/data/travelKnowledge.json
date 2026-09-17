@@ -1,0 +1,905 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-08-22",
+  "destinations": [
+    {
+      "id": "meghalaya",
+      "slug": "meghalaya",
+      "name": "Meghalaya",
+      "country": "India",
+      "region": "Northeast India",
+      "state": "Meghalaya",
+      "summary": "Abode of Clouds, living root bridges, roaring plunge waterfalls, and crystal-clear emerald rivers.",
+      "description": "Meghalaya offers a surreal landscape of subtropical rainforests, cascading plunge waterfalls like Nohkalikai and Wei Sawdong, prehistoric limestone fossil caves, and bio-engineered living root bridges in Nongriat. Experience the transparent glass waters of Umngot River in Dawki and the serene village culture of Mawlynnong.",
+      "heroImage": "https://images.unsplash.com/photo-1544735716-392fe2489ffa?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1544735716-392fe2489ffa?w=800&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["October", "November", "December", "January", "February", "March", "April", "May"],
+      "seasons": ["autumn", "winter", "spring"],
+      "travelStyles": ["adventure", "backpacking", "nature"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.90,
+        "rainy": 0.85,
+        "snow": 0.0
+      },
+      "weatherProfile": {
+        "temp": "21°C",
+        "condition": "Pleasant & Mist",
+        "humidity": "78%",
+        "iconType": "CloudRain",
+        "statusTag": "Roaring Waterfalls",
+        "bestMonthsText": "Oct - May",
+        "vibe": "Misty rainforests, living root bridges, and turquoise natural pools."
+      },
+      "recommendedDurations": [4, 5, 6, 7],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,500 - ₹3,500",
+        "mid-range": "₹4,000 - ₹5,500",
+        "luxury": "₹7,000 - ₹9,500"
+      },
+      "attractions": [
+        { "name": "Double Decker Living Root Bridge", "location": "Nongriat", "type": "Natural Wonder" },
+        { "name": "Nohkalikai Falls", "location": "Cherrapunji", "type": "Waterfall" },
+        { "name": "Wei Sawdong Falls", "location": "Cherrapunji", "type": "Waterfall Lagoon" },
+        { "name": "Umngot Crystal River", "location": "Dawki", "type": "River & Boating" },
+        { "name": "Krang Suri Waterfalls", "location": "Jaintia Hills", "type": "Natural Swimming Pool" },
+        { "name": "Arwah Limestone Caves", "location": "Cherrapunji", "type": "Fossil Caves" },
+        { "name": "Mawlynnong Cleanest Village", "location": "East Khasi Hills", "type": "Heritage Village" }
+      ],
+      "activities": ["root-bridge-trek", "crystal-river-boating", "waterfall-swimming", "cave-exploration", "riverside-camping"],
+      "food": [
+        "Jadoh (Traditional Khasi Rice & Spiced Meat)",
+        "Dohkhlieh (Pork Salad with Fresh Herbs)",
+        "Tungrymbai (Fermented Soybean Delicacy)",
+        "Organic Meghalayan CTC Black Teas"
+      ],
+      "packingTags": ["monsoon-poncho", "trekking-shoes", "waterproof-dry-bag", "hydration-flask", "mosquito-repellent"],
+      "aiContext": {
+        "travelNotes": [
+          "Trek down to Nongriat has 3,500 stone steps; recommend pacing and hydration.",
+          "Autumn (Oct-Nov) and Winter (Dec-Feb) have crystal transparent water in Dawki.",
+          "Monsoon (Jun-Aug) provides roaring waterfall plunges but trekking steps can be slippery."
+        ],
+        "planningHints": [
+          "Group Shillong and Cherrapunji together on initial days, then Nongriat, Dawki, and Jowai.",
+          "Keep light woolens for Shillong evenings."
+        ]
+      }
+    },
+    {
+      "id": "spiti-valley",
+      "slug": "spiti-valley",
+      "name": "Spiti Valley",
+      "country": "India",
+      "region": "North India",
+      "state": "Himachal Pradesh",
+      "summary": "Cold desert mountain valley with 1000-year-old monasteries, world's highest post office, and starry Chandratal night skies.",
+      "description": "Spiti Valley is an otherworldly high-altitude Himalayan desert. Surrounded by jagged jagged snow peaks, it is home to Key Monastery, Tabo Monastery, Hikkim, Komic, Langza, and the crescent-shaped turquoise Chandratal Lake at 14,100 ft.",
+      "heroImage": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=800&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1593181629936-11c609b8db9b?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["June", "July", "August", "September", "October"],
+      "seasons": ["summer", "monsoon", "autumn"],
+      "travelStyles": ["adventure", "high-altitude", "backpacking"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.85,
+        "rainy": 0.30,
+        "snow": 0.80
+      },
+      "weatherProfile": {
+        "temp": "14°C",
+        "condition": "Sunny & Crisp Air",
+        "humidity": "34%",
+        "iconType": "Sun",
+        "statusTag": "Clear Stargazing Skies",
+        "bestMonthsText": "Jun - Oct",
+        "vibe": "High-altitude cold desert, ancient monasteries, and moon lake."
+      },
+      "recommendedDurations": [6, 7, 8, 9],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,800 - ₹3,800",
+        "mid-range": "₹4,200 - ₹5,800",
+        "luxury": "₹7,500 - ₹10,500"
+      },
+      "attractions": [
+        { "name": "Key Monastery", "location": "Kaza", "type": "Monastery" },
+        { "name": "Chandratal Lake", "location": "Kunzum Pass", "type": "High Altitude Lake" },
+        { "name": "Hikkim Post Office", "location": "Hikkim (14,567 ft)", "type": "World's Highest Post Office" },
+        { "name": "Komic Village", "location": "Komic (15,027 ft)", "type": "Highest Motorised Village" },
+        { "name": "Langza Giant Buddha", "location": "Langza", "type": "Monument & Fossil Village" },
+        { "name": "Tabo 1000-Year Monastery", "location": "Tabo", "type": "UNESCO Heritage Site" },
+        { "name": "Gue 500-Year Mummy", "location": "Gue", "type": "Historical Site" },
+        { "name": "Pin Valley National Park", "location": "Mudh", "type": "National Park" }
+      ],
+      "activities": ["high-altitude-stargazing", "monastery-meditation", "postcard-mailing", "fossil-hunting", "mountain-pass-crossing"],
+      "food": [
+        "Authentic Tibetan Thukpa & Steamed Momos",
+        "Butter Tea (Po Cha) & Local Tsampa",
+        "Spitian Seabuckthorn Herbal Tea",
+        "Spiti Farm Fresh Buckwheat Pancakes"
+      ],
+      "packingTags": ["heavy-down-jacket", "thermal-base-layers", "polarised-sunglasses", "high-spf-sunscreen", "power-bank", "altitude-medicines"],
+      "aiContext": {
+        "travelNotes": [
+          "Altitude acclimatization is essential. Spend Day 1 and 2 at lower elevations (Kalpa/Nako) before ascending to Kaza (12,500 ft).",
+          "Kunzum Pass (15,060 ft) is open only from June to early October.",
+          "Cash is mandatory; remote high-altitude villages have no ATMs or digital payments."
+        ],
+        "planningHints": [
+          "Enter via Shimla-Kinnaur for smooth acclimatization and exit via Kunzum Pass-Manali.",
+          "Night temperatures at Chandratal camp drop below freezing even in summer."
+        ]
+      }
+    },
+    {
+      "id": "bali",
+      "slug": "bali",
+      "name": "Bali",
+      "country": "Indonesia",
+      "region": "Southeast Asia",
+      "state": "Bali",
+      "summary": "Tropical island paradise of lush emerald rice terraces, sacred cliffside sea temples, and world-class sunset beach clubs.",
+      "description": "Bali blends rich Hindu temple spirituality with tropical coastal leisure. Explore the cliffside temple of Uluwatu, surf vibrant beach breaks in Canggu and Seminyak, hike active volcano Mount Batur at sunrise, and speed boat to Nusa Penida's breathtaking Kelingking T-Rex cliff.",
+      "heroImage": "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["April", "May", "June", "July", "August", "September", "October", "November"],
+      "seasons": ["spring", "summer", "autumn", "winter"],
+      "travelStyles": ["coastal", "romantic", "backpacking", "nature"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.85,
+        "rainy": 0.60,
+        "snow": 0.0
+      },
+      "weatherProfile": {
+        "temp": "28°C",
+        "condition": "Tropical Sunshine",
+        "humidity": "72%",
+        "iconType": "Sun",
+        "statusTag": "Warm Surf Waters",
+        "bestMonthsText": "Apr - Nov",
+        "vibe": "Lush rice terraces, cliffside ocean temples, and sunset beach clubs."
+      },
+      "recommendedDurations": [5, 6, 7, 8],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹3,500 - ₹4,800",
+        "mid-range": "₹6,000 - ₹8,500",
+        "luxury": "₹12,000 - ₹18,000"
+      },
+      "attractions": [
+        { "name": "Kelingking Beach (T-Rex Cliff)", "location": "Nusa Penida", "type": "Island Viewpoint" },
+        { "name": "Uluwatu Clifftop Temple & Kecak Dance", "location": "Uluwatu", "type": "Temple & Cultural Show" },
+        { "name": "Tegallalang Rice Terraces & Jungle Swing", "location": "Ubud", "type": "Scenic Nature" },
+        { "name": "Mount Batur Sunrise Trek", "location": "Kintamani", "type": "Active Volcano Hike" },
+        { "name": "Tirta Empul Holy Water Temple", "location": "Ubud", "type": "Spiritual Cleansing" },
+        { "name": "Tanah Lot Sea Temple", "location": "Tabanan", "type": "Coastal Sunset Temple" }
+      ],
+      "activities": ["sunset-beach-club", "volcano-sunrise-hike", "island-speedboating", "surfing-lesson", "jungle-swing-photo"],
+      "food": [
+        "Nasi Goreng & Babi Guling",
+        "Authentic Chicken / Pork Satay with Peanut Sauce",
+        "Fresh Young Coconut Water & Tropical Smoothie Bowls",
+        "Luwak Coffee & Balinese Spiced Herbal Tea"
+      ],
+      "packingTags": ["swimwear", "reef-safe-sunscreen", "uv-sunglasses", "waterproof-phone-case", "light-breathable-linen"],
+      "aiContext": {
+        "travelNotes": [
+          "Split accommodation between Ubud (culture, rice terraces, wellness) and Seminyak/Canggu/Uluwatu (beaches, sunsets).",
+          "Carry a sarong for temple visits or borrow one at the entrance.",
+          "Book Nusa Penida island speedboat tours early morning to beat crowd lines."
+        ],
+        "planningHints": [
+          "Schedule Mount Batur sunrise hike on Day 3 or 4 when settled into island timezone.",
+          "Sunset Kecak dance at Uluwatu requires tickets booked in advance."
+        ]
+      }
+    },
+    {
+      "id": "kerala",
+      "slug": "kerala",
+      "name": "Kerala",
+      "country": "India",
+      "region": "South India",
+      "state": "Kerala",
+      "summary": "God's Own Country of emerald backwaters, luxury floating houseboats, tea-carpeted Munnar hills, and pristine Ayurvedic retreats.",
+      "description": "Kerala is a tropical haven spanning tranquil backwaters in Alleppey, rolling misty tea gardens in Munnar, spice plantations in Thekkady, and dramatic sea cliffs in Varkala. Experience sunset kayaking, traditional Kathakali martial art performances, and authentic Ayurvedic wellness.",
+      "heroImage": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["September", "October", "November", "December", "January", "February", "March"],
+      "seasons": ["autumn", "winter", "spring"],
+      "travelStyles": ["coastal", "nature", "romantic", "relaxed"],
+      "weatherSuitability": {
+        "sunny": 0.90,
+        "cloudy": 0.85,
+        "rainy": 0.70,
+        "snow": 0.0
+      },
+      "weatherProfile": {
+        "temp": "26°C",
+        "condition": "Gentle Coastal Breeze",
+        "humidity": "82%",
+        "iconType": "CloudSun",
+        "statusTag": "Serene Backwaters",
+        "bestMonthsText": "Sep - Mar",
+        "vibe": "Floating luxury houseboats, emerald tea estates, and spice hills."
+      },
+      "recommendedDurations": [4, 5, 6, 7],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,600 - ₹3,600",
+        "mid-range": "₹4,500 - ₹6,500",
+        "luxury": "₹8,000 - ₹14,000"
+      },
+      "attractions": [
+        { "name": "Alleppey Backwaters & Houseboat", "location": "Alleppey", "type": "Backwaters" },
+        { "name": "Munnar Tea Plantations & Eravikulam", "location": "Munnar", "type": "Hill Station" },
+        { "name": "Periyar Wildlife Sanctuary", "location": "Thekkady", "type": "Wildlife & Spice" },
+        { "name": "Varkala Cliff Beach", "location": "Varkala", "type": "Coastal Cliffs" }
+      ],
+      "activities": ["houseboat-cruise", "tea-tasting-tour", "spice-plantation-walk", "ayurvedic-massage", "backwater-kayaking"],
+      "food": [
+        "Kerala Sadya Served on Fresh Banana Leaf",
+        "Appam with Creamy Vegetable or Chicken Stew",
+        "Karimeen Pollichathu (Pearl Spot Fish in Banana Leaf)",
+        "Fresh Malabar Parotta with Spiced Curry"
+      ],
+      "packingTags": ["light-breathable-linen", "mosquito-repellent", "umbrella", "comfortable-walking-shoes", "sun-hat"],
+      "aiContext": {
+        "travelNotes": [
+          "Alleppey houseboats check-in around 12:30 PM with traditional lunch served onboard.",
+          "Munnar mornings are misty and cool (12°C - 16°C); light cardigan recommended."
+        ],
+        "planningHints": [
+          "Classic route: Cochin -> Munnar (2N) -> Thekkady (1N) -> Alleppey (1N) -> Cochin departure."
+        ]
+      }
+    },
+    {
+      "id": "kashmir",
+      "slug": "kashmir",
+      "name": "Kashmir",
+      "country": "India",
+      "region": "North India",
+      "state": "Jammu & Kashmir",
+      "summary": "Paradise on Earth with Dal Lake wooden houseboats, snow gondolas in Gulmarg, and saffron valleys in Pahalgam.",
+      "description": "Kashmir is famed for picturesque Dal Lake shikara rides, blooming Mughal gardens, Asia's highest cable car gondola in Gulmarg, and the pine-forested Betaab and Aru Valleys in Pahalgam.",
+      "heroImage": "https://images.unsplash.com/photo-1595815771614-ade9d652a65d?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1595815771614-ade9d652a65d?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["April", "May", "June", "July", "August", "September", "October", "December", "January", "February"],
+      "seasons": ["spring", "summer", "autumn", "winter"],
+      "travelStyles": ["romantic", "nature", "high-altitude", "relaxed"],
+      "weatherSuitability": {
+        "sunny": 0.90,
+        "cloudy": 0.85,
+        "rainy": 0.50,
+        "snow": 0.95
+      },
+      "weatherProfile": {
+        "temp": "16°C",
+        "condition": "Mild Valley Breeze",
+        "humidity": "55%",
+        "iconType": "CloudSun",
+        "statusTag": "Blooming Meadows",
+        "bestMonthsText": "Apr - Oct / Dec - Feb (Snow)",
+        "vibe": "Dal Lake shikaras, pine-fringed alpine valleys, and saffron fields."
+      },
+      "recommendedDurations": [5, 6, 7],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹3,000 - ₹4,200",
+        "mid-range": "₹5,000 - ₹7,500",
+        "luxury": "₹9,000 - ₹15,000"
+      },
+      "attractions": [
+        { "name": "Dal Lake Shikara & Houseboat", "location": "Srinagar", "type": "Lake & Heritage" },
+        { "name": "Gulmarg Gondola Phase 1 & 2 (13,780 ft)", "location": "Gulmarg", "type": "Cable Car & Snow" },
+        { "name": "Betaab Valley & Aru Valley", "location": "Pahalgam", "type": "Alpine Meadows" },
+        { "name": "Sonamarg Thajiwas Glacier", "location": "Sonamarg", "type": "Glacier Trail" }
+      ],
+      "activities": ["shikara-ride", "gondola-snow-ride", "pony-trekking", "kahwa-tea-tasting", "pashmina-shopping"],
+      "food": [
+        "Kashmiri Wazwan (Rogan Josh, Gushtaba, Rista)",
+        "Kashmiri Saffron Kahwa with Almond slivers",
+        "Dum Aloo & Nadru Yakhni (Lotus Stem)",
+        "Fresh Kashmiri Walnut & Apple Chutneys"
+      ],
+      "packingTags": ["heavy-down-jacket", "woolen-gloves", "thermal-base-layers", "lip-balm", "camera-lens"],
+      "aiContext": {
+        "travelNotes": [
+          "Gulmarg Gondola Phase 2 tickets must be booked online well in advance.",
+          "Winter months (Dec-Feb) experience heavy snowfall and sub-zero temperatures."
+        ],
+        "planningHints": [
+          "Srinagar -> Gulmarg (1N) -> Pahalgam (2N) -> Srinagar Houseboat (1N)."
+        ]
+      }
+    },
+    {
+      "id": "ladakh",
+      "slug": "ladakh",
+      "name": "Ladakh",
+      "country": "India",
+      "region": "North India",
+      "state": "Ladakh",
+      "summary": "Land of High Passes, azure Pangong Tso lake, double-humped camel dunes in Nubra, and thrilling Khardung La pass.",
+      "description": "Ladakh is a high-altitude wonderland where barren mountains meet cobalt blue skies. Ride across Khardung La (17,982 ft), camp along the trans-boundary Pangong Lake, and explore dramatic sand dunes in Nubra Valley.",
+      "heroImage": "https://images.unsplash.com/photo-1581793745862-99fde7fa73d2?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1581793745862-99fde7fa73d2?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["June", "July", "August", "September"],
+      "seasons": ["summer", "autumn"],
+      "travelStyles": ["adventure", "high-altitude", "backpacking"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.80,
+        "rainy": 0.20,
+        "snow": 0.70
+      },
+      "weatherProfile": {
+        "temp": "15°C",
+        "condition": "Crisp High-Altitude Sun",
+        "humidity": "28%",
+        "iconType": "Sun",
+        "statusTag": "Azure Blue Skies",
+        "bestMonthsText": "Jun - Sep",
+        "vibe": "Towering mountain passes, trans-boundary lakes, and ancient gompas."
+      },
+      "recommendedDurations": [6, 7, 8, 9],
+      "budgetLevel": ["mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹3,500 - ₹4,800",
+        "mid-range": "₹5,500 - ₹7,800",
+        "luxury": "₹9,500 - ₹16,000"
+      },
+      "attractions": [
+        { "name": "Pangong Tso Lake (14,270 ft)", "location": "Changthang", "type": "High Altitude Lake" },
+        { "name": "Nubra Valley & Hunder Sand Dunes", "location": "Nubra", "type": "Cold Desert Dunes" },
+        { "name": "Khardung La Pass (17,982 ft)", "location": "Leh-Nubra Highway", "type": "Mountain Pass" },
+        { "name": "Magnetic Hill & Indus-Zanskar Sangam", "location": "Nimmu", "type": "River Confluence" },
+        { "name": "Thiksey Monastery", "location": "Leh", "type": "Monastery" }
+      ],
+      "activities": ["bactrian-camel-safari", "khardungla-pass-crossing", "pangong-lake-stargazing", "atv-sand-dune-ride"],
+      "food": [
+        "Ladakhi Skyu & Thukpa",
+        "Tingmo Steamed Buns with Spicy Dip",
+        "Butter Tea & Apricot Jam with Khambir bread"
+      ],
+      "packingTags": ["heavy-down-jacket", "thermal-base-layers", "polarised-sunglasses", "high-spf-sunscreen", "diamox-altitude-medicine"],
+      "aiContext": {
+        "travelNotes": [
+          "Mandatory 24-48 hour complete rest in Leh (11,500 ft) upon flying in.",
+          "Inner Line Permits (ILP) are required for Nubra, Pangong, and Hanle."
+        ],
+        "planningHints": [
+          "Route: Leh Acclimatization (2N) -> Nubra Valley (1N) -> Pangong Lake (1N) -> Leh (1N)."
+        ]
+      }
+    },
+    {
+      "id": "goa",
+      "slug": "goa",
+      "name": "Goa",
+      "country": "India",
+      "region": "West India",
+      "state": "Goa",
+      "summary": "Sun-kissed Arabian Sea beaches, vibrant coastal beach clubs, Portuguese heritage quarters, and secret waterfall treks.",
+      "description": "Goa combines Portuguese architecture in Fontainhas, vibrant sunset beach clubs in North Goa, pristine tranquil coves in South Goa (Palolem, Agonda), and roaring Dudhsagar waterfalls in the lush Western Ghats.",
+      "heroImage": "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["October", "November", "December", "January", "February", "March", "April"],
+      "seasons": ["autumn", "winter", "spring"],
+      "travelStyles": ["coastal", "backpacking", "romantic", "relaxed"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.80,
+        "rainy": 0.60,
+        "snow": 0.0
+      },
+      "weatherProfile": {
+        "temp": "29°C",
+        "condition": "Sunny Beach Weather",
+        "humidity": "76%",
+        "iconType": "Sun",
+        "statusTag": "Golden Hour Waves",
+        "bestMonthsText": "Oct - Apr",
+        "vibe": "Sun-kissed beaches, coastal cafes, and vibrant nightlife."
+      },
+      "recommendedDurations": [3, 4, 5, 6],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,200 - ₹3,200",
+        "mid-range": "₹4,000 - ₹6,000",
+        "luxury": "₹8,000 - ₹15,000"
+      },
+      "attractions": [
+        { "name": "Fontainhas Latin Quarter", "location": "Panaji", "type": "Heritage Walk" },
+        { "name": "Dudhsagar Waterfalls", "location": "Sanguem", "type": "Four-Tier Waterfall" },
+        { "name": "Palolem & Butterfly Beach", "location": "South Goa", "type": "Pristine Beach & Kayaking" },
+        { "name": "Chapora Fort & Vagator Beach", "location": "North Goa", "type": "Fort & Sunset" }
+      ],
+      "activities": ["beach-hopping", "heritage-walk", "catamaran-sailing", "scuba-diving", "sunset-cafe-hopping"],
+      "food": [
+        "Goan Fish Curry with Steamed Rice",
+        "Pork Vindaloo & Chicken Xacuti",
+        "Goan Poi Bread with Chorizo",
+        "Traditional Bebinca Layered Dessert"
+      ],
+      "packingTags": ["swimwear", "reef-safe-sunscreen", "uv-sunglasses", "flip-flops", "cotton-linen-shirts"],
+      "aiContext": {
+        "travelNotes": [
+          "North Goa is ideal for vibrant cafes, live music, and watersports.",
+          "South Goa is ideal for serene white-sand beaches, yoga, and quiet boutique stays."
+        ],
+        "planningHints": [
+          "Rent a self-drive scooter or cab for effortless coastal exploration."
+        ]
+      }
+    },
+    {
+      "id": "rajasthan",
+      "slug": "rajasthan",
+      "name": "Rajasthan",
+      "country": "India",
+      "region": "Northwest India",
+      "state": "Rajasthan",
+      "summary": "Royal desert kingdom of massive living hill forts, romantic lake palaces in Udaipur, and golden sand dunes in Jaisalmer.",
+      "description": "Rajasthan is a regal tapestry of magnificent UNESCO hill forts, heritage havelis, camel safaris on Thar Desert dunes, and romantic sunset boat rides across Lake Pichola in Udaipur.",
+      "heroImage": "https://images.unsplash.com/photo-1599661046289-e31897846e41?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1599661046289-e31897846e41?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["October", "November", "December", "January", "February", "March"],
+      "seasons": ["autumn", "winter", "spring"],
+      "travelStyles": ["cultural", "romantic", "backpacking", "relaxed"],
+      "weatherSuitability": {
+        "sunny": 0.95,
+        "cloudy": 0.85,
+        "rainy": 0.30,
+        "snow": 0.0
+      },
+      "weatherProfile": {
+        "temp": "28°C",
+        "condition": "Warm Golden Sunshine",
+        "humidity": "35%",
+        "iconType": "Sun",
+        "statusTag": "Desert Camp Nights",
+        "bestMonthsText": "Oct - Mar",
+        "vibe": "Majestic living forts, royal lake palaces, and golden sand dunes."
+      },
+      "recommendedDurations": [4, 5, 6, 7],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,500 - ₹3,500",
+        "mid-range": "₹4,500 - ₹6,500",
+        "luxury": "₹9,000 - ₹18,000"
+      },
+      "attractions": [
+        { "name": "City Palace & Lake Pichola", "location": "Udaipur", "type": "Palace & Lake" },
+        { "name": "Jaisalmer Living Golden Fort & Sam Dunes", "location": "Jaisalmer", "type": "Fort & Sand Dunes" },
+        { "name": "Mehrangarh Fort & Blue City", "location": "Jodhpur", "type": "Fort & Heritage" },
+        { "name": "Amer Fort & Hawa Mahal", "location": "Jaipur", "type": "Fort & Palace" }
+      ],
+      "activities": ["desert-camel-safari", "lake-boat-ride", "fort-heritage-walk", "folk-music-night", "bazaar-shopping"],
+      "food": [
+        "Dal Baati Churma with Pure Desi Ghee",
+        "Laal Maas (Fiery Rajasthani Mutton Curry)",
+        "Ker Sangri & Gatte Ki Sabzi",
+        "Ghevar & Mawa Kachori with Masala Chai"
+      ],
+      "packingTags": ["cotton-linen-clothing", "sun-hat", "sunglasses", "comfortable-walking-shoes", "light-evening-jacket"],
+      "aiContext": {
+        "travelNotes": [
+          "Winter months (Dec-Jan) feature warm sunny days (24°C) and cool desert nights (8°C).",
+          "Book desert camps with traditional Kalbelia folk performances and stargazing."
+        ],
+        "planningHints": [
+          "Popular circuits: Jaipur-Jodhpur-Jaisalmer (6N) or Udaipur-Mount Abu (4N)."
+        ]
+      }
+    },
+    {
+      "id": "himachal-pradesh",
+      "slug": "himachal-pradesh",
+      "name": "Himachal Pradesh",
+      "country": "India",
+      "region": "North India",
+      "state": "Himachal Pradesh",
+      "summary": "Pine-fringed alpine valleys, gushing river rapids, cozy riverside mountain cafes, and high Himalayan passes.",
+      "description": "Himachal Pradesh is India's premier mountain playground, encompassing Manali, Kasol, Jibhi, Dharamshala, Bir Billing paragliding, and high mountain passes through the Atal Tunnel.",
+      "heroImage": "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["March", "April", "May", "June", "September", "October", "November", "December", "January"],
+      "seasons": ["spring", "summer", "autumn", "winter"],
+      "travelStyles": ["adventure", "backpacking", "nature", "high-altitude"],
+      "weatherSuitability": {
+        "sunny": 0.90,
+        "cloudy": 0.85,
+        "rainy": 0.45,
+        "snow": 0.90
+      },
+      "weatherProfile": {
+        "temp": "18°C",
+        "condition": "Cool Mountain Air",
+        "humidity": "52%",
+        "iconType": "Wind",
+        "statusTag": "Fresh Pine Breezes",
+        "bestMonthsText": "Mar - Nov / Dec - Feb (Snow)",
+        "vibe": "Riverside cafes, alpine pine forests, and thrilling mountain passes."
+      },
+      "recommendedDurations": [3, 4, 5, 6],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,200 - ₹3,200",
+        "mid-range": "₹3,800 - ₹5,500",
+        "luxury": "₹7,500 - ₹13,000"
+      },
+      "attractions": [
+        { "name": "Solang Valley & Atal Tunnel", "location": "Manali", "type": "Snow Valley & Tunnel" },
+        { "name": "Parvati Valley & Kheerganga Trek", "location": "Kasol", "type": "Hot Springs Trek" },
+        { "name": "World's 2nd Highest Paragliding Takeoff", "location": "Bir Billing", "type": "Paragliding" },
+        { "name": "Jibhi Waterfalls & Serolsar Lake", "location": "Tirthan Valley", "type": "Pine Valley & Lake" }
+      ],
+      "activities": ["paragliding-flight", "river-rafting", "hot-spring-dip", "cafe-hopping", "waterfall-hike"],
+      "food": [
+        "Fresh Himalayan Trout Fish",
+        "Siddu with Ghee & Dal Chutney",
+        "Tibetan Momos & Thukpa in McLeod Ganj",
+        "Wood-Fired Mountain Artisan Pizzas"
+      ],
+      "packingTags": ["fleece-jacket", "trekking-shoes", "thermal-base-layer", "rain-jacket", "hydration-flask"],
+      "aiContext": {
+        "travelNotes": [
+          "Bir Billing is the world's 2nd highest paragliding takeoff point with 20-30 minute tandem flights.",
+          "Overnight luxury AC Volvo coaches connect Delhi/Chandigarh to Manali, Dharamshala, and Shimla."
+        ],
+        "planningHints": [
+          "Weekend getaway: Delhi -> Manali/Jibhi (3N/4D) -> Delhi return."
+        ]
+      }
+    },
+    {
+      "id": "uttarakhand",
+      "slug": "uttarakhand",
+      "name": "Uttarakhand",
+      "country": "India",
+      "region": "North India",
+      "state": "Uttarakhand",
+      "summary": "Land of the Gods with holy Ganges rafting in Rishikesh, high-altitude alpine bugyals, and Himalayan ski slopes in Auli.",
+      "description": "Uttarakhand offers white-water river rafting and bungee jumping in Rishikesh, stunning alpine meadows (bugyals) in Chopta and Dayara, winter ski slopes in Auli, and holy river confluences in Devprayag.",
+      "heroImage": "https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?w=1200&auto=format&fit=crop&q=80",
+      "gallery": [
+        "https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?w=800&auto=format&fit=crop&q=80"
+      ],
+      "bestMonths": ["March", "April", "May", "June", "September", "October", "November", "December", "January"],
+      "seasons": ["spring", "summer", "autumn", "winter"],
+      "travelStyles": ["adventure", "nature", "high-altitude", "backpacking"],
+      "weatherSuitability": {
+        "sunny": 0.90,
+        "cloudy": 0.85,
+        "rainy": 0.40,
+        "snow": 0.90
+      },
+      "weatherProfile": {
+        "temp": "19°C",
+        "condition": "Sunny & Refreshing",
+        "humidity": "48%",
+        "iconType": "Sun",
+        "statusTag": "Pristine Himalayan Views",
+        "bestMonthsText": "Apr - Dec",
+        "vibe": "Holy river confluences, bugyal meadows, and scenic mountain trails."
+      },
+      "recommendedDurations": [3, 4, 5, 6],
+      "budgetLevel": ["budget", "mid-range", "luxury"],
+      "defaultDailyCost": {
+        "budget": "₹2,000 - ₹3,000",
+        "mid-range": "₹3,800 - ₹5,200",
+        "luxury": "₹7,000 - ₹12,000"
+      },
+      "attractions": [
+        { "name": "Ganges White Water Rafting & Cliff Jump", "location": "Rishikesh", "type": "Adventure Sports" },
+        { "name": "Chopta & Tungnath (Highest Shiva Temple)", "location": "Chopta", "type": "High Altitude Trek" },
+        { "name": "Auli Ski Slopes & Ropeway", "location": "Auli", "type": "Ski Resort & Snow" },
+        { "name": "Jim Corbett Jungle Safari", "location": "Ramnagar", "type": "Tiger Reserve" }
+      ],
+      "activities": ["river-rafting", "bungee-jumping", "high-altitude-trek", "ganga-aarti-viewing", "jungle-safari"],
+      "food": [
+        "Garhwali Kafuli & Chainsoo",
+        "Singodi Sweet Wrapped in Maalu Leaf",
+        "Pahadi Chai & Aloo Ke Gutke with Bhang Chutney"
+      ],
+      "packingTags": ["trail-shoes", "fleece-jacket", "quick-dry-t-shirts", "sunscreen", "waterproof-pouch"],
+      "aiContext": {
+        "travelNotes": [
+          "Rishikesh river rafting season is open from late September to June.",
+          "Chopta-Tungnath-Chandrashila is one of India's best beginner to intermediate summit treks."
+        ],
+        "planningHints": [
+          "Easy weekend departures available from Delhi NCR every Friday evening."
+        ]
+      }
+    }
+  ],
+  "travelStyles": [
+    {
+      "id": "adventure",
+      "label": "Adventure & High Passes",
+      "query": "Adventure",
+      "icon": "Mountain",
+      "description": "High-altitude circuits, river rafting, and certified expedition trails.",
+      "bannerTag": "Adrenaline & Mountains"
+    },
+    {
+      "id": "coastal",
+      "label": "Tropical Coastal",
+      "query": "Beach",
+      "icon": "Palmtree",
+      "description": "Sun-kissed beaches, catamaran sailing, surf waves, and coastal cafes.",
+      "bannerTag": "Sun, Sand & Surf"
+    },
+    {
+      "id": "nature",
+      "label": "Misty Rainforests",
+      "query": "Waterfalls",
+      "icon": "Trees",
+      "description": "Cascading plunge waterfalls, living root bridges, and tea hills.",
+      "bannerTag": "Living Rainforests"
+    },
+    {
+      "id": "high-altitude",
+      "label": "High Altitude Treks",
+      "query": "High Altitude",
+      "icon": "Waves",
+      "description": "14,000+ ft mountain passes, trans-boundary lakes, and moon valleys.",
+      "bannerTag": "Above the Clouds"
+    },
+    {
+      "id": "backpacking",
+      "label": "Backpacking Circuits",
+      "query": "Backpacking",
+      "icon": "Compass",
+      "description": "Community-led group trips with fellow solo travelers and captains.",
+      "bannerTag": "Solo & Community"
+    },
+    {
+      "id": "romantic",
+      "label": "Romantic Getaways",
+      "query": "Romantic",
+      "icon": "Heart",
+      "description": "Boutique private stays, houseboat cruises, and scenic sunset dinners.",
+      "bannerTag": "Couples & Escapes"
+    },
+    {
+      "id": "cultural",
+      "label": "Heritage & Forts",
+      "query": "Culture",
+      "icon": "Award",
+      "description": "UNESCO living forts, ancient monasteries, and royal palaces.",
+      "bannerTag": "Living History"
+    },
+    {
+      "id": "relaxed",
+      "label": "Slow & Rejuvenation",
+      "query": "Relaxation",
+      "icon": "Coffee",
+      "description": "Ayurvedic wellness, riverside cafes, and comfortable paced getaways.",
+      "bannerTag": "Peace & Wellness"
+    }
+  ],
+  "seasons": {
+    "spring": {
+      "key": "spring",
+      "months": [3, 4, 5],
+      "name": "Spring / Early Summer",
+      "tagline": "Blooming Valleys & High Mountain Passes",
+      "greeting": "Pleasant Weather Across North & Northeast",
+      "heroTag": "Spring & Summer Expeditions 2026",
+      "badgeColor": "from-amber-500 to-orange-500",
+      "accentColor": "text-amber-500",
+      "bgGradient": "from-amber-500/10 via-emerald-500/5 to-transparent",
+      "recommendedTypes": ["Trekking", "Mountains", "Nature", "Backpacking"],
+      "weatherAdvice": "Clear blue skies and pleasant day temperatures — perfect for high-altitude roadtrips."
+    },
+    "monsoon": {
+      "key": "monsoon",
+      "months": [6, 7, 8],
+      "name": "Monsoon / High Summer",
+      "tagline": "Lush Green Valleys, Roaring Waterfalls & High Passes",
+      "greeting": "Magical Rainforests & Himalayan Roadtrips",
+      "heroTag": "Monsoon & Summer Getaways 2026",
+      "badgeColor": "from-emerald-600 to-teal-600",
+      "accentColor": "text-emerald-500",
+      "bgGradient": "from-emerald-500/10 via-teal-500/5 to-transparent",
+      "recommendedTypes": ["Waterfalls", "High Altitude", "Lakes", "Relaxation"],
+      "weatherAdvice": "Lush green valleys in Meghalaya and clear rain-shadow skies in Spiti Valley."
+    },
+    "autumn": {
+      "key": "autumn",
+      "months": [9, 10, 11],
+      "name": "Autumn / Post-Monsoon",
+      "tagline": "Crystal Transparent Waters & Golden Himalayan Ridges",
+      "greeting": "Crystal Clear Rivers & High Mountain Views",
+      "heroTag": "Autumn Adventure Season 2026",
+      "badgeColor": "from-amber-600 to-rose-600",
+      "accentColor": "text-amber-600",
+      "bgGradient": "from-amber-500/10 via-rose-500/5 to-transparent",
+      "recommendedTypes": ["Backpacking", "Crystal Waters", "Photography", "International"],
+      "weatherAdvice": "Pristine emerald rivers in Dawki, crisp mountain visibility, and pleasant beach weather."
+    },
+    "winter": {
+      "key": "winter",
+      "months": [12, 1, 2],
+      "name": "Winter / Snow Season",
+      "tagline": "Snow-Capped Peaks, Cozy Bonfires & Tropical Escapes",
+      "greeting": "Snowy Peaks & Sunny Tropical Beaches",
+      "heroTag": "Winter & New Year Expeditions 2026",
+      "badgeColor": "from-sky-600 to-indigo-600",
+      "accentColor": "text-sky-500",
+      "bgGradient": "from-sky-500/10 via-indigo-500/5 to-transparent",
+      "recommendedTypes": ["Snow", "Beach", "Luxury", "International"],
+      "weatherAdvice": "Pristine snow in Himalayas and peak sunshine on Bali and tropical beaches."
+    }
+  },
+  "occasions": [
+    {
+      "id": "monsoon_magic",
+      "name": "Monsoon Waterfall Season",
+      "tagline": "Lush green valleys & roaring rainforest waterfalls",
+      "startMonth": 6,
+      "endMonth": 8,
+      "leadDays": 30,
+      "bannerBg": "from-emerald-900 to-slate-900",
+      "bannerText": "Misty Rainforests & Roaring Waterfalls in Meghalaya & Western Ghats",
+      "recommendedCategories": ["Nature", "Backpacking"],
+      "featuredLocations": ["Meghalaya", "Kerala", "Goa"],
+      "active": true
+    },
+    {
+      "id": "independence_long_weekend",
+      "name": "Independence Day Long Weekend",
+      "tagline": "Take 1 day off, get a 4-day mountain getaway",
+      "startMonth": 8,
+      "endMonth": 8,
+      "leadDays": 25,
+      "bannerBg": "from-amber-900 to-slate-900",
+      "bannerText": "Long Weekend Alert: 3-4 Day Mountain & Beach Getaways Booking Fast!",
+      "recommendedCategories": ["Weekend Trips", "Adventure"],
+      "featuredLocations": ["Himachal Pradesh", "Uttarakhand", "Goa"],
+      "active": true
+    },
+    {
+      "id": "autumn_long_weekend",
+      "name": "Autumn Long Weekend & Gandhi Jayanti",
+      "tagline": "Crisp mountain visibility & clear blue skies",
+      "startMonth": 9,
+      "endMonth": 10,
+      "leadDays": 30,
+      "bannerBg": "from-teal-900 to-slate-900",
+      "bannerText": "Autumn Clear Skies: Ideal time for Spiti, Kashmir & Dawki Glass River",
+      "recommendedCategories": ["Adventure", "Backpacking"],
+      "featuredLocations": ["Kashmir", "Meghalaya", "Ladakh"],
+      "active": true
+    },
+    {
+      "id": "diwali_festive_holidays",
+      "name": "Diwali Festive Getaways",
+      "tagline": "Celebrate the festival of lights amidst starry mountain skies",
+      "startMonth": 10,
+      "endMonth": 11,
+      "leadDays": 35,
+      "bannerBg": "from-orange-950 to-slate-900",
+      "bannerText": "Festive Holiday Departures: Royal Rajasthan & Golden Sands Getaways",
+      "recommendedCategories": ["Culture", "Nature"],
+      "featuredLocations": ["Rajasthan", "Kerala", "Bali"],
+      "active": true
+    },
+    {
+      "id": "winter_new_year",
+      "name": "Winter Snow & New Year Expeditions",
+      "tagline": "Ring in the New Year under snow peaks or tropical beaches",
+      "startMonth": 12,
+      "endMonth": 1,
+      "leadDays": 45,
+      "bannerBg": "from-indigo-950 to-slate-900",
+      "bannerText": "Winter White Snow Expeditions & Tropical Bali Escapes Open for Booking",
+      "recommendedCategories": ["Adventure", "International"],
+      "featuredLocations": ["Kashmir", "Himachal Pradesh", "Bali"],
+      "active": true
+    },
+    {
+      "id": "valentine_spring",
+      "name": "Valentine’s & Spring Blossom Escapes",
+      "tagline": "Romantic retreats, tea gardens, and blooming valleys",
+      "startMonth": 2,
+      "endMonth": 2,
+      "leadDays": 30,
+      "bannerBg": "from-rose-950 to-slate-900",
+      "bannerText": "Spring Blossom & Couple-Friendly Retreats in Munnar, Udaipur & Bali",
+      "recommendedCategories": ["Nature", "Culture", "International"],
+      "featuredLocations": ["Kerala", "Rajasthan", "Bali"],
+      "active": true
+    },
+    {
+      "id": "holi_getaway",
+      "name": "Holi Long Weekend",
+      "tagline": "Colors, camping, and riverside music festivals",
+      "startMonth": 3,
+      "endMonth": 3,
+      "leadDays": 25,
+      "bannerBg": "from-fuchsia-950 to-slate-900",
+      "bannerText": "Holi Long Weekend: Riverside Camping & Mountain Music Escapes",
+      "recommendedCategories": ["Weekend Trips", "Adventure"],
+      "featuredLocations": ["Uttarakhand", "Himachal Pradesh", "Rajasthan"],
+      "active": true
+    }
+  ],
+  "packingRules": {
+    "base": [
+      { "id": "gov-id", "name": "Government Photo ID (Aadhaar / Passport)", "category": "Essential Documents", "mandatory": true, "icon": "ShieldCheck" },
+      { "id": "voucher", "name": "WanderLuxe Booking Pass & QR Voucher", "category": "Essential Documents", "mandatory": true, "icon": "Ticket" },
+      { "id": "powerbank", "name": "10,000mAh Power Bank & Universal Charger", "category": "Electronics", "mandatory": true, "icon": "BatteryCharging" },
+      { "id": "meds", "name": "Personal Prescribed Medications & First Aid", "category": "Medical", "mandatory": true, "icon": "HeartPulse" }
+    ],
+    "cold": [
+      { "id": "down-jacket", "name": "Heavy Down Jacket (-5°C to 10°C rated)", "category": "Cold Weather Gear", "mandatory": true, "icon": "Shirt" },
+      { "id": "thermals", "name": "Thermal Base Layer Set (Top & Bottom)", "category": "Cold Weather Gear", "mandatory": true, "icon": "Layers" },
+      { "id": "beanie", "name": "Woolen Beanie Cap & Fleece Neck Gaiter", "category": "Cold Weather Gear", "mandatory": true, "icon": "Smile" },
+      { "id": "gloves", "name": "Waterproof Thermal Fleece Gloves", "category": "Cold Weather Gear", "mandatory": true, "icon": "Hand" }
+    ],
+    "rain": [
+      { "id": "poncho", "name": "Breathable Rain Poncho / Waterproof Jacket", "category": "Monsoon Essentials", "mandatory": true, "icon": "CloudRain" },
+      { "id": "phone-case", "name": "Waterproof Phone Pouch (IPX8 rated)", "category": "Monsoon Essentials", "mandatory": true, "icon": "Smartphone" },
+      { "id": "dry-bag", "name": "15L / 20L Waterproof Dry Bag", "category": "Monsoon Essentials", "mandatory": false, "icon": "Luggage" }
+    ],
+    "beach": [
+      { "id": "sunglasses", "name": "UV 400 Polarized Sunglasses", "category": "Coastal Essentials", "mandatory": true, "icon": "Glasses" },
+      { "id": "sunscreen", "name": "Reef-Safe Sunscreen SPF 50+", "category": "Coastal Essentials", "mandatory": true, "icon": "Sun" },
+      { "id": "swimwear", "name": "Quick-Dry Swimwear & Beach Flip-Flops", "category": "Coastal Essentials", "mandatory": false, "icon": "Waves" }
+    ],
+    "trekking": [
+      { "id": "trek-shoes", "name": "Ankle-Support Waterproof Trekking Shoes", "category": "Trekking Gear", "mandatory": true, "icon": "Footprints" },
+      { "id": "trek-pole", "name": "Lightweight Trekking Pole & Headlamp", "category": "Trekking Gear", "mandatory": false, "icon": "Flashlight" },
+      { "id": "flask", "name": "1L Reusable Insulated Water Flask", "category": "Hydration", "mandatory": true, "icon": "Droplet" }
+    ]
+  },
+  "aiPlanner": {
+    "defaultPace": "Balanced",
+    "paces": {
+      "Relaxed": { "maxActivitiesPerDay": 2, "description": "Comfortable mornings and slow scenic afternoons." },
+      "Balanced": { "maxActivitiesPerDay": 3, "description": "Equal balance of sightseeing, adventure, and local culture." },
+      "Packed": { "maxActivitiesPerDay": 4, "description": "High-intensity exploration maximizing every hour." }
+    },
+    "budgetMultipliers": {
+      "Budget": 2800,
+      "Moderate": 4500,
+      "Luxury": 8500
+    },
+    "basePlanningRules": [
+      "Pacing must be geographically logical without excessive backtrack driving.",
+      "Every single day must be divided into morning, afternoon, and evening slots.",
+      "Each activity slot must provide: time, activity, location, description, estimatedCost, travelTime.",
+      "Include realistic stay recommendations, regional food delicacies to try, and packing essentials.",
+      "Never fabricate live bookable product prices; use standard estimated ranges."
+    ]
+  }
+}
