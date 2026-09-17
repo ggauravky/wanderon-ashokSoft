@@ -424,7 +424,7 @@ const BookingDates = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                 {/* 1. Triple Sharing */}
                 {(() => {
-                  const tripleRate = Number(selectedBatch?.pricing?.tripleSharing || trip.sharingPricing?.tripleSharing || Math.max(1000, trip.price - 1500));
+                  const tripleRate = Number(selectedBatch?.pricing?.tripleSharing || trip.sharingPricing?.tripleSharing || trip.price || 0);
                   const isSelected = occupancy === 'Triple Sharing';
                   return (
                     <div
@@ -495,7 +495,7 @@ const BookingDates = () => {
 
                 {/* 3. Single Sharing */}
                 {(() => {
-                  const singleRate = Number(selectedBatch?.pricing?.singleSharing || trip.sharingPricing?.singleSharing || (trip.price + 3500));
+                  const singleRate = Number(selectedBatch?.pricing?.singleSharing || trip.sharingPricing?.singleSharing || trip.price || 0);
                   const isSelected = occupancy === 'Single Sharing';
                   return (
                     <div
