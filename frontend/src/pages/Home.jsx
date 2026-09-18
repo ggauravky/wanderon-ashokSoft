@@ -198,7 +198,7 @@ const Home = () => {
   }, [allWeekendTrips]);
 
   const handleSearchSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const params = new URLSearchParams();
     if (searchQuery.trim()) params.set('q', searchQuery.trim());
     if (budgetFilter && budgetFilter !== 'all') params.set('budget', budgetFilter);
@@ -306,22 +306,24 @@ const Home = () => {
                 />
               </div>
 
-              {/* Right Actions: Classic Search Link + Plan with AI Primary Pill Button */}
+              {/* Right Actions: Equalized Hero Search Action Pill Buttons with Hover Green Highlight */}
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleSearchSubmit}
-                  className="hidden sm:inline-block px-3.5 py-2 text-slate-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+                  className="group inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-white bg-slate-900/90 hover:bg-emerald-400 hover:text-slate-950 border border-white/25 hover:border-emerald-400 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-sm hover:shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                 >
-                  Classic Search
+                  <Search size={14} className="shrink-0 text-slate-300 group-hover:text-slate-950 transition-colors" />
+                  <span>Classic Search</span>
                 </button>
 
                 <button 
                   type="button"
                   onClick={() => openAIPlannerFor(searchQuery || 'Meghalaya')}
-                  className="px-5 sm:px-6 py-2.5 sm:py-3 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs sm:text-sm rounded-full transition-all shadow-[0_0_20px_rgba(52,211,153,0.4)] hover:shadow-[0_0_25px_rgba(52,211,153,0.6)] flex items-center justify-center whitespace-nowrap cursor-pointer"
+                  className="group inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-white bg-slate-900/90 hover:bg-emerald-400 hover:text-slate-950 border border-white/25 hover:border-emerald-400 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-sm hover:shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                 >
-                  Plan with AI
+                  <Sparkles size={14} className="shrink-0 text-slate-300 group-hover:text-slate-950 transition-colors" />
+                  <span>Plan with AI</span>
                 </button>
               </div>
 
@@ -424,7 +426,7 @@ const Home = () => {
                 Explore Destinations
               </span>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
-                Popular Mountain & Island Hubs
+                Trending Destinations
               </h2>
             </div>
 
@@ -490,57 +492,6 @@ const Home = () => {
               <span>Browse All 50+ Circuits</span>
               <ArrowRight size={14} />
             </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 5. EXPLORE TRAVEL STYLES */}
-      {/* ========================================================================= */}
-      <section className="py-12 bg-white border-y border-slate-200/80">
-        <div className="travel-container">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-6">
-            <div>
-              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
-                Curated Travel Formats
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900">
-                Explore by Travel Style
-              </h2>
-            </div>
-            <Link to="/trips" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-              View All Formats <ArrowRight size={14} />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-            {[
-              { label: 'Community Trips', count: '50 Trips', path: '/community-trips', icon: HeartHandshake },
-              { label: 'Weekend Getaways', count: '19 Trips', path: '/weekend-trips', icon: Clock },
-              { label: 'Backpacking Circuits', count: '15 Trips', path: '/backpacking-trips', icon: Backpack },
-              { label: 'Adventure & Treks', count: '19 Trips', path: '/adventure-treks', icon: Mountain },
-              { label: 'Romantic Escapes', count: '20 Trips', path: '/romantic-escapes', icon: Heart },
-              { label: 'Culture & Heritage', count: '12 Trips', path: '/culture-heritage', icon: Compass }
-            ].map((style) => {
-              const IconComp = style.icon;
-              return (
-                <Link
-                  key={style.label}
-                  to={style.path}
-                  className="p-4 rounded-3xl bg-slate-50 hover:bg-emerald-50/50 border border-slate-200/80 hover:border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between group"
-                >
-                  <div className="w-10 h-10 rounded-2xl bg-white text-emerald-600 flex items-center justify-center mb-3 shadow-xs group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                    <IconComp size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-black text-slate-900 group-hover:text-emerald-600 transition-colors">
-                      {style.label}
-                    </h3>
-                    <span className="text-[10px] font-bold text-slate-400 mt-0.5 block">{style.count}</span>
-                  </div>
-                </Link>
-              );
-            })}
           </div>
         </div>
       </section>

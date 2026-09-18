@@ -10,6 +10,12 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const validTrip = trip && typeof trip === 'object' ? trip : null;
   const tripKey = validTrip?.id || validTrip?._id || validTrip?.slug;
+  const defaultFallbackImg = 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop';
+  const [imgSrc, setImgSrc] = useState(validTrip?.image || defaultFallbackImg);
+
+  useEffect(() => {
+    setImgSrc(validTrip?.image || defaultFallbackImg);
+  }, [validTrip?.image]);
 
   useEffect(() => {
     try {
@@ -66,9 +72,10 @@ const TripCard = ({ trip, showWeather = true, customBadge = null }) => {
         {/* Cover Image Container */}
         <div className="relative h-56 sm:h-60 overflow-hidden bg-slate-100">
           <img 
-            src={trip.image || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1200&auto=format&fit=crop'} 
+            src={imgSrc} 
             alt={trip.title || 'WanderLuxe Trip'} 
             loading="lazy"
+            onError={() => setImgSrc(defaultFallbackImg)}
             className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
           />
           

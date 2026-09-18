@@ -36,16 +36,11 @@ const DestinationCard = ({
         {/* Ambient Overlay Gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/40 to-transparent flex flex-col justify-between p-5 pointer-events-none" />
 
-        {/* Top Header Row (Weather or Region) */}
+        {/* Top Header Row (Region Tag) */}
         <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-2 z-10">
           <span className="text-[10px] uppercase font-black tracking-wider bg-slate-900/80 backdrop-blur-md text-emerald-400 px-3 py-1 rounded-full border border-emerald-500/30">
             {regionTag}
           </span>
-          {weather && (
-            <div className="shrink-0">
-              <WeatherBadge weather={weather} size="sm" showCondition={false} />
-            </div>
-          )}
         </div>
 
         {/* Bottom Content Row */}

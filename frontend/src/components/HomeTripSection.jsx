@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Compass } from 'lucide-react';
+import { ArrowRight, Compass, ChevronLeft, ChevronRight } from 'lucide-react';
 import TripCard from './TripCard.jsx';
 
 /**
@@ -9,11 +9,11 @@ import TripCard from './TripCard.jsx';
  * Reusable, responsive trip discovery section for WanderLuxe Home page
  * 
  * Features:
- * - Desktop: Compact 4-column grid (up to 2 rows for 6-8 cards, 1 row for 4 cards)
- * - Mobile: Touch-friendly horizontal snap-scroll row (~1.2 cards peek)
- * - Accessible, crawlable View All anchor navigation
- * - Dynamic count integration
- * - Built-in card deduplication & deterministic limit enforcement
+ * - Side-by-side horizontal scrollable row with smooth snap scrolling
+ * - Desktop left/right scroll navigation buttons
+ * - Accessible View All anchor navigation
+ * - Dynamic inventory count integration
+ * - Built-in card deduplication & limit enforcement
  * =============================================================================
  */
 const HomeTripSection = ({
@@ -28,8 +28,20 @@ const HomeTripSection = ({
   viewAllPath = '/trips',
   headerChildren = null,
   bgClass = 'bg-transparent',
-  showWeather = true
+  showWeather = false
 }) => {
+  const scrollRef = useRef(null);
+
+  const handleScroll = (direction) => {
+    if (scrollRef.current) {
+      const scrollAmount = scrollRef.current.clientWidth * 0.75;
+      scrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   // Deduplicate trips by canonical ID
   const uniqueTrips = React.useMemo(() => {
     const seen = new Set();
@@ -61,10 +73,10 @@ const HomeTripSection = ({
     <section id={id} className={`travel-section ${bgClass}`}>
       <div className="travel-container">
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 mb-6 sm:mb-8">
-          <div className="max-w-2xl">
+        <div className="flex flex-col lg:flex-row justify-between lg:items-end gap-4 mb-6 sm:mb-8">
+          <div className="max-w-2xl space-y-1">
             {eyebrow && (
-              <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
+              <span className="text-[11px] sm:text-xs font-black uppercase tracking-wider text-emerald-600 block">
                 {eyebrow}
               </span>
             )}
@@ -72,38 +84,64 @@ const HomeTripSection = ({
               {title}
             </h2>
             {description && (
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed">
                 {description}
               </p>
             )}
           </div>
 
-          {/* Right Header: Extra Controls (e.g. Month Chips) + Desktop View All Button */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 shrink-0">
+          {/* Right Header: Month Pills + Scroll Arrows + View All CTA */}
+          <div className="flex items-center justify-between lg:justify-end gap-3 flex-wrap lg:flex-nowrap shrink-0">
             {headerChildren}
 
-            <Link
-              to={viewAllPath}
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/80 px-4 py-2 rounded-2xl transition-all shadow-2xs group shrink-0"
-              aria-label={ctaLabel}
-            >
-              <span>{ctaLabel}</span>
-              <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Left / Right Scroll Navigation Arrows for Desktop */}
+              {uniqueTrips.length > 3 && (
+                <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleScroll('left')}
+                    className="flex items-center justify-center w-9 h-9 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300 transition-all shadow-xs cursor-pointer active:scale-95"
+                    aria-label="Scroll left"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleScroll('right')}
+                    className="flex items-center justify-center w-9 h-9 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300 transition-all shadow-xs cursor-pointer active:scale-95"
+                    aria-label="Scroll right"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              )}
+
+              <Link
+                to={viewAllPath}
+                className="hidden sm:inline-flex items-center gap-1.5 text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/80 px-4 py-2 rounded-2xl transition-all shadow-2xs group shrink-0"
+                aria-label={ctaLabel}
+              >
+                <span>{ctaLabel}</span>
+                <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
           </div>
         </div>
 
-        {/* Trips Display: Responsive Grid (Desktop) + Touch-friendly Horizontal Snap Scroll (Mobile) */}
+        {/* Trips Display: Side-by-Side Horizontal Scrollable Row */}
         {uniqueTrips.length > 0 ? (
           <div>
             <div 
-              className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:gap-5 sm:overflow-visible scroll-smooth"
+              ref={scrollRef}
+              className="flex overflow-x-auto snap-x snap-mandatory gap-4 sm:gap-5 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 scroll-smooth [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {uniqueTrips.map((trip) => (
                 <div
                   key={trip.id || trip._id || trip.slug}
-                  className="w-[82vw] max-w-[310px] sm:w-auto shrink-0 snap-start flex flex-col"
+                  className="w-[82vw] max-w-[300px] sm:w-[285px] md:w-[295px] lg:w-[300px] shrink-0 snap-start flex flex-col"
                 >
                   <TripCard trip={trip} showWeather={showWeather} />
                 </div>
