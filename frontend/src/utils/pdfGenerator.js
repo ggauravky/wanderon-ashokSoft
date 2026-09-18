@@ -10,27 +10,87 @@ const waitForImages = async (container, timeoutMs = 3500) => {
   const images = Array.from(container.querySelectorAll('img'));
   if (images.length === 0) return;
 
-  const promises = images.map((img) => {
-    // If already loaded and has dimensions
-    if (img.complete && img.naturalHeight !== 0) {
-      return Promise.resolve();
+  const settle = (promise) => Promise.race([
+    promise.catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
+  const promises = images.map(async (img) => {
+    if (!img.complete) {
+      await settle(new Promise((resolve) => {
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      }));
     }
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(), timeoutMs);
-      img.onload = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      img.onerror = () => {
-        clearTimeout(timer);
-        // Fallback: set crossOrigin and prevent broken image from breaking html2canvas
-        img.crossOrigin = 'anonymous';
-        resolve();
-      };
-    });
+    if (img.naturalHeight !== 0 && typeof img.decode === 'function') await settle(img.decode());
   });
 
   await Promise.all(promises);
+};
+
+const waitForFonts = async (timeoutMs = 3000) => {
+  if (!document.fonts?.ready) return;
+  await Promise.race([
+    document.fonts.ready.catch(() => {}),
+    new Promise((resolve) => setTimeout(resolve, timeoutMs))
+  ]);
+};
+
+const progress = (handler, stage, message, current = 0, total = 0) => handler?.({ stage, message, current, total });
+
+/**
+ * Quotation-only exporter. Every explicit A4 HTML page is rendered separately,
+ * so headings, cards and itinerary entries are never cut by canvas slicing.
+ */
+export const exportPagedElementToPdf = async (element, options = {}) => {
+  if (!element) throw new Error('Quotation document for PDF export was not found.');
+  const pages = Array.from(element.querySelectorAll('[data-pdf-page="true"]'));
+  if (!pages.length) throw new Error('No quotation PDF pages were rendered.');
+  const { filename = 'WanderLuxe-Quotation.pdf', scale = 2, quality = 0.93, onProgress = null } = options;
+  const previousTransform = element.style.transform;
+
+  progress(onProgress, 'preparing', 'Preparing quotation...', 0, pages.length);
+  await waitForFonts();
+  element.style.transform = 'none';
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  try {
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    for (let index = 0; index < pages.length; index += 1) {
+      const page = pages[index];
+      const content = page.querySelector('.pdf-page-content');
+      if (page.scrollHeight > page.clientHeight + 4 || content?.scrollHeight > content?.clientHeight + 4) {
+        throw new Error(`Quotation PDF page ${index + 1} contains overflowed content.`);
+      }
+      progress(onProgress, 'images', 'Loading images...', index + 1, pages.length);
+      await waitForImages(page, 3500);
+      progress(onProgress, 'rendering', `Rendering page ${index + 1} of ${pages.length}...`, index + 1, pages.length);
+      const canvas = await html2canvas(page, {
+        scale,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        backgroundColor: null,
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123,
+        scrollX: 0,
+        scrollY: 0
+      });
+      if (index > 0) pdf.addPage('a4', 'portrait');
+      const image = canvas.toDataURL('image/jpeg', quality);
+      pdf.addImage(image, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      canvas.width = 1;
+      canvas.height = 1;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    progress(onProgress, 'saving', 'Creating PDF...', pages.length, pages.length);
+    pdf.save(filename);
+    progress(onProgress, 'complete', 'PDF downloaded.', pages.length, pages.length);
+    return { pageCount: pages.length, filename };
+  } finally {
+    element.style.transform = previousTransform;
+  }
 };
 
 /**
@@ -204,5 +264,6 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
 
 export default {
   exportElementToPdf,
+  exportPagedElementToPdf,
   printElementDirectly
 };

@@ -77,6 +77,20 @@ test('public revision DTO strips internal supplier fields and internal attachmen
   assert.equal('driverDetails' in dto.transportOptions[0], false);
 });
 
+test('public revision DTO always uses the immutable share template', () => {
+  const quotation = baseQuotation();
+  const snapshot = { ...quotation, presentationSettings: { ...quotation.presentationSettings, template: 'journey' } };
+  const revision = { _id: 'revision-1', version: 1, status: 'SHARED', templateKey: 'signature_luxe', snapshot, approval: {} };
+  const dto = buildPublicRevisionDto({
+    quotation,
+    revision,
+    share: { _id: 'share-1', templateKey: 'minimal', allowAttachments: true, allowPdfDownload: true, requireEmailVerification: true, approvalEnabled: true, isActive: true, expiresAt: new Date(Date.now() + 86_400_000) }
+  });
+  assert.equal(dto.templateKey, 'minimal');
+  assert.equal(revision.templateKey, 'signature_luxe');
+  assert.equal(snapshot.presentationSettings.template, 'journey');
+});
+
 test('legacy attachment display labels normalize across every quotation attachment path', () => {
   const normalized = normalizeQuotationAttachmentPayload({
     attachments: [{ category: 'TRAIN TICKET', visibility: 'customer visible after approval' }],

@@ -1,0 +1,154 @@
+@page { size: A4 portrait; margin: 0; }
+
+.quotation-pdf-document { width: 794px; margin: 0 auto; color: #17211d; }
+.quotation-pdf-stack { display: flex; flex-direction: column; gap: 24px; width: 794px; }
+.quotation-pdf-page { position: relative; width: 794px; height: 1123px; box-sizing: border-box; overflow: hidden; background: #fff; box-shadow: 0 24px 80px rgba(15,23,42,.22); break-after: page; page-break-after: always; font-family: "Plus Jakarta Sans", Inter, Arial, sans-serif; }
+.quotation-pdf-page * { box-sizing: border-box; }
+.pdf-page-content { position: relative; z-index: 2; height: 100%; padding: 72px 58px 62px; }
+.quotation-pdf-page--cover .pdf-page-content { padding: 0; }
+.pdf-running-header, .pdf-running-footer { position: absolute; z-index: 4; left: 58px; right: 58px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; opacity: .72; }
+.pdf-running-header { top: 28px; padding-bottom: 11px; border-bottom: 1px solid currentColor; }
+.pdf-running-header span:nth-child(2) { text-align: center; }
+.pdf-running-header span:last-child, .pdf-running-footer span:last-child { text-align: right; }
+.pdf-running-footer { bottom: 24px; padding-top: 10px; border-top: 1px solid currentColor; }
+.pdf-running-footer span:nth-child(2) { text-align: center; text-transform: none; letter-spacing: 0; }
+.pdf-watermark { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 94px; font-weight: 800; letter-spacing: .3em; color: currentColor; opacity: .045; white-space: nowrap; pointer-events: none; }
+.pdf-image-fallback { display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,.18), transparent 36%), linear-gradient(135deg,#315c4d,#0b2b23); color: rgba(255,255,255,.72); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+.pdf-kicker, .pdf-card-kicker { font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+.pdf-title { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 44px; line-height: 1.02; font-weight: 600; }
+.pdf-section-title { margin: 8px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 31px; line-height: 1.1; }
+.pdf-copy { white-space: pre-line; font-size: 11.5px; line-height: 1.7; color: inherit; opacity: .78; }
+.pdf-rule { height: 1px; background: currentColor; opacity: .2; }
+.pdf-facts { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 0; }
+.pdf-facts div { min-height: 74px; padding: 14px; border: 1px solid rgba(100,116,139,.22); border-radius: 8px; }
+.pdf-facts dt { font-size: 8.5px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; opacity: .55; }
+.pdf-facts dd { margin: 9px 0 0; font-size: 13px; font-weight: 700; line-height: 1.25; }
+.pdf-route-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pdf-route-flow span { display: inline-flex; align-items: center; gap: 5px; padding: 7px 10px; border: 1px solid rgba(100,116,139,.28); border-radius: 999px; font-size: 10px; }
+.pdf-route-flow b { opacity: .45; }
+.pdf-bullet-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+.pdf-bullet-list li { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; line-height: 1.55; }
+.pdf-bullet-list svg { flex: none; margin-top: 2px; }
+.pdf-itinerary-list { display: grid; gap: 13px; margin-top: 20px; }
+.pdf-itinerary-day { display: grid; grid-template-columns: 54px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid rgba(100,116,139,.22); break-inside: avoid; }
+.pdf-day-marker span { display: block; font-size: 8px; letter-spacing: .16em; opacity: .55; }
+.pdf-day-marker strong { display: block; margin-top: 4px; font: 700 24px/1 Georgia, serif; }
+.pdf-day-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.pdf-day-heading h3, .pdf-hotel-card h3, .pdf-transport-card h3 { margin: 0; font-size: 14px; line-height: 1.25; }
+.pdf-day-heading p, .pdf-hotel-card p, .pdf-transport-card p { margin: 4px 0 0; font-size: 9.5px; opacity: .62; }
+.pdf-day-image { width: 72px; height: 52px; flex: none; object-fit: cover; border-radius: 6px; }
+.pdf-day-slots { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 9px; }
+.pdf-day-slots div { padding: 8px; background: rgba(100,116,139,.07); border-radius: 5px; }
+.pdf-day-slots b, .pdf-day-slots span { display: block; font-size: 8.5px; line-height: 1.45; }
+.pdf-day-slots b { margin-bottom: 4px; text-transform: uppercase; letter-spacing: .08em; }
+.pdf-inline-meta, .pdf-highlights { margin: 7px 0 0; font-size: 8.8px; line-height: 1.5; opacity: .65; }
+.pdf-card-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; margin-top: 20px; }
+.pdf-hotel-card, .pdf-transport-card { overflow: hidden; border: 1px solid rgba(100,116,139,.22); border-radius: 10px; break-inside: avoid; }
+.pdf-hotel-card.is-selected { box-shadow: inset 0 0 0 2px rgba(16,185,129,.4); }
+.pdf-hotel-image { width: 100%; height: 126px; object-fit: cover; }
+.pdf-hotel-body, .pdf-transport-card { padding: 14px; }
+.pdf-card-kicker { margin-bottom: 7px; opacity: .65; }
+.pdf-card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.pdf-card-meta span, .pdf-tags { padding: 4px 6px; border-radius: 4px; background: rgba(100,116,139,.09); font-size: 8px; line-height: 1.3; }
+.pdf-transport-card .pdf-route { margin-top: 7px; font-size: 11px; font-weight: 600; opacity: .85; }
+.pdf-price-hero { padding: 24px; border-radius: 10px; background: #0d342a; color: #fff; }
+.pdf-price-hero strong { display: block; margin-top: 8px; font: 600 38px/1 Georgia, serif; }
+.pdf-payment-table { width: 100%; margin-top: 18px; border-collapse: collapse; font-size: 9px; }
+.pdf-payment-table th, .pdf-payment-table td { padding: 10px 8px; border-bottom: 1px solid rgba(100,116,139,.2); text-align: left; }
+.pdf-payment-table th { font-size: 8px; letter-spacing: .1em; text-transform: uppercase; opacity: .55; }
+.pdf-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.pdf-policy { margin-top: 17px; break-inside: avoid; }
+.pdf-policy h3 { margin: 0; font-size: 12px; }
+.pdf-policy p { margin: 7px 0 0; white-space: pre-line; font-size: 10px; line-height: 1.65; opacity: .76; }
+.pdf-approval { padding: 18px; border: 1px solid currentColor; border-radius: 8px; }
+.pdf-approval span { display: block; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
+.pdf-approval strong, .pdf-approval small { display: block; margin-top: 7px; }
+.pdf-approval p { margin: 8px 0 0; font-size: 10px; line-height: 1.6; opacity: .7; }
+.pdf-approval.is-approved { border-color: #10b981; color: #096344; }
+
+.quotation-pdf-page--signature_luxe { background: #fcfbf7; color: #10291f; }
+.quotation-pdf-page--signature_luxe .pdf-kicker, .quotation-pdf-page--signature_luxe .pdf-card-kicker { color: #8c6b2d; }
+.signature-cover { background: #08251e; color: #fff; }
+.signature-cover .signature-cover-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .58; }
+.signature-cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg,rgba(4,25,20,.96) 0%,rgba(4,25,20,.73) 53%,rgba(4,25,20,.32)),linear-gradient(0deg,rgba(4,25,20,.93),transparent 55%); }
+.signature-cover-inner { position: relative; z-index: 2; height: 100%; padding: 62px; display: flex; flex-direction: column; }
+.signature-brand { font-family: Georgia,serif; font-size: 18px; letter-spacing: .24em; }
+.signature-cover-main { margin-top: auto; margin-bottom: auto; max-width: 600px; }
+.signature-cover .pdf-title { margin-top: 20px; font-size: 62px; color: #fff; }
+.signature-cover-sub { margin-top: 18px; max-width: 500px; font: 18px/1.55 Georgia,serif; color: rgba(255,255,255,.78); }
+.signature-cover-meta { display: grid; grid-template-columns: 1.3fr repeat(3,1fr); gap: 22px; padding-top: 22px; border-top: 1px solid rgba(212,175,55,.55); }
+.signature-cover-meta span { display: block; font-size: 8px; letter-spacing: .15em; color: #d4af37; }
+.signature-cover-meta strong { display: block; margin-top: 6px; font-size: 11px; }
+.signature-split { display: grid; grid-template-columns: 1.05fr .95fr; gap: 32px; align-items: stretch; margin-top: 24px; }
+.signature-feature-image { width: 100%; height: 390px; object-fit: cover; border-radius: 2px; }
+.signature-highlight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.signature-highlight { padding: 18px; border: 1px solid #e6e2d8; min-height: 112px; }
+.signature-highlight strong { display: block; color: #8c6b2d; font-family: Georgia,serif; font-size: 22px; }
+.signature-highlight span { display: block; margin-top: 9px; font-size: 11px; line-height: 1.45; }
+.signature-final { background: #08251e; color: #fff; }
+.signature-final .pdf-page-content { display: flex; flex-direction: column; justify-content: space-between; padding: 90px 72px; }
+
+.quotation-pdf-page--journey { background: #faf7f2; color: #243f32; }
+.quotation-pdf-page--journey .pdf-kicker, .quotation-pdf-page--journey .pdf-card-kicker { color: #c86d51; }
+.journey-cover { background: #faf7f2; }
+.journey-cover-inner { height: 100%; padding: 54px; position: relative; overflow: hidden; }
+.journey-cover-inner::before { content: ""; position: absolute; width: 560px; height: 560px; border: 2px dashed rgba(200,109,81,.22); border-radius: 50%; right: -230px; top: -210px; }
+.journey-cover .pdf-title { margin-top: 90px; max-width: 520px; color: #1c3a2b; font-family: "Trebuchet MS",Arial,sans-serif; font-weight: 800; font-size: 56px; }
+.journey-polaroids { position: absolute; right: 52px; bottom: 135px; width: 310px; height: 320px; }
+.journey-polaroid { position: absolute; width: 220px; padding: 10px 10px 34px; background: #fff; box-shadow: 0 15px 32px rgba(64,45,30,.17); transform: rotate(-5deg); }
+.journey-polaroid + .journey-polaroid { left: 85px; top: 76px; transform: rotate(6deg); }
+.journey-polaroid img, .journey-polaroid .pdf-image-fallback { width: 200px; height: 205px; object-fit: cover; }
+.journey-stamp { display: inline-block; padding: 9px 13px; border: 2px solid #c86d51; border-radius: 50%; color: #c86d51; font-size: 9px; font-weight: 800; letter-spacing: .12em; transform: rotate(-6deg); }
+.journey-note { font-family: "Comic Sans MS",cursive; color: #c86d51; transform: rotate(-2deg); }
+.journey-paper-card { padding: 16px; border-radius: 12px; background: #fff; box-shadow: 0 8px 20px rgba(62,50,34,.07); }
+.journey-ledger { background: repeating-linear-gradient(#faf7f2,#faf7f2 30px,#e6ddd0 31px); }
+
+.quotation-pdf-page--minimal { background: #faf5ec; color: #382715; font-family: Montserrat,"Plus Jakarta Sans",Arial,sans-serif; }
+.quotation-pdf-page--minimal .pdf-kicker, .quotation-pdf-page--minimal .pdf-card-kicker { color: #8b1e1e; }
+.dossier-cover { background: #faf5ec; }
+.dossier-banner { padding: 34px 58px; background: #6b4a2d; color: #fff; clip-path: polygon(0 0,100% 0,100% 86%,96% 92%,91% 86%,86% 93%,80% 87%,73% 94%,66% 87%,58% 93%,50% 86%,42% 94%,35% 87%,26% 93%,18% 86%,9% 94%,0 87%); }
+.dossier-cover-body { padding: 45px 58px 56px; }
+.dossier-cover .pdf-title { margin-top: 22px; font-size: 50px; color: #382715; }
+.dossier-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 24px; }
+.dossier-photo { padding: 9px 9px 30px; background: #fff; box-shadow: 0 12px 25px rgba(75,52,28,.15); transform: rotate(2deg); }
+.dossier-photo img, .dossier-photo .pdf-image-fallback { width: 100%; height: 230px; object-fit: cover; }
+.dossier-stamp { display: inline-block; padding: 8px 11px; border: 2px solid #8b1e1e; color: #8b1e1e; font-size: 9px; font-weight: 800; letter-spacing: .12em; transform: rotate(-4deg); }
+.dossier-tape { width: 90px; height: 22px; background: rgba(214,177,112,.5); transform: rotate(-4deg); }
+.quotation-pdf-page--minimal .pdf-itinerary-day { padding: 9px 0; }
+.quotation-pdf-page--minimal .pdf-copy { font-size: 10px; line-height: 1.5; }
+
+.quotation-template-loading { width: 794px; min-height: 1123px; display: flex; align-items: center; justify-content: center; background: #fff; color: #64748b; }
+.template-choice-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.template-choice-card { overflow: hidden; padding: 0; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; color: #0f172a; text-align: left; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.template-choice-card:hover { transform: translateY(-2px); border-color: #94a3b8; box-shadow: 0 14px 32px rgba(15,23,42,.1); }
+.template-choice-card.is-selected { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.15); }
+.template-choice-select { display: block; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.template-choice-select:focus-visible, .template-choice-preview:focus-visible { outline: 3px solid rgba(16,185,129,.28); outline-offset: -3px; }
+.template-cover-mini { position: relative; height: 210px; overflow: hidden; background: #08251e; color: #fff; }
+.template-cover-mini img, .template-cover-mini .pdf-image-fallback { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .44; }
+.template-cover-mini::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg,rgba(5,24,19,.96),rgba(5,24,19,.15)); }
+.template-cover-mini > div:last-child { position: absolute; z-index: 2; left: 18px; right: 18px; bottom: 18px; }
+.template-cover-mini small, .template-cover-mini strong, .template-cover-mini span { display: block; }
+.template-cover-mini small { font-size: 8px; letter-spacing: .2em; }
+.template-cover-mini strong { margin-top: 9px; font: 600 22px/1.05 Georgia,serif; }
+.template-cover-mini span { margin-top: 7px; font-size: 10px; opacity: .75; }
+.template-cover-mini.is-journey { background: #faf7f2; color: #1c3a2b; }
+.template-cover-mini.is-journey::after { background: linear-gradient(0deg,rgba(250,247,242,.98),rgba(250,247,242,.18)); }
+.template-cover-mini.is-minimal { background: #6b4a2d; color: #fff7e8; }
+.template-choice-copy { padding: 16px; }
+.template-choice-copy > div { display: flex; flex-direction: column-reverse; }
+.template-choice-copy span { color: #059669; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.template-choice-copy strong { font-size: 17px; }
+.template-choice-copy em { float: right; margin-top: -31px; color: #64748b; font-size: 11px; font-style: normal; }
+.template-choice-copy p { margin: 13px 0 0; color: #334155; font-size: 12px; font-weight: 700; }
+.template-choice-copy small { display: block; margin-top: 6px; color: #64748b; font-size: 11px; line-height: 1.6; }
+.template-choice-preview { display: flex; width: calc(100% - 32px); min-height: 38px; align-items: center; justify-content: center; gap: 7px; margin: 0 16px 16px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font-size: 12px; font-weight: 750; cursor: pointer; }
+.template-choice-preview:hover { border-color: #10b981; color: #047857; }
+.template-choice-grid.is-compact .template-choice-select { padding: 14px; }
+.template-choice-grid.is-compact .template-choice-copy { padding: 0; }
+@media (max-width: 760px) { .template-choice-grid { grid-template-columns: 1fr; } }
+@media print {
+  body { margin: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .quotation-pdf-stack { gap: 0; }
+  .quotation-pdf-page { box-shadow: none; }
+}

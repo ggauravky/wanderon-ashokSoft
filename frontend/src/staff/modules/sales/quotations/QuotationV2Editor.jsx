@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCircle2,
-  Copy, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
-  Paperclip, Plus, Save, Send, Sparkles, Trash2, Upload, X
+  Copy, Download, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
+  Paperclip, Plus, Save, Send, Trash2, Upload, X
 } from 'lucide-react';
 import { useAuth } from '../../../../contexts/AuthContext.jsx';
 import {
@@ -23,8 +23,10 @@ import {
 } from '../../../../services/quotationService.js';
 import MediaLibraryModal from '../../../../components/MediaLibraryModal.jsx';
 import UploadLocationImageModal from '../../../../components/UploadLocationImageModal.jsx';
-import QuotationTemplateRenderer from '../../../../quotation-v2/QuotationTemplateRenderer.jsx';
-import { QUOTATION_V2_STEPS, formatQuotationCurrency, validateQuotationV2Client } from '../../../../quotation-v2/quotationV2.js';
+import TemplatePickerModal, { TemplateChoiceGrid } from '../../../../quotation-v2/components/TemplatePickerModal.jsx';
+import QuotationPreviewModal from '../../../../quotation-v2/components/QuotationPreviewModal.jsx';
+import { getQuotationTemplate } from '../../../../quotation-v2/templateRegistry.js';
+import { QUOTATION_V2_STEPS, formatQuotationCurrency, quotationPdfFileName, validateQuotationV2Client } from '../../../../quotation-v2/quotationV2.js';
 import {
   QUOTATION_ATTACHMENT_CATEGORIES,
   QUOTATION_ATTACHMENT_VISIBILITIES,
@@ -79,7 +81,9 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [preview, setPreview] = useState(false);
+  const [previewPickerOpen, setPreviewPickerOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState(null);
+  const [pdfProgress, setPdfProgress] = useState(null);
   const [mediaTarget, setMediaTarget] = useState(null);
   const [hotelUploadOpen, setHotelUploadOpen] = useState(false);
   const [uploadedHotelAsset, setUploadedHotelAsset] = useState(null);
@@ -200,6 +204,30 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     finally { setUploading(false); }
   };
 
+  const previewQuotation = { ...payload(), version: quotation.version || 1 };
+  const openTemplatePreview = (templateKey) => {
+    setPreviewPickerOpen(false);
+    setPreviewTemplate(templateKey || quotation.presentationSettings?.template || 'journey');
+  };
+  const downloadPreview = async (sourceQuotation, templateKey, element) => {
+    if (!element) return;
+    setError('');
+    setPdfProgress({ completed: 0, total: 0 });
+    try {
+      const { exportPagedElementToPdf } = await import('../../../../utils/pdfGenerator.js');
+      await exportPagedElementToPdf(element, {
+        filename: quotationPdfFileName(sourceQuotation, templateKey),
+        onProgress: (progress) => setPdfProgress(progress)
+      });
+      setNotice(`${getQuotationTemplate(templateKey).name} PDF downloaded.`);
+    } catch (downloadError) {
+      console.error('Quotation PDF generation failed', downloadError);
+      setError('Unable to generate the PDF. Please retry or choose another template.');
+    } finally {
+      setPdfProgress(null);
+    }
+  };
+
   if (loading) return <div className="flex min-h-[28rem] items-center justify-center rounded-xl border border-slate-200 bg-white text-sm text-slate-500"><Loader2 size={18} className="mr-2 animate-spin" />Loading quotation editor…</div>;
   if (!quotation) return <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-rose-800">Unable to initialize quotation editor.</div>;
 
@@ -211,7 +239,7 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     <header className="sticky top-0 z-30 -mx-4 -mt-4 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3"><button type="button" onClick={() => { if (!dirty || window.confirm('Discard unsaved quotation changes?')) onClose?.(); }} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600"><ArrowLeft size={17} /></button><div className="min-w-0"><div className="flex items-center gap-2"><h1 className="truncate text-base font-semibold text-slate-950">{quotation.tripRequirements?.title || 'New quotation'}</h1><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">v{quotation.version || 1}</span>{dirty && <span className="text-xs font-medium text-amber-700">Unsaved</span>}</div><p className="truncate text-xs text-slate-500">{quotation.quotationNumber || 'Draft number assigned on first save'} · {quotation.customerSnapshot?.name || 'Customer not set'}</p></div></div>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setPreview(true)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Eye size={16} />Preview</button><button type="button" onClick={save} disabled={saving || frozen || !dirty} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save draft</button></div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setPreviewPickerOpen(true)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Eye size={16} />Preview</button><button type="button" onClick={save} disabled={saving || frozen || !dirty} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}Save draft</button></div>
       </div>
     </header>
 
@@ -246,9 +274,9 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
 
         {stepKey === 'terms' && <Panel title="Terms and policy copy" description="Use explicit client-approved language. No legal or cancellation copy is invented by the system."><div className="grid gap-4 md:grid-cols-2"><Textarea label="Payment terms" value={quotation.policies?.paymentTerms || ''} onChange={(event) => setNested('policies', 'paymentTerms', event.target.value)} disabled={frozen} /><Textarea label="Cancellation policy" value={quotation.policies?.cancellationPolicy || ''} onChange={(event) => setNested('policies', 'cancellationPolicy', event.target.value)} disabled={frozen} /><Textarea label="Refund notes" value={quotation.policies?.refundNotes || ''} onChange={(event) => setNested('policies', 'refundNotes', event.target.value)} disabled={frozen} /><Textarea label="Travel requirements" value={quotation.policies?.travelRequirements || ''} onChange={(event) => setNested('policies', 'travelRequirements', event.target.value)} disabled={frozen} /><Textarea label="Important information" value={quotation.policies?.importantInformation || ''} onChange={(event) => setNested('policies', 'importantInformation', event.target.value)} disabled={frozen} /><Textarea label="Terms and conditions" value={quotation.policies?.termsAndConditions || ''} onChange={(event) => setNested('policies', 'termsAndConditions', event.target.value)} disabled={frozen} /><Field label="Quotation valid until" type="date" value={quotation.validUntil?.slice?.(0, 10) || ''} onChange={(event) => setValue('validUntil', event.target.value)} disabled={frozen} /></div></Panel>}
 
-        {stepKey === 'presentation' && <Panel title="Presentation" description="All three customer templates read from the same normalized revision snapshot."><div className="grid gap-4 md:grid-cols-3">{[['minimal', 'Minimal', 'Quiet, clean and highly legible.'], ['journey', 'Journey', 'Warm editorial storytelling.'], ['signature_luxe', 'Signature Luxe', 'Dark, premium and cinematic.']].map(([key, title, description]) => <button key={key} type="button" disabled={frozen} onClick={() => setNested('presentationSettings', 'template', key)} className={cx('rounded-xl border p-5 text-left transition', quotation.presentationSettings?.template === key ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-100' : 'border-slate-200 bg-white hover:border-slate-300')}><Sparkles size={19} className="text-emerald-600" /><p className="mt-4 font-semibold text-slate-900">{title}</p><p className="mt-1 text-sm leading-6 text-slate-500">{description}</p></button>)}</div><div className="mt-5 grid gap-3 md:grid-cols-2">{[['showComponentPrices', 'Show component prices'], ['showPaymentSchedule', 'Show payment schedule'], ['showAttachments', 'Show visible attachments'], ['showAdvisor', 'Show advisor'], ['showTerms', 'Show terms'], ['showItineraryGallery', 'Show itinerary gallery']].map(([field, label]) => <Toggle key={field} label={label} checked={quotation.presentationSettings?.[field] !== false} onChange={(value) => setNested('presentationSettings', field, value)} />)}</div></Panel>}
+        {stepKey === 'presentation' && <Panel title="Presentation" description="Choose a default customer experience. Previewing another style never changes the saved revision."><TemplateChoiceGrid quotation={previewQuotation} selectedKey={quotation.presentationSettings?.template || 'journey'} onSelect={(key) => { if (!frozen) setNested('presentationSettings', 'template', key); }} onPreview={openTemplatePreview} /><div className="mt-5 grid gap-3 md:grid-cols-2">{[['showComponentPrices', 'Show component prices'], ['showPaymentSchedule', 'Show payment schedule'], ['showAttachments', 'Show visible attachments'], ['showAdvisor', 'Show advisor'], ['showTerms', 'Show terms'], ['showItineraryGallery', 'Show itinerary gallery']].map(([field, label]) => <Toggle key={field} label={label} checked={quotation.presentationSettings?.[field] !== false} onChange={(value) => setNested('presentationSettings', field, value)} />)}</div></Panel>}
 
-        {stepKey === 'review' && <><Panel title="Review and validation" description="Frontend guidance mirrors authoritative backend validation. The server validates again on pricing and sharing."><div className="grid gap-4 sm:grid-cols-3"><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Sections complete</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.sectionsComplete}/12</p></div><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Blocking issues</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.errors.length}</p></div><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Warnings</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.warnings.length}</p></div></div><div className="mt-5 space-y-2">{validation.errors.map((item) => <button key={item.code} type="button" onClick={() => setActiveStep(QUOTATION_V2_STEPS.findIndex(([key]) => key === item.step))} className="flex w-full items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-left text-sm text-rose-800"><AlertCircle size={16} className="mt-0.5 shrink-0" /><span><strong>{item.step}:</strong> {item.message}</span></button>)}{validation.warnings.map((item) => <button key={item.code} type="button" onClick={() => setActiveStep(QUOTATION_V2_STEPS.findIndex(([key]) => key === item.step))} className="flex w-full items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800"><AlertCircle size={16} className="mt-0.5 shrink-0" /><span><strong>{item.step}:</strong> {item.message}</span></button>)}{!validation.errors.length && !validation.warnings.length && <div className="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 size={18} />No validation issues detected.</div>}</div></Panel><Panel title="Proposal summary"><dl className="grid gap-3 text-sm md:grid-cols-2">{[['Customer', quotation.customerSnapshot?.name], ['Destination', quotation.tripRequirements?.destination], ['Itinerary days', quotation.itinerary?.length], ['Hotels', quotation.hotelOptions?.length], ['Transport segments', quotation.transportOptions?.length], ['Attachments', quotation.attachments?.length], ['Component reference', formatQuotationCurrency(calculateReference(quotation))], ['Final price', quotation.manualPricing?.finalCustomerPrice ? formatQuotationCurrency(quotation.manualPricing.finalCustomerPrice) : 'Awaiting Admin']].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-semibold text-slate-900">{value ?? '—'}</dd></div>)}</dl></Panel></>}
+        {stepKey === 'review' && <><Panel title="Review and validation" description="Frontend guidance mirrors authoritative backend validation. The server validates again on pricing and sharing."><div className="grid gap-4 sm:grid-cols-3"><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Sections complete</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.sectionsComplete}/12</p></div><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Blocking issues</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.errors.length}</p></div><div className="rounded-xl border border-slate-200 p-4"><p className="text-xs uppercase tracking-wider text-slate-500">Warnings</p><p className="mt-2 text-2xl font-semibold text-slate-950">{validation.warnings.length}</p></div></div><div className="mt-5 space-y-2">{validation.errors.map((item) => <button key={item.code} type="button" onClick={() => setActiveStep(QUOTATION_V2_STEPS.findIndex(([key]) => key === item.step))} className="flex w-full items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-left text-sm text-rose-800"><AlertCircle size={16} className="mt-0.5 shrink-0" /><span><strong>{item.step}:</strong> {item.message}</span></button>)}{validation.warnings.map((item) => <button key={item.code} type="button" onClick={() => setActiveStep(QUOTATION_V2_STEPS.findIndex(([key]) => key === item.step))} className="flex w-full items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800"><AlertCircle size={16} className="mt-0.5 shrink-0" /><span><strong>{item.step}:</strong> {item.message}</span></button>)}{!validation.errors.length && !validation.warnings.length && <div className="flex gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 size={18} />No validation issues detected.</div>}</div></Panel><Panel title="Proposal summary"><dl className="grid gap-3 text-sm md:grid-cols-2">{[['Customer', quotation.customerSnapshot?.name], ['Destination', quotation.tripRequirements?.destination], ['Itinerary days', quotation.itinerary?.length], ['Hotels', quotation.hotelOptions?.length], ['Transport segments', quotation.transportOptions?.length], ['Attachments', quotation.attachments?.length], ['Component reference', formatQuotationCurrency(calculateReference(quotation))], ['Final price', quotation.manualPricing?.finalCustomerPrice ? formatQuotationCurrency(quotation.manualPricing.finalCustomerPrice) : 'Awaiting Admin']].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 font-semibold text-slate-900">{value ?? 'Not available'}</dd></div>)}</dl></Panel></>}
 
         <footer className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"><button type="button" disabled={activeStep === 0} onClick={() => setActiveStep((step) => step - 1)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 disabled:opacity-30"><ArrowLeft size={15} />Previous</button><span className="text-xs font-medium text-slate-500">Step {activeStep + 1} of {QUOTATION_V2_STEPS.length}</span><button type="button" disabled={activeStep === QUOTATION_V2_STEPS.length - 1} onClick={() => setActiveStep((step) => step + 1)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 disabled:opacity-30">Next<ArrowRight size={15} /></button></footer>
       </main>
@@ -264,6 +292,8 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
       setHotelUploadOpen(false);
     }} initialDestination={quotation.tripRequirements?.destination || ''} initialLocationName={quotation.hotelOptions?.[mediaTarget?.index]?.hotelName || ''} initialCity={quotation.hotelOptions?.[mediaTarget?.index]?.city || ''} />
 
-    {preview && <div className="fixed inset-0 z-[80] overflow-y-auto bg-slate-950/80 p-3 md:p-8"><div className="mx-auto mb-3 flex max-w-[1120px] justify-end"><button type="button" onClick={() => setPreview(false)} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-900"><X size={16} />Close preview</button></div><QuotationTemplateRenderer quotation={{ ...payload(), version: quotation.version || 1 }} templateKey={quotation.presentationSettings?.template} isDraft={!quotation.manualPricing?.finalizedAt} /></div>}
+    <TemplatePickerModal open={previewPickerOpen} quotation={previewQuotation} selectedKey={quotation.presentationSettings?.template || 'journey'} onSelect={(key) => { if (!frozen) setNested('presentationSettings', 'template', key); }} onClose={() => setPreviewPickerOpen(false)} onPreview={openTemplatePreview} mode="preview" />
+    <QuotationPreviewModal open={Boolean(previewTemplate)} quotation={previewQuotation} initialTemplateKey={previewTemplate} onClose={() => setPreviewTemplate(null)} onBack={() => { setPreviewTemplate(null); setPreviewPickerOpen(true); }} onDownload={downloadPreview} busy={Boolean(pdfProgress)} />
+    {pdfProgress && <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[110] flex items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-2xl"><Download size={17} />{pdfProgress.message || (pdfProgress.total ? `Building PDF page ${Math.min(pdfProgress.current, pdfProgress.total)} of ${pdfProgress.total}` : 'Preparing PDF pages')}</div>}
   </div>;
 }

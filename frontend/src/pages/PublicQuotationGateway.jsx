@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, Download, Loader2, Mail, MessageSquareText, 
 import { useParams } from 'react-router-dom';
 import QuotationTemplateRenderer from '../quotation-v2/QuotationTemplateRenderer.jsx';
 import { quotationPdfFileName } from '../quotation-v2/quotationV2.js';
+import { getQuotationTemplate } from '../quotation-v2/templateRegistry.js';
 import {
   decidePublicQuotationV2Api,
   getPublicQuotationV2Api,
@@ -24,6 +25,7 @@ export default function PublicQuotationGateway() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [pdfProgress, setPdfProgress] = useState('');
   const [decision, setDecision] = useState('');
   const [notes, setNotes] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -80,11 +82,16 @@ export default function PublicQuotationGateway() {
     if (!documentRef.current || !quotation?.share?.allowPdfDownload) return;
     setBusy(true); setError('');
     try {
-      const { exportElementToPdf } = await import('../utils/pdfGenerator.js');
-      await exportElementToPdf(documentRef.current, { filename: quotationPdfFileName(quotation), scale: 2 });
+      const { exportPagedElementToPdf } = await import('../utils/pdfGenerator.js');
+      setPdfProgress(`Preparing ${getQuotationTemplate(quotation.templateKey).name}...`);
+      await exportPagedElementToPdf(documentRef.current, {
+        filename: quotationPdfFileName(quotation, quotation.templateKey),
+        scale: 2,
+        onProgress: (state) => setPdfProgress(state.message)
+      });
       await trackPublicQuotationEventV2Api(token, { type: 'PDF_DOWNLOADED' });
-    } catch (downloadError) { setError(downloadError.message || 'Unable to download PDF.'); }
-    finally { setBusy(false); }
+    } catch (downloadError) { console.error('Public quotation PDF generation failed:', downloadError); setError('Unable to generate this quotation PDF. Please try again.'); }
+    finally { setBusy(false); setPdfProgress(''); }
   };
 
   if (loading) return <main className="flex min-h-[70vh] items-center justify-center bg-slate-50 text-sm text-slate-500"><Loader2 size={19} className="mr-2 animate-spin" />Opening your private journey proposal…</main>;
@@ -115,5 +122,6 @@ export default function PublicQuotationGateway() {
     </section>
 
     {verificationOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"><section role="dialog" aria-modal="true" aria-labelledby="verify-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><Mail size={22} className="text-emerald-600" /><h2 id="verify-title" className="mt-3 text-lg font-semibold text-slate-950">Verify recipient email</h2><p className="mt-1 text-sm leading-6 text-slate-600">We’ll send a short-lived code to the email recorded on this quotation{quotation.share?.recipientEmailHint ? ` (${quotation.share.recipientEmailHint})` : ''}.</p><label className="mt-5 block text-sm font-medium text-slate-700">Recipient email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 px-3 outline-none focus:border-emerald-500" /></label>{codeSent && <label className="mt-4 block text-sm font-medium text-slate-700">6-digit code<input inputMode="numeric" maxLength={6} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 px-3 tracking-[0.4em] outline-none focus:border-emerald-500" /></label>}<div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setVerificationOpen(false)} className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700">Cancel</button>{codeSent ? <button type="button" disabled={busy || code.length !== 6} onClick={verifyCode} className="min-h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-40">Verify and submit</button> : <button type="button" disabled={busy || !email} onClick={sendCode} className="min-h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-40">Send code</button>}</div></section></div>}
+    {pdfProgress && <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70"><div className="rounded-2xl bg-white px-8 py-7 text-center shadow-2xl"><Loader2 size={25} className="mx-auto animate-spin text-emerald-600" /><p className="mt-3 text-sm font-semibold text-slate-900">{pdfProgress}</p></div></div>}
   </main>;
 }

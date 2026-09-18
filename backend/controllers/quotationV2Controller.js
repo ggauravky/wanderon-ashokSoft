@@ -418,7 +418,6 @@ export const createQuotationShare = async (req, res) => {
       approvalEnabled: req.body?.approvalEnabled !== false
     });
     revision.status = 'SHARED';
-    revision.templateKey = templateKey;
     await revision.save();
     quotation.status = 'SHARED';
     quotation.commercialState = 'SHARED';
