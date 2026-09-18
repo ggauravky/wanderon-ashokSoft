@@ -1,10 +1,10 @@
-import React, { lazy, Suspense, useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
   Search, MapPin, Calendar, Users, ShieldCheck, HeartHandshake, 
   Compass, CreditCard, Star, Sparkles, CloudSun, ArrowRight,
-  TrendingUp, Clock, Mountain, Palmtree, Shuffle, ChevronRight,
+  TrendingUp, Clock, Mountain, Palmtree, Shuffle, ChevronRight, ChevronLeft,
   Plane, Heart, Backpack, CheckCircle2, PhoneCall, Image as ImageIcon
 } from 'lucide-react';
 
@@ -12,15 +12,14 @@ import TripCard from '../components/TripCard.jsx';
 import DestinationCard from '../components/DestinationCard.jsx';
 import CallbackForm from '../components/CallbackForm.jsx';
 import SEOHead from '../components/SEOHead.jsx';
+import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import HomeTripSection from '../components/HomeTripSection.jsx';
 import { HOME_SECTION_LIMITS, HOME_SECTIONS_META } from '../config/homeConfig.js';
 import { getOrganizationSchema, getTravelAgencySchema } from '../utils/seoSchemas.js';
-import { DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
+import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
+import { getCurrentSeason } from '../utils/weatherSeasonEngine.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
-import { getActiveMarketingBannersApi } from '../services/api.js';
-
-const AIPlannerModal = lazy(() => import('../components/AIPlannerModal.jsx'));
 
 const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
@@ -73,10 +72,10 @@ const Home = () => {
   const navigate = useNavigate();
   const { 
     timeContext = { greeting: 'Welcome Explorer', period: 'Day', heroTitle: 'Explore India & The World In Community.', heroSubtitle: 'Curated social group trips, high-altitude backpacking circuits & boutique mountain stays with certified captains.' }, 
-    season = { name: 'Autumn Expeditions', heroTag: 'Ideal Mountain Weather' }, 
-    recommendedTrips = [], 
-    tripsPool = [],
-    allTrips = [],
+    season = getCurrentSeason(), 
+    recommendedTrips = UPCOMING_TRIPS || [], 
+    tripsPool = UPCOMING_TRIPS || [],
+    allTrips = UPCOMING_TRIPS || [],
     getWeatherFor = () => null
   } = useTravelContext() || {};
 
@@ -86,19 +85,21 @@ const Home = () => {
   const [selectedMonth, setSelectedMonth] = useState("SEP '26");
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [plannerDestination, setPlannerDestination] = useState('Meghalaya');
-  const [homeHeroBanner, setHomeHeroBanner] = useState(null);
+  const destinationsScrollRef = useRef(null);
 
-  useEffect(() => {
-    let active = true;
-    getActiveMarketingBannersApi('home_hero')
-      .then((data) => { if (active) setHomeHeroBanner(data.banners?.[0] || null); })
-      .catch(() => { if (active) setHomeHeroBanner(null); });
-    return () => { active = false; };
-  }, []);
+  const handleDestinationsScroll = (direction) => {
+    if (destinationsScrollRef.current) {
+      const scrollAmount = destinationsScrollRef.current.clientWidth * 0.75;
+      destinationsScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   // Dynamic active catalog (excludes inactive/draft trips, merges live with knowledge base)
   const activeCatalog = useMemo(() => {
-    const pool = (tripsPool && tripsPool.length > 0) ? tripsPool : allTrips;
+    const pool = (tripsPool && tripsPool.length > 0) ? tripsPool : (allTrips && allTrips.length > 0 ? allTrips : UPCOMING_TRIPS);
     return (pool || []).filter(t => t && t.isActive !== false && t.status !== 'inactive');
   }, [tripsPool, allTrips]);
 
@@ -117,7 +118,7 @@ const Home = () => {
       }
     });
     const months = Array.from(monthSet);
-    return months.slice(0, 5);
+    return months.length > 0 ? months.slice(0, 5) : ["SEP '26", "OCT '26", "NOV '26", "DEC '26"];
   }, [activeCatalog]);
 
   // Trips Filtered for Upcoming Community Trips Section by Month (Enforcing Limit <= 6)
@@ -223,15 +224,11 @@ const Home = () => {
       />
 
       {/* AI Planner Modal */}
-      {isPlannerOpen && (
-        <Suspense fallback={null}>
-          <AIPlannerModal
-            isOpen
-            onClose={() => setIsPlannerOpen(false)}
-            initialDestination={plannerDestination}
-          />
-        </Suspense>
-      )}
+      <AIPlannerModal
+        isOpen={isPlannerOpen}
+        onClose={() => setIsPlannerOpen(false)}
+        initialDestination={plannerDestination}
+      />
 
       {/* ========================================================================= */}
       {/* 1. CINEMATIC TRAVEL HERO & DISCOVERY SEARCH */}
@@ -239,29 +236,30 @@ const Home = () => {
       <section className="relative min-h-[90vh] flex items-center justify-center pt-28 pb-20 overflow-hidden bg-slate-950">
         {/* Cinematic Backdrop Image */}
         <div className="absolute inset-0 z-0">
-          <picture className="block h-full w-full">
-            {homeHeroBanner?.mobileImageUrl && <source media="(max-width: 640px)" srcSet={homeHeroBanner.mobileImageUrl} />}
-            <img
-              src={homeHeroBanner?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2000&auto=format&fit=crop'}
-              alt={homeHeroBanner?.title || 'WanderLuxe mountain group travel landscape'}
-              className="w-full h-full object-cover opacity-45 scale-105 transition-transform duration-1000"
-            />
-          </picture>
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/50 to-[#f8fafc]" />
+          <img 
+            src="/hero-bg.jpg" 
+            alt="WanderLuxe sunset mountain expedition landscape" 
+            className="w-full h-full object-cover opacity-70 scale-105 transition-transform duration-1000"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-950/40 to-slate-950" />
         </div>
 
         <div className="travel-container relative z-10 text-center mt-[-10px]">
           
-          {/* Live Contextual Weather & Season Pill */}
+          {/* Live Contextual Season Pill */}
           <motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-xs font-black text-emerald-300 mb-6 shadow-xl"
+            className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-slate-950/70 backdrop-blur-xl border border-white/15 text-xs font-semibold text-slate-200 mb-6 shadow-xl"
           >
-            <CloudSun size={15} className="text-emerald-400" />
-            <span>{homeHeroBanner?.tag || season.heroTag || 'Autumn Clear Skies'}</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-emerald-400 font-bold">
+              {season?.heroTag && /\d{4}/.test(season.heroTag)
+                ? season.heroTag.replace(/\d{4}/, new Date().getFullYear())
+                : `${season?.name ? season.name.split('/')[0].trim() : 'Autumn'} Adventure Season ${new Date().getFullYear()}`}
+            </span>
             <span className="text-white/30">•</span>
-            <span className="text-white/90 font-medium">{timeContext.greeting || 'Welcome Explorer'}</span>
+            <span className="text-slate-300 font-medium">Curated Community Departures</span>
           </motion.div>
 
           {/* Main Hero Headline */}
@@ -269,135 +267,87 @@ const Home = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight mb-4 max-w-5xl mx-auto leading-[1.1]"
+            className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white tracking-tight mb-4 max-w-5xl mx-auto leading-[1.08]"
           >
-            {homeHeroBanner?.title || <>Explore India & The World <span className="text-emerald-400">In Community.</span></>}
+            Explore India & The World <br />
+            <span className="text-emerald-400">
+              In Community.
+            </span>
           </motion.h1>
 
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-sm sm:text-base md:text-lg text-slate-200 max-w-2xl mx-auto mb-8 font-medium"
+            className="text-sm sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto mb-10 font-medium leading-relaxed"
           >
-            {homeHeroBanner?.subtitle || 'Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.'}
+            Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.
           </motion.p>
 
-          {homeHeroBanner?.ctaText && homeHeroBanner?.ctaLink && (
-            /^https?:\/\//i.test(homeHeroBanner.ctaLink)
-              ? <a href={homeHeroBanner.ctaLink} className="mb-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg hover:bg-emerald-400">{homeHeroBanner.ctaText}<ArrowRight size={16}/></a>
-              : <Link to={homeHeroBanner.ctaLink} className="mb-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950 shadow-lg hover:bg-emerald-400">{homeHeroBanner.ctaText}<ArrowRight size={16}/></Link>
-          )}
-
-          {/* Contextual Discovery Search Card */}
+          {/* Sleek Unified Search Capsule */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-white/95 backdrop-blur-2xl p-4 sm:p-5 rounded-3xl shadow-2xl max-w-4xl mx-auto border border-white/60 text-left"
+            className="bg-slate-950/70 backdrop-blur-2xl p-2 pl-5 sm:pl-6 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.6)] max-w-3xl mx-auto border border-white/20 text-left"
           >
-            <form onSubmit={handleSearchSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                
-                {/* Destination Input */}
-                <div className="md:col-span-2 relative">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
-                    Where do you want to go?
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Spiti Valley, Bali, Meghalaya, Kasol..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {/* Duration Filter */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
-                    Duration
-                  </label>
-                  <select
-                    value={durationFilter}
-                    onChange={(e) => setDurationFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="all">All Durations</option>
-                    <option value="weekend">Weekend (2–3 Days)</option>
-                    <option value="short">Short Break (4–5 Days)</option>
-                    <option value="expedition">Expedition (6–8 Days)</option>
-                  </select>
-                </div>
-
-                {/* Budget Filter */}
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1 block">
-                    Budget Level
-                  </label>
-                  <select
-                    value={budgetFilter}
-                    onChange={(e) => setBudgetFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="all">All Budgets</option>
-                    <option value="under15k">Under ₹15,000</option>
-                    <option value="15k_25k">₹15,000 – ₹25,000</option>
-                    <option value="above35k">Premium ₹35,000+</option>
-                  </select>
-                </div>
+            <form onSubmit={handleSearchSubmit} className="flex items-center justify-between gap-3">
+              
+              {/* Search Icon & Input */}
+              <div className="flex items-center gap-3 flex-grow min-w-0">
+                <Search className="text-emerald-400 shrink-0" size={19} />
+                <input 
+                  type="text" 
+                  placeholder="Where to, or ask AI planner (e.g. 7-day Spiti road trip)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-slate-100 placeholder-slate-400 text-xs sm:text-sm font-medium outline-none border-none focus:outline-none focus:ring-0 focus:border-none focus:shadow-none py-2"
+                  style={{ outline: 'none', boxShadow: 'none' }}
+                />
               </div>
 
-              {/* Bottom Action Row */}
-              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const pool = activeCatalog;
-                      const pick = pool[Math.floor(Math.random() * pool.length)];
-                      if (pick) navigate(`/trip/${pick.slug || pick.id}`);
-                    }}
-                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Shuffle size={13} className="text-emerald-500" /> Surprise Me
-                  </button>
-
-                  <Link
-                    to={`/plan?destination=${encodeURIComponent(searchQuery || 'Meghalaya')}`}
-                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-black rounded-xl transition-all border border-emerald-200 flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Sparkles size={13} /> Custom Route with AI
-                  </Link>
-                </div>
+              {/* Right Actions: Classic Search Link + Plan with AI Primary Pill Button */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleSearchSubmit}
+                  className="hidden sm:inline-block px-3.5 py-2 text-slate-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Classic Search
+                </button>
 
                 <button 
-                  type="submit"
-                  className="w-full sm:w-auto px-7 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                  type="button"
+                  onClick={() => openAIPlannerFor(searchQuery || 'Meghalaya')}
+                  className="px-5 sm:px-6 py-2.5 sm:py-3 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs sm:text-sm rounded-full transition-all shadow-[0_0_20px_rgba(52,211,153,0.4)] hover:shadow-[0_0_25px_rgba(52,211,153,0.6)] flex items-center justify-center whitespace-nowrap cursor-pointer"
                 >
-                  <Search size={15} /> Find 50+ Packages
+                  Plan with AI
                 </button>
               </div>
+
             </form>
           </motion.div>
 
-          {/* Trending Search Chips */}
-          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap text-xs text-slate-300">
-            <span className="font-bold text-slate-400 flex items-center gap-1">
-              <TrendingUp size={13} className="text-emerald-400" /> Trending:
-            </span>
-            {TRENDING_SEARCH_CHIPS.map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => navigate(`/trips?q=${chip.query}`)}
-                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold rounded-lg backdrop-blur-md border border-white/15 transition-all cursor-pointer"
-              >
-                {chip.label}
-              </button>
+          {/* Trending Search Chips with Bullet Dots */}
+          <div className="mt-6 flex items-center justify-center gap-2.5 flex-wrap text-xs text-slate-400 font-medium">
+            <span className="text-slate-400 font-medium">Trending:</span>
+            {[
+              { label: 'Spiti Valley', query: 'spiti' },
+              { label: 'Bali & Penida', query: 'bali' },
+              { label: 'Kashmir', query: 'kashmir' },
+              { label: 'Ladakh', query: 'ladakh' },
+              { label: 'Meghalaya', query: 'meghalaya' }
+            ].map((chip, idx, arr) => (
+              <React.Fragment key={chip.label}>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/trips?q=${chip.query}`)}
+                  className="text-slate-200 hover:text-white font-semibold transition-colors cursor-pointer"
+                >
+                  {chip.label}
+                </button>
+                {idx < arr.length - 1 && <span className="text-slate-600 font-bold">•</span>}
+              </React.Fragment>
             ))}
           </div>
 
@@ -407,7 +357,7 @@ const Home = () => {
       {/* ========================================================================= */}
       {/* 2. TRUST & SOCIAL PROOF STRIP */}
       {/* ========================================================================= */}
-      <section className="bg-slate-900 text-white py-5 border-y border-slate-800 relative z-20 shadow-md">
+      <section className="bg-slate-950 text-white py-5 border-y border-white/10 relative z-20 shadow-md">
         <div className="travel-container grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-center text-xs md:text-sm font-bold">
           <div className="flex items-center justify-center gap-2">
             <Star className="text-amber-400 fill-amber-400 shrink-0" size={17} />
@@ -429,47 +379,123 @@ const Home = () => {
       </section>
 
       {/* ========================================================================= */}
-      {/* 3. POPULAR DESTINATIONS / WHERE NEXT? */}
+      {/* 3. UPCOMING COMMUNITY TRIPS (WITH DEPARTURE MONTH TABS) */}
+      {/* ========================================================================= */}
+      <HomeTripSection
+        id={HOME_SECTIONS_META.community.id}
+        eyebrow={HOME_SECTIONS_META.community.eyebrow}
+        title={HOME_SECTIONS_META.community.title}
+        description={HOME_SECTIONS_META.community.description}
+        trips={upcomingCommunityTrips}
+        totalAvailable={activeCatalog.length}
+        limit={HOME_SECTIONS_META.community.limit}
+        viewAllBaseLabel={HOME_SECTIONS_META.community.viewAllBaseLabel}
+        viewAllPath={HOME_SECTIONS_META.community.viewAllPath}
+        bgClass={HOME_SECTIONS_META.community.bgClass}
+        showWeather={true}
+        headerChildren={
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+            {availableMonths.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setSelectedMonth(m)}
+                className={`px-3.5 py-1.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                  selectedMonth === m
+                    ? 'bg-slate-900 text-white shadow-md'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        }
+      />
+
+      {/* ========================================================================= */}
+      {/* 4. POPULAR DESTINATIONS / WHERE NEXT? */}
       {/* ========================================================================= */}
       <section className="travel-section">
         <div className="travel-container">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-8">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 mb-6 sm:mb-8">
             <div>
               <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block mb-1">
                 Explore Destinations
               </span>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
                 Popular Mountain & Island Hubs
               </h2>
             </div>
-            <Link 
-              to="/trips" 
-              className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1 shrink-0"
-            >
-              Browse All 50+ Circuits <ArrowRight size={14} />
-            </Link>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleDestinationsScroll('left')}
+                className="hidden sm:flex items-center justify-center w-9 h-9 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300 transition-all shadow-xs cursor-pointer active:scale-95"
+                aria-label="Scroll left"
+              >
+                <ChevronLeft size={18} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDestinationsScroll('right')}
+                className="hidden sm:flex items-center justify-center w-9 h-9 rounded-2xl bg-white border border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300 transition-all shadow-xs cursor-pointer active:scale-95"
+                aria-label="Scroll right"
+              >
+                <ChevronRight size={18} />
+              </button>
+
+              <Link 
+                to="/trips" 
+                className="hidden sm:inline-flex items-center gap-1.5 text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200/80 px-4 py-2 rounded-2xl transition-all shadow-2xs group shrink-0"
+              >
+                <span>Browse All 50+ Circuits</span>
+                <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-            {DESTINATIONS.slice(0, 8).map(dest => {
+          <div 
+            ref={destinationsScrollRef}
+            className="flex overflow-x-auto snap-x snap-mandatory gap-4 sm:gap-5 pb-4 -mx-4 px-4 sm:mx-0 sm:px-0 scroll-smooth [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {DESTINATIONS.map(dest => {
               const activeCount = getDestinationPackageCount(dest.name, activeCatalog);
               const destWeather = getWeatherFor(dest.name);
               return (
-                <DestinationCard 
-                  key={dest.id} 
-                  destination={dest} 
-                  activeCount={activeCount}
-                  weather={destWeather}
-                  aspect="aspect-[3/4]"
-                />
+                <div 
+                  key={dest.id}
+                  className="w-[70vw] max-w-[260px] sm:w-[240px] md:w-[260px] lg:w-[270px] shrink-0 snap-start flex flex-col"
+                >
+                  <DestinationCard 
+                    destination={dest} 
+                    activeCount={activeCount}
+                    weather={destWeather}
+                    aspect="aspect-[3/4]"
+                  />
+                </div>
               );
             })}
+          </div>
+
+          {/* Mobile View All button below cards */}
+          <div className="sm:hidden mt-4 text-center">
+            <Link
+              to="/trips"
+              className="inline-flex items-center justify-center gap-2 w-full py-3 bg-white border border-slate-200 text-slate-900 rounded-2xl text-xs font-black uppercase tracking-wider shadow-xs hover:bg-slate-50 active:scale-[0.99] transition-all"
+            >
+              <span>Browse All 50+ Circuits</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
         </div>
       </section>
 
       {/* ========================================================================= */}
-      {/* 4. EXPLORE TRAVEL STYLES */}
+      {/* 5. EXPLORE TRAVEL STYLES */}
       {/* ========================================================================= */}
       <section className="py-12 bg-white border-y border-slate-200/80">
         <div className="travel-container">
@@ -518,41 +544,6 @@ const Home = () => {
           </div>
         </div>
       </section>
-
-      {/* ========================================================================= */}
-      {/* ========================================================================= */}
-      {/* 5. UPCOMING COMMUNITY TRIPS (WITH DEPARTURE MONTH TABS) */}
-      {/* ========================================================================= */}
-      <HomeTripSection
-        id={HOME_SECTIONS_META.community.id}
-        eyebrow={HOME_SECTIONS_META.community.eyebrow}
-        title={HOME_SECTIONS_META.community.title}
-        description={HOME_SECTIONS_META.community.description}
-        trips={upcomingCommunityTrips}
-        totalAvailable={activeCatalog.length}
-        limit={HOME_SECTIONS_META.community.limit}
-        viewAllBaseLabel={HOME_SECTIONS_META.community.viewAllBaseLabel}
-        viewAllPath={HOME_SECTIONS_META.community.viewAllPath}
-        bgClass={HOME_SECTIONS_META.community.bgClass}
-        headerChildren={
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-            {availableMonths.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setSelectedMonth(m)}
-                className={`px-3.5 py-1.5 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                  selectedMonth === m
-                    ? 'bg-slate-900 text-white shadow-md'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        }
-      />
 
       {/* ========================================================================= */}
       {/* 6. EXPLORE INDIA CIRCUITS */}

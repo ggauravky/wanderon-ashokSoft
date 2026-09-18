@@ -11,49 +11,100 @@ import {
 import SEOHead from '../components/SEOHead.jsx';
 import Breadcrumbs from '../components/Breadcrumbs.jsx';
 import WeatherBadge from '../components/WeatherBadge.jsx';
+import TripCard from '../components/TripCard.jsx';
 import AIPlannerModal from '../components/AIPlannerModal.jsx';
 import RequestCallbackModal from '../components/RequestCallbackModal.jsx';
 import ItineraryDayGallery from '../components/ItineraryDayGallery.jsx';
 import { getProductTripSchema, getFAQSchema } from '../utils/seoSchemas.js';
+import { UPCOMING_TRIPS } from '../constants/mockData.js';
+import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import { getDestinationWeather, getCurrentSeason } from '../utils/weatherSeasonEngine.js';
 import { recordTripView, toggleWishlistItem, getWishlistIds } from '../utils/userHistory.js';
 import { generatePackingChecklist, getTripPersonaBadges, getWhyVisitNow } from '../utils/travelContextEngine.js';
-import { API_BASE_URL } from '../services/apiConfig.js';
+
+const getAllStaticTrips = () => {
+  if (typeof travelKnowledgeService.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.getAllStaticTrips();
+  }
+  if (typeof travelKnowledgeService.default?.getAllStaticTrips === 'function') {
+    return travelKnowledgeService.default.getAllStaticTrips();
+  }
+  return UPCOMING_TRIPS || [];
+};
+
+const normalizeTripObject = (t) => {
+  if (typeof travelKnowledgeService.normalizeTripObject === 'function') {
+    return travelKnowledgeService.normalizeTripObject(t);
+  }
+  if (typeof travelKnowledgeService.default?.normalizeTripObject === 'function') {
+    return travelKnowledgeService.default.normalizeTripObject(t);
+  }
+  return t;
+};
 
 const TripDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [trip, setTrip] = useState({ title: '', slug: '', batches: [], availableBatches: [], gallery: [], itinerary: [], inclusions: [], exclusions: [], faqs: [], sharingPricing: {} });
-  const [tripLoading, setTripLoading] = useState(true);
-  const [tripUnavailable, setTripUnavailable] = useState(false);
+  // Find trip from static catalog or initialize
+  const [trip, setTrip] = useState(() => {
+    const staticList = typeof getAllStaticTrips === 'function' ? getAllStaticTrips() : (UPCOMING_TRIPS || []).map(t => typeof normalizeTripObject === 'function' ? normalizeTripObject(t) : t);
+    const found = (staticList || []).find(
+      (t) => String(t.id) === String(id) || String(t._id) === String(id) || t.slug === id || t.id === parseInt(id)
+    );
+    const resolved = found || (staticList && staticList[0]) || (typeof normalizeTripObject === 'function' ? normalizeTripObject(UPCOMING_TRIPS[0]) : UPCOMING_TRIPS[0]);
+    return typeof normalizeTripObject === 'function' ? normalizeTripObject(resolved) : resolved;
+  });
 
   // Fetch live trip from backend if it was created in Admin
   useEffect(() => {
     const fetchLiveTrip = async () => {
       if (!id) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/trips/${id}`);
-        if (!res.ok) throw new Error('Trip unavailable');
-        const json = await res.json();
-        if (!json.data) throw new Error('Trip unavailable');
-        setTrip({ ...json.data, availableBatches: Array.isArray(json.data.batches) ? json.data.batches : [] });
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/trips/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            const normalized = typeof normalizeTripObject === 'function' ? normalizeTripObject(json.data) : json.data;
+            setTrip(normalized);
+          }
+        }
       } catch (err) {
-        setTripUnavailable(true);
-      } finally {
-        setTripLoading(false);
+        // Fallback to static catalog already in state
       }
     };
     fetchLiveTrip();
   }, [id]);
 
-  const weather = trip?.weather || (trip?.location ? getDestinationWeather(trip.location) : (trip?.destination ? getDestinationWeather(trip.destination) : getDestinationWeather('meghalaya')));
-  const season = getCurrentSeason ? getCurrentSeason() : { name: 'Autumn', weatherAdvice: 'Pleasant season' };
-
-  const [selectedBatch, setSelectedBatch] = useState(null);
+  const [liveWeather, setLiveWeather] = useState(() => {
+    const targetLoc = trip?.location || trip?.destination || 'meghalaya';
+    return getDestinationWeather(targetLoc);
+  });
 
   useEffect(() => {
-    setSelectedBatch(trip?.availableBatches?.find((batch) => batch.status !== 'sold_out') || trip?.availableBatches?.[0] || null);
+    const targetLoc = trip?.location || trip?.destination || 'meghalaya';
+    setLiveWeather(getDestinationWeather(targetLoc));
+
+    const handleUpdate = () => {
+      const updatedLoc = trip?.location || trip?.destination || 'meghalaya';
+      setLiveWeather(getDestinationWeather(updatedLoc));
+    };
+
+    window.addEventListener('wanderluxeWeatherUpdate', handleUpdate);
+    return () => window.removeEventListener('wanderluxeWeatherUpdate', handleUpdate);
+  }, [trip]);
+
+  const weather = liveWeather;
+  const season = getCurrentSeason ? getCurrentSeason() : { name: 'Autumn', weatherAdvice: 'Pleasant season' };
+
+  const [selectedBatch, setSelectedBatch] = useState(
+    trip?.availableBatches?.[0] || { dates: trip?.nextBatch || '15 Sep - 20 Sep, 2026', seatsLeft: 6, status: 'Available' }
+  );
+
+  useEffect(() => {
+    if (trip?.availableBatches && trip.availableBatches.length > 0) {
+      setSelectedBatch(trip.availableBatches[0]);
+    }
   }, [trip]);
 
   const [occupancy, setOccupancy] = useState('Double Sharing');
@@ -64,6 +115,42 @@ const TripDetails = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
   const [isCallbackOpen, setIsCallbackOpen] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
+
+  // Dynamic Scrollspy for Sticky Section Navigation Tabs
+  useEffect(() => {
+    const sectionIds = ['overview', 'itinerary', 'packing', 'inclusions', 'faqs'];
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 180; // Offset for header & sticky nav
+
+      for (let i = sectionIds.length - 1; i >= 0; i--) {
+        const sectionEl = document.getElementById(sectionIds[i]);
+        if (sectionEl) {
+          const sectionTop = sectionEl.offsetTop;
+          if (scrollPosition >= sectionTop) {
+            setActiveTab(sectionIds[i]);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const handleTabClick = (e, targetId) => {
+    e.preventDefault();
+    setActiveTab(targetId);
+    const element = document.getElementById(targetId);
+    if (element) {
+      const yOffset = -140;
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
 
   // Contextual Helpers
   const whyVisitNow = getWhyVisitNow(trip, season, weather);
@@ -120,12 +207,12 @@ const TripDetails = () => {
 
   // Pricing calculations based on occupancy — reads sharingPricing from trip if available
   const getPerPersonPrice = () => {
-    const sp = selectedBatch?.pricing || trip.sharingPricing || {};
+    const sp = trip.sharingPricing || selectedBatch?.pricing || {};
     if (occupancy === 'Single Sharing') {
-      return Number(sp.singleSharing) || Number(trip.price) || 0;
+      return Number(sp.singleSharing) || (Number(trip.price) + 3500);
     }
     if (occupancy === 'Triple Sharing') {
-      return Number(sp.tripleSharing) || Number(trip.price) || 0;
+      return Number(sp.tripleSharing) || Math.max(1000, Number(trip.price) - 1500);
     }
     // Double Sharing (default)
     return Number(sp.doubleSharing) || Number(trip.price);
@@ -134,6 +221,10 @@ const TripDetails = () => {
   const perPersonPrice = getPerPersonPrice();
   const totalPrice = perPersonPrice * travelers;
   const monthlyEmi = Math.round(totalPrice / 6);
+
+  // Similar Trips (excluding current trip)
+  const similarTrips = UPCOMING_TRIPS.filter((t) => t.id !== trip.id && (t.category === trip.category || t.destination === trip.destination)).slice(0, 3);
+  const fallbackSimilarTrips = similarTrips.length > 0 ? similarTrips : UPCOMING_TRIPS.filter((t) => t.id !== trip.id).slice(0, 3);
 
   const tripFaqs = [
     {
@@ -154,7 +245,6 @@ const TripDetails = () => {
   const faqSchema = getFAQSchema(tripFaqs);
 
   const handleProceedToBooking = () => {
-    if (!selectedBatch || selectedBatch.status === 'sold_out') return;
     navigate(`/book/${trip.slug || trip.id}`, {
       state: {
         tripId: trip.id,
@@ -171,9 +261,6 @@ const TripDetails = () => {
       }
     });
   };
-
-  if (tripLoading) return <div className="min-h-screen bg-brand-light pt-32 text-center text-sm text-slate-500">Loading trip…</div>;
-  if (tripUnavailable) return <div className="min-h-screen bg-brand-light px-4 pt-32 text-center"><h1 className="text-2xl font-black text-slate-900">Trip unavailable</h1><p className="mt-2 text-sm text-slate-600">This trip is no longer available for public booking.</p><Link to="/destinations" className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white">Browse available trips</Link></div>;
 
   return (
     <div className="min-h-screen bg-brand-light pt-24 pb-32 lg:pb-24">
@@ -315,22 +402,31 @@ const TripDetails = () => {
         </div>
 
         {/* Sticky Section Navigation Header */}
-        <div className="sticky top-16 z-30 mb-8 bg-white/95 backdrop-blur-md p-2 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-2 overflow-x-auto">
+        <div className="sticky top-16 z-30 mb-8 bg-white/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/80 shadow-md flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           {[
             { id: 'overview', label: 'Overview' },
             { id: 'itinerary', label: 'Day-by-Day Itinerary' },
             { id: 'packing', label: 'Packing Assistant' },
             { id: 'inclusions', label: 'Inclusions & Exclusions' },
             { id: 'faqs', label: 'Trip FAQs' }
-          ].map((sec) => (
-            <a
-              key={sec.id}
-              href={`#${sec.id}`}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-black text-slate-700 hover:text-emerald-600 hover:bg-slate-50 transition-colors whitespace-nowrap"
-            >
-              {sec.label}
-            </a>
-          ))}
+          ].map((sec) => {
+            const isActive = activeTab === sec.id;
+            return (
+              <a
+                key={sec.id}
+                href={`#${sec.id}`}
+                onClick={(e) => handleTabClick(e, sec.id)}
+                className={`px-4 py-2 rounded-xl text-xs font-black transition-all duration-200 whitespace-nowrap cursor-pointer flex items-center gap-2 ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-md shadow-slate-950/20 scale-[1.02]'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-bold'
+                }`}
+              >
+                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+                {sec.label}
+              </a>
+            );
+          })}
         </div>
 
         {/* "Why Visit Now?" Contextual Banner */}
@@ -559,6 +655,39 @@ const TripDetails = () => {
                 </ul>
               </div>
             </div>
+
+            {/* Trip FAQs Accordion */}
+            <div id="faqs" className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900">Trip FAQs</h3>
+                  <p className="text-xs text-slate-500 font-medium">Everything you need to know before booking this expedition</p>
+                </div>
+                <HelpCircle size={20} className="text-emerald-600" />
+              </div>
+
+              <div className="space-y-3">
+                {tripFaqs.map((faq, idx) => {
+                  const isOpen = openFaq === idx;
+                  return (
+                    <div key={idx} className="border border-slate-200 rounded-2xl overflow-hidden transition-all">
+                      <button
+                        onClick={() => setOpenFaq(isOpen ? null : idx)}
+                        className="w-full p-4 flex items-center justify-between text-left bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        <span className="text-xs md:text-sm font-black text-slate-900 pr-2">{faq.q}</span>
+                        {isOpen ? <ChevronUp size={18} className="text-slate-500 shrink-0" /> : <ChevronDown size={18} className="text-slate-500 shrink-0" />}
+                      </button>
+                      {isOpen && (
+                        <div className="p-4 bg-white text-xs md:text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-100">
+                          {faq.a}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Right Column: Sticky Booking Widget */}
@@ -585,12 +714,16 @@ const TripDetails = () => {
                   Select Upcoming Departure Batch
                 </label>
                 <div className="space-y-2">
-                  {(trip.availableBatches || []).map((batch, idx) => (
+                  {(trip.availableBatches || [
+                    { dates: '15 Sep - 20 Sep, 2026', seatsLeft: 4, status: 'Filling Fast' },
+                    { dates: '25 Sep - 30 Sep, 2026', seatsLeft: 8, status: 'Available' },
+                    { dates: '05 Oct - 10 Oct, 2026', seatsLeft: 12, status: 'Available' }
+                  ]).map((batch, idx) => (
                     <div
                       key={idx}
                       onClick={() => setSelectedBatch(batch)}
                       className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between text-xs ${
-                        selectedBatch?.dates === batch.dates
+                        selectedBatch.dates === batch.dates
                           ? 'border-emerald-500 bg-emerald-50/50 font-black text-slate-900 ring-2 ring-emerald-500/20'
                           : 'border-slate-200 hover:border-slate-300 font-bold text-slate-700'
                       }`}
@@ -600,11 +733,10 @@ const TripDetails = () => {
                         <span>{batch.dates}</span>
                       </div>
                       <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-900 text-white">
-                        {Math.max(0, Number(batch.capacity || 0) - Number(batch.bookedSeats || 0))} seats
+                        {batch.seatsLeft} seats
                       </span>
                     </div>
                   ))}
-                  {(trip.availableBatches || []).length === 0 && <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs font-semibold text-slate-500">No departures currently available.</div>}
                 </div>
               </div>
 
@@ -697,6 +829,28 @@ const TripDetails = () => {
         </div>
 
         {/* Similar Expeditions Section */}
+        <div className="mt-20 pt-10 border-t border-slate-200/80">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-emerald-600 block">
+                Related Itineraries
+              </span>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900">
+                You May Also Like
+              </h2>
+            </div>
+            <Link to="/destinations" className="text-xs font-black text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+              Browse All <ArrowRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {fallbackSimilarTrips.map((sTrip) => (
+              <TripCard key={sTrip.id} trip={sTrip} showWeather={false} />
+            ))}
+          </div>
+        </div>
+
         {/* Mobile Sticky Bottom Conversion Bar (Visible on mobile/tablet < 1024px) */}
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 py-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-3">
           <div>
