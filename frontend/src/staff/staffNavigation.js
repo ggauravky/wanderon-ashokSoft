@@ -171,6 +171,16 @@ export const STAFF_MODULES = Object.freeze([
     exact: true
   }),
   Object.freeze({
+    id: 'marketing_lead_analytics',
+    label: 'Lead & Conversion Analytics',
+    path: '/staff/marketing/lead-analytics',
+    icon: 'marketing_lead_analytics',
+    roles: Object.freeze(['super_admin', 'admin', 'marketing']),
+    section: 'marketing',
+    description: 'Measure first-touch acquisition through paid booking outcomes.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'marketing_campaigns',
     label: 'Campaigns',
     path: '/staff/marketing/campaigns',

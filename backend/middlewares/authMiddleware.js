@@ -78,6 +78,7 @@ export const ACTION_PERMISSIONS = Object.freeze({
   'marketing:manage_campaigns': ['super_admin', 'admin', 'marketing'],
   'marketing:manage_banners': ['super_admin', 'admin', 'marketing'],
   'marketing:view_dashboard': ['super_admin', 'admin', 'marketing'],
+  'marketing:view_lead_analytics': ['super_admin', 'admin', 'marketing'],
   'sales:view_dashboard': ['super_admin', 'admin', 'sales'],
   'reports:view': ['super_admin', 'admin'],
   'users:manage_roles': ['super_admin', 'admin']

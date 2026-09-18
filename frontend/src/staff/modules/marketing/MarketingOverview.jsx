@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, ArrowRight, CalendarClock, Image, Megaphone, RefreshCw } from 'lucide-react';
-import { getMarketingDashboardApi } from '../../../services/api';
+import { AlertCircle, ArrowRight, BarChart3, CalendarClock, Image, Megaphone, RefreshCw } from 'lucide-react';
+import { getMarketingDashboardApi, getMarketingLeadAnalyticsApi } from '../../../services/api';
 import { getApiErrorMessage } from '../../../services/apiConfig';
 import { formatDate, StatusBadge } from './marketingHelpers';
 
@@ -12,6 +12,7 @@ export default function MarketingOverview() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [conversionSnapshot, setConversionSnapshot] = useState(null);
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -25,13 +26,15 @@ export default function MarketingOverview() {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { getMarketingLeadAnalyticsApi({ range: '30d' }).then((result) => setConversionSnapshot(result.summary)).catch(() => setConversionSnapshot(null)); }, []);
   const recent = [...(dashboard?.recentCampaigns || []).map((item) => ({ ...item, kind: 'Campaign' })), ...(dashboard?.recentBanners || []).map((item) => ({ ...item, kind: 'Banner' }))].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 6);
 
   return <div className="space-y-7">
     <section className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.12em] text-emerald-700">Marketing</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Marketing operations overview</h1><p className="mt-2 max-w-2xl text-sm text-slate-600">Plan campaigns and control eligible website promotions from persistent records.</p></div><button type="button" onClick={load} disabled={loading} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={15} className={loading ? 'animate-spin' : ''}/>Refresh</button></section>
     {error ? <section className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center"><AlertCircle className="mx-auto text-rose-600"/><h2 className="mt-3 font-semibold text-rose-900">Unable to load Marketing overview.</h2><p className="mt-1 text-sm text-rose-700">{error}</p><button type="button" onClick={load} className="mt-4 rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white">Retry</button></section> : <>
       <section><h2 className="mb-3 text-sm font-semibold text-slate-950">Current inventory</h2><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Campaigns" value={loading ? '—' : dashboard?.totalCampaigns} hint={`${dashboard?.activeCampaigns || 0} active`} /><Metric label="Scheduled campaigns" value={loading ? '—' : dashboard?.scheduledCampaigns} hint="Starting in the future"/><Metric label="Banners" value={loading ? '—' : dashboard?.totalBanners} hint={`${dashboard?.activeBanners || 0} currently eligible`}/><Metric label="Expired promotions" value={loading ? '—' : dashboard?.expiredPromotions} hint={`${dashboard?.scheduledBanners || 0} scheduled banners`}/></div></section>
-      <section><h2 className="mb-3 text-sm font-semibold text-slate-950">Quick access</h2><div className="grid gap-3 md:grid-cols-3"><QuickLink to="/staff/marketing/campaigns" icon={Megaphone} title="Campaigns" description="Create and schedule marketing campaign records."/><QuickLink to="/staff/marketing/banners" icon={Image} title="Banners & Promotions" description="Control homepage and promotional placements."/><QuickLink icon={Image} title="Media Library" description="Choose approved media safely from within the banner editor."/></div></section>
+      <section><h2 className="mb-3 text-sm font-semibold text-slate-950">Quick access</h2><div className="grid gap-3 md:grid-cols-3"><QuickLink to="/staff/marketing/lead-analytics" icon={BarChart3} title="Lead & Conversion Analytics" description="Measure acquisition sources through real paid bookings."/><QuickLink to="/staff/marketing/campaigns" icon={Megaphone} title="Campaigns" description="Create and schedule marketing campaign records."/><QuickLink to="/staff/marketing/banners" icon={Image} title="Banners & Promotions" description="Control homepage and promotional placements."/></div></section>
+      {conversionSnapshot && <section><h2 className="mb-3 text-sm font-semibold text-slate-950">Last 30 Days conversion snapshot</h2><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric label="Potential Leads" value={conversionSnapshot.potentialLeads} hint="Persisted Lead cohort"/><Metric label="Paying Customers" value={conversionSnapshot.payingCustomers} hint="Payment received"/><Metric label="Lead to Paid" value={`${Number(conversionSnapshot.leadToPaidRate || 0).toFixed(1)}%`} hint="Cohort conversion"/><Metric label="Paid Revenue" value={new Intl.NumberFormat('en-IN', { style: 'currency', currency: conversionSnapshot.currency || 'INR', maximumFractionDigits: 0 }).format(conversionSnapshot.paidRevenue || 0)} hint="Actual collected amount"/></div></section>}
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-200 px-5 py-4"><h2 className="text-sm font-semibold text-slate-950">Recently updated</h2><p className="mt-1 text-xs text-slate-500">Real campaign and banner records ordered by latest update.</p></div><div className="divide-y divide-slate-100">{recent.length ? recent.map((item) => <div key={`${item.kind}-${item._id}`} className="flex items-center gap-3 px-5 py-3"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">{item.kind === 'Campaign' ? <Megaphone size={15}/> : <Image size={15}/>}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-slate-900">{item.name || item.title}</p><p className="text-xs text-slate-500">{item.kind} · Updated {formatDate(item.updatedAt)}</p></div><StatusBadge status={item.displayStatus || item.status}/></div>) : <div className="px-5 py-10 text-center text-sm text-slate-500"><CalendarClock className="mx-auto mb-2" size={20}/>No marketing records yet.</div>}</div></section>
     </>}
   </div>;

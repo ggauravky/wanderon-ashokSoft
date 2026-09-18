@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle2, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Phone, MapPin, Send, CheckCircle2 } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import Breadcrumbs from '../components/Breadcrumbs';
 import { getFAQSchema } from '../utils/seoSchemas';
@@ -18,25 +17,28 @@ const Contact = () => {
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [openFaq, setOpenFaq] = useState(null);
+  const [submitError, setSubmitError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !email || !message) return;
+    if (!name || !email || !phone || !message) return;
     setIsSubmitting(true);
+    setSubmitError('');
     try {
       await createLeadApi({
         name,
         email,
-        phone: phone || '+91 8542036499',
+        phone,
+        leadType: 'general',
+        source: 'contact_page',
         destination: subject,
         message
       });
+      setSubmitted(true);
     } catch (err) {
-      console.warn('Lead submission fallback:', err.message);
+      setSubmitError(err.message || 'Unable to send your message. Please review your details and try again.');
     } finally {
       setIsSubmitting(false);
-      setSubmitted(true);
     }
   };
 
@@ -133,6 +135,7 @@ const Contact = () => {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {submitError && <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800">{submitError}</div>}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-brand-navy uppercase mb-1">Your Full Name</label>
@@ -199,9 +202,10 @@ const Contact = () => {
 
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     className="w-full py-4 bg-brand-emerald text-white rounded-2xl font-extrabold text-sm hover:bg-brand-teal transition-all shadow-lg flex items-center justify-center gap-2"
                   >
-                    Send Message to Captains <Send size={16} />
+                    {isSubmitting ? 'Sending…' : 'Send Message to Captains'} <Send size={16} />
                   </button>
                 </form>
               )}

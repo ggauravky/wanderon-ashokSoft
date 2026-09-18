@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, Mail, User, MapPin, Calendar, CheckCircle2, Send, ShieldCheck, Sparkles, MessageSquare } from 'lucide-react';
+import { Phone, Mail, User, MapPin, Calendar, CheckCircle2, Send, ShieldCheck, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { createLeadApi } from '../services/api.js';
 
@@ -47,8 +47,8 @@ const CallbackForm = ({
     e.preventDefault();
     setError('');
 
-    if (!formData.name.trim() || !formData.phone.trim()) {
-      setError('Please provide your name and phone number.');
+    if (!formData.name.trim() || !formData.phone.trim() || !formData.email.trim()) {
+      setError('Please provide your name, email, and phone number.');
       return;
     }
 
@@ -57,12 +57,13 @@ const CallbackForm = ({
       await createLeadApi({
         name: formData.name.trim(),
         phone: formData.phone.trim(),
-        email: formData.email.trim() || undefined,
+        email: formData.email.trim(),
+        leadType: 'trip_enquiry',
         destination: formData.destination,
-        preferredDates: formData.preferredMonth,
+        travelMonth: formData.preferredMonth,
         travelersCount: Number(formData.travelers) || 2,
-        notes: formData.message.trim() || `Interested in custom travel to ${formData.destination} for ${formData.travelers} travelers.`,
-        source: 'Website Lead Form'
+        message: formData.message.trim() || `Interested in custom travel to ${formData.destination} for ${formData.travelers} travelers.`,
+        source: 'website_lead_form'
       });
       setSuccess(true);
     } catch (err) {
@@ -167,6 +168,7 @@ const CallbackForm = ({
                     <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
                       type="email"
+                      required
                       placeholder="e.g. rahul@example.com"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}

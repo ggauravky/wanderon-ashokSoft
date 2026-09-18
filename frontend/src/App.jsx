@@ -6,6 +6,7 @@ import RoleProtectedRoute from './components/RoleProtectedRoute';
 import InfluencerRoute from './components/InfluencerRoute';
 import RouteLoader from './components/RouteLoader';
 import ScrollToTop from './components/ScrollToTop';
+import MarketingAttributionTracker from './components/MarketingAttributionTracker';
 import StaffShell from './staff/StaffShell';
 import StaffModuleRoute from './staff/components/StaffModuleRoute';
 
@@ -41,6 +42,7 @@ const AdminWorkspace = lazy(() => import('./staff/workspaces/AdminWorkspace'));
 const MarketingOverview = lazy(() => import('./staff/modules/marketing/MarketingOverview'));
 const CampaignsWorkspace = lazy(() => import('./staff/modules/marketing/campaigns/CampaignsWorkspace'));
 const CampaignEditor = lazy(() => import('./staff/modules/marketing/campaigns/CampaignEditor'));
+const MarketingLeadAnalyticsWorkspace = lazy(() => import('./staff/modules/marketing/leadAnalytics/MarketingLeadAnalyticsWorkspace'));
 const BannersWorkspace = lazy(() => import('./staff/modules/marketing/banners/BannersWorkspace'));
 const BannerEditor = lazy(() => import('./staff/modules/marketing/banners/BannerEditor'));
 const SalesOverview = lazy(() => import('./staff/modules/sales/SalesOverview'));
@@ -87,6 +89,7 @@ function App() {
     <AuthProvider>
       <Router>
         <ScrollToTop />
+        <MarketingAttributionTracker />
         <Suspense fallback={<RouteLoader />}>
         <Routes>
           <Route path="/staff/login" element={<AdminLogin />} />
@@ -207,6 +210,7 @@ function App() {
               </StaffModuleRoute>
             } />
             <Route path="marketing/campaigns" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignsWorkspace /></StaffModuleRoute>} />
+            <Route path="marketing/lead-analytics" element={<StaffModuleRoute moduleId="marketing_lead_analytics"><MarketingLeadAnalyticsWorkspace /></StaffModuleRoute>} />
             <Route path="marketing/campaigns/new" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignEditor /></StaffModuleRoute>} />
             <Route path="marketing/campaigns/:id/edit" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignEditor /></StaffModuleRoute>} />
             <Route path="marketing/banners" element={<StaffModuleRoute moduleId="marketing_banners"><BannersWorkspace /></StaffModuleRoute>} />

@@ -4,6 +4,7 @@ import Campaign from '../models/Campaign.js';
 import MediaAsset from '../models/MediaAsset.js';
 import { sendErrorResponse } from '../utils/httpResponse.js';
 import { recordStaffActivity } from '../services/staffActivityService.js';
+import { normalizeUtmValue } from '../services/marketingAttributionService.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,8 +123,12 @@ const campaignInput = (body, existing = {}) => {
   if (!Campaign.schema.path('type').enumValues.includes(type)) throw Object.assign(new Error('Unsupported campaign type.'), { status: 400 });
   const budget = Number(body.budget ?? existing.budget ?? 0);
   if (!Number.isFinite(budget) || budget < 0) throw Object.assign(new Error('Campaign budget must be zero or greater.'), { status: 400 });
+  const spend = Number(body.spend ?? existing.spend ?? 0);
+  if (!Number.isFinite(spend) || spend < 0) throw Object.assign(new Error('Actual spend must be zero or greater.'), { status: 400 });
+  const landingPath = String(body.landingPath ?? existing.landingPath ?? '/').trim() || '/';
+  if (!landingPath.startsWith('/') || landingPath.startsWith('//') || /^\/\\/.test(landingPath)) throw Object.assign(new Error('Landing page must be a WanderLuxe site path.'), { status: 400 });
   const asList = (value) => Array.isArray(value) ? value.map(String).map((item) => item.trim()).filter(Boolean) : String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
-  return { name, code, type, status: normalizeCampaignStatus(requestedStatus, startDate, endDate), startDate, endDate, budget, utmSource: String(body.utmSource ?? existing.utmSource ?? '').trim(), utmMedium: String(body.utmMedium ?? existing.utmMedium ?? '').trim(), utmCampaign: String(body.utmCampaign ?? existing.utmCampaign ?? '').trim(), targetAudience: String(body.targetAudience ?? existing.targetAudience ?? '').trim(), targetDestinations: asList(body.targetDestinations ?? existing.targetDestinations), featuredTrips: asList(body.featuredTrips ?? existing.featuredTrips), notes: String(body.notes ?? existing.notes ?? '').trim() };
+  return { name, code, type, status: normalizeCampaignStatus(requestedStatus, startDate, endDate), startDate, endDate, budget, spend, landingPath, utmSource: normalizeUtmValue(body.utmSource ?? existing.utmSource), utmMedium: normalizeUtmValue(body.utmMedium ?? existing.utmMedium), utmCampaign: normalizeUtmValue(body.utmCampaign ?? existing.utmCampaign), targetAudience: String(body.targetAudience ?? existing.targetAudience ?? '').trim(), targetDestinations: asList(body.targetDestinations ?? existing.targetDestinations), featuredTrips: asList(body.featuredTrips ?? existing.featuredTrips), notes: String(body.notes ?? existing.notes ?? '').trim() };
 };
 
 export const createCampaign = async (req, res) => {
@@ -143,7 +148,7 @@ export const updateCampaign = async (req, res) => {
     const campaign = mongoose.Types.ObjectId.isValid(req.params.id) ? await Campaign.findById(req.params.id) : null;
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     const input = campaignInput(req.body, campaign.toObject());
-    if (await Campaign.exists({ code: input.code, _id: { $ne: campaign._id } })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
+    if (input.code !== campaign.code) return res.status(409).json({ success: false, message: 'Campaign code cannot be changed because active attribution links depend on it.' });
     const previousStatus = campaign.status;
     Object.assign(campaign, input, { updatedBy: actorMongoId(req) }); await campaign.save();
     await recordStaffActivity({ req, department: 'marketing', action: previousStatus !== campaign.status ? 'CAMPAIGN_STATUS_CHANGED' : 'CAMPAIGN_UPDATED', entityType: 'Campaign', entityId: campaign._id, entityKey: campaign.code, entityLabel: campaign.name, metadata: previousStatus !== campaign.status ? { fromStatus: previousStatus, toStatus: campaign.status } : {} });

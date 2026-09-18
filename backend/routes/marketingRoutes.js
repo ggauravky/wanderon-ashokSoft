@@ -14,6 +14,7 @@ import {
   deleteBanner
 } from '../controllers/marketingController.js';
 import { protect, checkPermission } from '../middlewares/authMiddleware.js';
+import { marketingLeadAnalytics, marketingLeadAnalyticsOptions } from '../controllers/marketingLeadAnalyticsController.js';
 
 const router = express.Router();
 
@@ -24,6 +25,8 @@ router.get('/banners/active', getActiveBanners);
 router.use(protect);
 
 router.get('/dashboard', checkPermission('marketing:view_dashboard'), getMarketingDashboard);
+router.get('/lead-analytics', checkPermission('marketing:view_lead_analytics'), marketingLeadAnalytics);
+router.get('/lead-analytics/options', checkPermission('marketing:view_lead_analytics'), marketingLeadAnalyticsOptions);
 
 // Campaign Routes
 router.get('/campaigns', checkPermission('marketing:manage_campaigns'), getCampaigns);

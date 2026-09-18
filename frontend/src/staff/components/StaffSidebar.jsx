@@ -38,6 +38,7 @@ const ICONS = {
   bookings: BookOpen,
   marketing: Megaphone,
   marketing_campaigns: Megaphone,
+  marketing_lead_analytics: BarChart3,
   marketing_banners: Image
 };
 

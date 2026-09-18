@@ -220,6 +220,28 @@ const leadSchema = new mongoose.Schema(
       enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry', 'callback_request', 'expert_callback_modal'],
       default: 'trip_page'
     },
+    marketingAttribution: {
+      schemaVersion: { type: Number, default: 1 },
+      model: { type: String, enum: ['FIRST_TOUCH'], default: 'FIRST_TOUCH' },
+      campaignId: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign', default: null },
+      campaignCodeSnapshot: { type: String, default: '' },
+      campaignNameSnapshot: { type: String, default: '' },
+      matchedBy: { type: String, enum: ['', 'UTM_ID', 'UTM_TUPLE'], default: '' },
+      firstTouch: {
+        utmId: { type: String, default: '' }, source: { type: String, default: '' }, medium: { type: String, default: '' },
+        campaign: { type: String, default: '' }, content: { type: String, default: '' }, term: { type: String, default: '' },
+        landingPath: { type: String, default: '' }, referrerHost: { type: String, default: '' }, capturedAt: { type: Date, default: null }
+      },
+      lastTouch: {
+        utmId: { type: String, default: '' }, source: { type: String, default: '' }, medium: { type: String, default: '' },
+        campaign: { type: String, default: '' }, content: { type: String, default: '' }, term: { type: String, default: '' },
+        landingPath: { type: String, default: '' }, referrerHost: { type: String, default: '' }, capturedAt: { type: Date, default: null }
+      },
+      leadCapture: {
+        source: { type: String, default: '' }, medium: { type: String, default: '' }, campaign: { type: String, default: '' },
+        landingPath: { type: String, default: '' }, capturedAt: { type: Date, default: null }
+      }
+    },
     whatsappNotification: {
       sent: { type: Boolean, default: false },
       status: {
@@ -267,5 +289,7 @@ leadSchema.index({ priority: 1, createdAt: -1 });
 leadSchema.index({ preferredCallDate: 1 });
 // Supports selected-member contact attribution without introducing lead ownership.
 leadSchema.index({ 'callOutcomes.loggedBy': 1, 'callOutcomes.loggedAt': -1 });
+leadSchema.index({ 'marketingAttribution.campaignId': 1, createdAt: -1 });
+leadSchema.index({ 'marketingAttribution.firstTouch.source': 1, createdAt: -1 });
 
 export default mongoose.model('Lead', leadSchema);

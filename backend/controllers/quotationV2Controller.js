@@ -8,8 +8,10 @@ import QuotationShare from '../models/QuotationShare.js';
 import QuotationEvent from '../models/QuotationEvent.js';
 import QuotationApprovalVerification from '../models/QuotationApprovalVerification.js';
 import User from '../models/User.js';
+import Lead from '../models/Lead.js';
 import { getJwtSecret } from '../config/environment.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
+import { syncLeadConversionFromBooking } from '../services/leadConversionService.js';
 import {
   normalizeQuotationAttachment,
   normalizeQuotationAttachmentPayload
@@ -218,6 +220,12 @@ export const createQuotationV2 = async (req, res) => {
       quotation.manualPricing.priceNotes = commercial.priceNotes || '';
     }
     await quotation.save();
+    if (quotation.leadId) {
+      await Lead.findByIdAndUpdate(quotation.leadId, {
+        status: 'IN_PROGRESS',
+        $addToSet: { quotations: quotation._id }
+      });
+    }
     await createQuotationEvent({ quotationId: quotation._id, type: 'QUOTATION_CREATED', actor: req.user, details: { schemaVersion: 2 } });
     return res.status(201).json({ success: true, quotation, validation: validateQuotationV2(quotation) });
   } catch (error) {
@@ -781,7 +789,10 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     const quotation = await loadAuthorized(req, res, { edit: true });
     if (!quotation) return;
     const existing = await Booking.findOne({ sourceQuotationId: quotation._id });
-    if (existing) return res.json({ success: true, booking: existing, quotation, checkoutUrl: `/checkout?bookingId=${existing.bookingId}`, isExisting: true });
+    if (existing) {
+      await syncLeadConversionFromBooking(existing);
+      return res.json({ success: true, booking: existing, quotation, checkoutUrl: `/checkout?bookingId=${existing.bookingId}`, isExisting: true });
+    }
     const revision = await QuotationRevision.findById(quotation.approvedRevisionId);
     if (!revision || revision.status !== 'APPROVED') return fail(res, 409, 'Only an approved immutable revision can be converted to a booking.');
     const snapshot = clone(revision.snapshot);
@@ -863,12 +874,16 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     quotation.bookingCode = booking.bookingId;
     quotation.statusHistory.push(statusEntry('CONVERTED', req.user, `Converted from approved revision ${revision.version}`));
     await quotation.save();
+    await syncLeadConversionFromBooking(booking);
     await createQuotationEvent({ quotationId: quotation._id, revisionId: revision._id, type: 'BOOKING_CREATED', actor: req.user, details: { bookingId: booking._id, bookingCode: booking.bookingId, version: revision.version } });
     return res.status(201).json({ success: true, booking, quotation, checkoutUrl: `/checkout?bookingId=${booking.bookingId}`, isExisting: false });
   } catch (error) {
     if (error?.code === 11000) {
       const existing = await Booking.findOne({ sourceQuotationId: (await findQuotation(req.params.id))?._id });
-      if (existing) return res.json({ success: true, booking: existing, checkoutUrl: `/checkout?bookingId=${existing.bookingId}`, isExisting: true });
+      if (existing) {
+        await syncLeadConversionFromBooking(existing);
+        return res.json({ success: true, booking: existing, checkoutUrl: `/checkout?bookingId=${existing.bookingId}`, isExisting: true });
+      }
     }
     console.error('Create Booking From Quotation V2 Error:', error);
     return fail(res, error?.name === 'ValidationError' ? 400 : 500, error.message || 'Unable to create booking.');

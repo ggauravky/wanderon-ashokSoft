@@ -6,6 +6,7 @@ import { resolveCustomerUserObjectId, isValidMongoObjectId, toObjectIdOrNull } f
 import { sendErrorResponse } from '../utils/httpResponse.js';
 import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js';
 import { recordStaffActivity } from '../services/staffActivityService.js';
+import { hasMeaningfulAttribution, resolveLeadAttribution } from '../services/marketingAttributionService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -42,7 +43,8 @@ export const createLead = async (req, res) => {
       preferredCallWindow,
       topics,
       message,
-      source
+      source,
+      marketingAttribution
     } = req.body;
 
     // 1. Strict Server-Side Validations
@@ -119,8 +121,18 @@ export const createLead = async (req, res) => {
 
     if (tripId) queryFilter.tripId = String(tripId);
 
+    let resolvedAttribution = null;
+    try {
+      resolvedAttribution = await resolveLeadAttribution(marketingAttribution);
+    } catch (attributionError) {
+      console.warn('Lead attribution was skipped:', attributionError.message);
+    }
     const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
     if (existingLead) {
+      if (resolvedAttribution && !hasMeaningfulAttribution(existingLead.marketingAttribution)) {
+        existingLead.marketingAttribution = resolvedAttribution;
+        await existingLead.save();
+      }
       return res.status(200).json({
         success: true,
         isDuplicateThrottled: true,
@@ -166,6 +178,7 @@ export const createLead = async (req, res) => {
       message: message ? String(message).trim() : '',
       status: 'NEW',
       source: determinedSource,
+      ...(resolvedAttribution ? { marketingAttribution: resolvedAttribution } : {}),
       assignedTo: 'Sales Concierge Team',
       assignedToUser: null,
       assignedToUserName: '',

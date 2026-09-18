@@ -26,6 +26,10 @@ const campaignSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    landingPath: {
+      type: String,
+      default: '/'
+    },
     type: {
       type: String,
       enum: ['meta_ads', 'google_ads', 'influencer', 'email', 'organic', 'festival_promo', 'other'],

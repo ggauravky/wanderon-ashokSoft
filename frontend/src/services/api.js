@@ -1,5 +1,6 @@
 import { API_BASE_URL, getHeaders, parseApiResponse, request, toQueryString } from './apiConfig.js';
 import { normalizeImageUploadResult } from '../utils/uploadResult.js';
+import { getLeadAttributionPayload } from '../utils/marketingAttribution.js';
 
 export * from './quotationService.js';
 export { getHeaders } from './apiConfig.js';
@@ -646,10 +647,14 @@ export async function getTripByIdOrSlugApi(idOrSlug) {
 }
 
 export async function createLeadApi(leadData) {
+  let marketingAttribution = leadData?.marketingAttribution;
+  if (!marketingAttribution) {
+    try { marketingAttribution = getLeadAttributionPayload(); } catch { marketingAttribution = null; }
+  }
   const response = await request(`${API_BASE_URL}/leads`, {
     method: 'POST',
     headers: getHeaders(),
-    body: JSON.stringify(leadData)
+    body: JSON.stringify({ ...leadData, ...(marketingAttribution ? { marketingAttribution } : {}) })
   });
 
   const data = await parseApiResponse(response);
@@ -1302,6 +1307,8 @@ const marketingQuery = (params = {}) => {
 };
 
 export const getMarketingDashboardApi = () => marketingRequest('/dashboard');
+export const getMarketingLeadAnalyticsApi = (params = {}) => marketingRequest(`/lead-analytics${marketingQuery(params)}`);
+export const getMarketingLeadAnalyticsOptionsApi = () => marketingRequest('/lead-analytics/options');
 export const getCampaignsApi = (params = {}) => marketingRequest(`/campaigns${marketingQuery(params)}`);
 export const getCampaignByIdApi = (id) => marketingRequest(`/campaigns/${encodeURIComponent(id)}`);
 export const createCampaignApi = (payload) => marketingRequest('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
