@@ -89,5 +89,7 @@ const campaignSchema = new mongoose.Schema(
 
 campaignSchema.index({ status: 1, startDate: 1, endDate: 1 });
 campaignSchema.index({ type: 1, updatedAt: -1 });
+campaignSchema.index({ createdBy: 1, createdAt: -1 });
+campaignSchema.index({ updatedBy: 1, updatedAt: -1 });
 
 export default mongoose.model('Campaign', campaignSchema);

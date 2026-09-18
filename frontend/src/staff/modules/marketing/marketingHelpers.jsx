@@ -13,4 +13,4 @@ const tones = {
 };
 
 export const StatusBadge = ({ status }) => <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold capitalize ring-1 ring-inset ${tones[status] || tones.inactive}`}>{titleCase(status)}</span>;
-export const ManagementEmptyState = ({ title, description, action }) => <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center"><h2 className="text-sm font-semibold text-slate-900">{title}</h2><p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{description}</p>{action}</div>;
+export const MarketingEmptyState = ({ title, description, action }) => <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center"><h2 className="text-sm font-semibold text-slate-900">{title}</h2><p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{description}</p>{action}</div>;

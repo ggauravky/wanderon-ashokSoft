@@ -66,7 +66,7 @@ const AdminLogin = () => {
               WanderLuxe Staff Portal
             </h2>
             <p className="text-white/70 text-sm leading-relaxed font-medium mb-6">
-              One secure gateway for WanderLuxe Administration, Sales, and Management teams. Your role determines the workspaces available after sign-in.
+              One secure gateway for WanderLuxe Administration, Sales, and Marketing teams. Your role determines the workspaces available after sign-in.
             </p>
 
             <div className="space-y-2.5 text-xs text-white/80 font-semibold">
@@ -77,7 +77,7 @@ const AdminLogin = () => {
                 <Headphones size={14} /> Travel Expert Sales Consultation Desk
               </div>
               <div className="flex items-center gap-2 text-emerald-200">
-                <Megaphone size={14} /> Management Campaign Workspace
+                <Megaphone size={14} /> Marketing Campaign Workspace
               </div>
             </div>
           </div>
@@ -100,7 +100,7 @@ const AdminLogin = () => {
               Staff Authentication
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-brand-navy">Staff Sign In</h1>
-            <p className="text-gray-500 text-xs mt-1">Administration, Sales, and Management access</p>
+            <p className="text-gray-500 text-xs mt-1">Administration, Sales, and Marketing access</p>
           </div>
 
           {error && (

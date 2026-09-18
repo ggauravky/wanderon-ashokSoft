@@ -16,5 +16,6 @@ const quotationEventSchema = new mongoose.Schema(
 );
 
 quotationEventSchema.index({ quotationId: 1, createdAt: -1 });
+quotationEventSchema.index({ actorId: 1, createdAt: -1 });
 
 export default mongoose.model('QuotationEvent', quotationEventSchema);

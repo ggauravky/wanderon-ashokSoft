@@ -18,8 +18,6 @@ export const LEAD_STATUSES = Object.freeze([
   'LOST'
 ]);
 
-export const LEAD_PRIORITIES = Object.freeze(['LOW', 'MEDIUM', 'HIGH', 'URGENT']);
-
 export const CONTACT_OUTCOMES = Object.freeze([
   Object.freeze({ value: 'CONNECTED', label: 'Connected' }),
   Object.freeze({ value: 'NO_ANSWER', label: 'No answer' }),

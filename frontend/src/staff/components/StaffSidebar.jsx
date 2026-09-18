@@ -15,13 +15,15 @@ import {
   UserCheck,
   Users,
   WalletCards,
-  Tags
+  Tags,
+  BarChart3
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
 const ICONS = {
   overview: LayoutDashboard,
   admin: ShieldCheck,
+  admin_team_analytics: BarChart3,
   trips: Map,
   admin_bookings: BookOpen,
   admin_media: Image,
@@ -34,9 +36,9 @@ const ICONS = {
   expert_requests: PhoneCall,
   quotations: FileText,
   bookings: BookOpen,
-  management: Megaphone,
-  management_campaigns: Megaphone,
-  management_banners: Image
+  marketing: Megaphone,
+  marketing_campaigns: Megaphone,
+  marketing_banners: Image
 };
 
 const StaffSidebar = ({ modules, user, roleLabel, onLogout, onNavigate }) => {

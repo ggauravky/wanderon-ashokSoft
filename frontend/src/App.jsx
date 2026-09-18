@@ -38,11 +38,11 @@ const AIPlannerPage = lazy(() => import('./pages/AIPlannerPage'));
 
 const StaffOverview = lazy(() => import('./staff/StaffOverview'));
 const AdminWorkspace = lazy(() => import('./staff/workspaces/AdminWorkspace'));
-const ManagementOverview = lazy(() => import('./staff/modules/management/ManagementOverview'));
-const CampaignsWorkspace = lazy(() => import('./staff/modules/management/campaigns/CampaignsWorkspace'));
-const CampaignEditor = lazy(() => import('./staff/modules/management/campaigns/CampaignEditor'));
-const BannersWorkspace = lazy(() => import('./staff/modules/management/banners/BannersWorkspace'));
-const BannerEditor = lazy(() => import('./staff/modules/management/banners/BannerEditor'));
+const MarketingOverview = lazy(() => import('./staff/modules/marketing/MarketingOverview'));
+const CampaignsWorkspace = lazy(() => import('./staff/modules/marketing/campaigns/CampaignsWorkspace'));
+const CampaignEditor = lazy(() => import('./staff/modules/marketing/campaigns/CampaignEditor'));
+const BannersWorkspace = lazy(() => import('./staff/modules/marketing/banners/BannersWorkspace'));
+const BannerEditor = lazy(() => import('./staff/modules/marketing/banners/BannerEditor'));
 const SalesOverview = lazy(() => import('./staff/modules/sales/SalesOverview'));
 const ExpertRequestsWorkspace = lazy(() => import('./staff/modules/sales/ExpertRequestsWorkspace'));
 const QuotationsWorkspace = lazy(() => import('./staff/modules/sales/quotations/QuotationsWorkspace'));
@@ -64,6 +64,7 @@ const CreatorApplicationDetail = lazy(() => import('./staff/modules/admin/creato
 const PayoutsWorkspace = lazy(() => import('./staff/modules/admin/payouts/PayoutsWorkspace'));
 const PayoutDetail = lazy(() => import('./staff/modules/admin/payouts/PayoutDetail'));
 const DiscountsWorkspace = lazy(() => import('./staff/modules/admin/discounts/DiscountsWorkspace'));
+const TeamAnalyticsWorkspace = lazy(() => import('./staff/modules/admin/teamAnalytics/TeamAnalyticsWorkspace'));
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -74,6 +75,11 @@ const LegacyQuotationRedirect = ({ edit = false }) => {
 const LegacyAdminBookingRedirect = () => {
   const { id } = useParams();
   return <Navigate to={`/staff/admin/bookings/${encodeURIComponent(id)}`} replace />;
+};
+
+const LegacyMarketingEditorRedirect = ({ entity }) => {
+  const { id } = useParams();
+  return <Navigate to={`/staff/marketing/${entity}/${encodeURIComponent(id)}/edit`} replace />;
 };
 
 function App() {
@@ -103,6 +109,9 @@ function App() {
               <StaffModuleRoute moduleId="admin">
                 <AdminWorkspace />
               </StaffModuleRoute>
+            } />
+            <Route path="admin/team-analytics" element={
+              <StaffModuleRoute moduleId="admin_team_analytics"><TeamAnalyticsWorkspace /></StaffModuleRoute>
             } />
             <Route path="admin/trips" element={
               <StaffModuleRoute moduleId="trips"><TripsWorkspace /></StaffModuleRoute>
@@ -192,17 +201,24 @@ function App() {
                 <SalesBookingDetail />
               </StaffModuleRoute>
             } />
-            <Route path="management" element={
-              <StaffModuleRoute moduleId="management">
-                <ManagementOverview />
+            <Route path="marketing" element={
+              <StaffModuleRoute moduleId="marketing">
+                <MarketingOverview />
               </StaffModuleRoute>
             } />
-            <Route path="management/campaigns" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignsWorkspace /></StaffModuleRoute>} />
-            <Route path="management/campaigns/new" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignEditor /></StaffModuleRoute>} />
-            <Route path="management/campaigns/:id/edit" element={<StaffModuleRoute moduleId="management_campaigns"><CampaignEditor /></StaffModuleRoute>} />
-            <Route path="management/banners" element={<StaffModuleRoute moduleId="management_banners"><BannersWorkspace /></StaffModuleRoute>} />
-            <Route path="management/banners/new" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
-            <Route path="management/banners/:id/edit" element={<StaffModuleRoute moduleId="management_banners"><BannerEditor /></StaffModuleRoute>} />
+            <Route path="marketing/campaigns" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignsWorkspace /></StaffModuleRoute>} />
+            <Route path="marketing/campaigns/new" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignEditor /></StaffModuleRoute>} />
+            <Route path="marketing/campaigns/:id/edit" element={<StaffModuleRoute moduleId="marketing_campaigns"><CampaignEditor /></StaffModuleRoute>} />
+            <Route path="marketing/banners" element={<StaffModuleRoute moduleId="marketing_banners"><BannersWorkspace /></StaffModuleRoute>} />
+            <Route path="marketing/banners/new" element={<StaffModuleRoute moduleId="marketing_banners"><BannerEditor /></StaffModuleRoute>} />
+            <Route path="marketing/banners/:id/edit" element={<StaffModuleRoute moduleId="marketing_banners"><BannerEditor /></StaffModuleRoute>} />
+            <Route path="management" element={<Navigate to="/staff/marketing" replace />} />
+            <Route path="management/campaigns" element={<Navigate to="/staff/marketing/campaigns" replace />} />
+            <Route path="management/campaigns/new" element={<Navigate to="/staff/marketing/campaigns/new" replace />} />
+            <Route path="management/campaigns/:id/edit" element={<LegacyMarketingEditorRedirect entity="campaigns" />} />
+            <Route path="management/banners" element={<Navigate to="/staff/marketing/banners" replace />} />
+            <Route path="management/banners/new" element={<Navigate to="/staff/marketing/banners/new" replace />} />
+            <Route path="management/banners/:id/edit" element={<LegacyMarketingEditorRedirect entity="banners" />} />
             <Route path="*" element={<Navigate to="/staff" replace />} />
           </Route>
 

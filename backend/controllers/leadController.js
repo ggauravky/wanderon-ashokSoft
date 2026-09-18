@@ -5,6 +5,7 @@ import FollowUp from '../models/FollowUp.js';
 import { resolveCustomerUserObjectId, isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 import { sendErrorResponse } from '../utils/httpResponse.js';
 import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js';
+import { recordStaffActivity } from '../services/staffActivityService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -385,7 +386,9 @@ export const getLeads = async (req, res) => {
     const filter = andConditions.length > 0 ? { $and: andConditions } : {};
     const pageNumber = Math.max(1, Number(page) || 1);
     const pageSize = Math.min(200, Math.max(1, Number(limit) || 100));
-    const usesEffectivePriority = userRole === 'sales' || leadType === 'callback_request';
+    // Keep derived-priority compatibility only for older API callers that
+    // explicitly request it. The current Expert Requests UI no longer uses it.
+    const usesEffectivePriority = (priority && priority !== 'all') || sortBy === 'effective_priority';
     let total;
     let leads;
 
@@ -744,6 +747,7 @@ export const logLeadContact = async (req, res) => {
       }
     }
 
+    const statusBeforeContact = lead.status;
     // 1. Append Call Outcome
     const outcomeEntry = {
       outcome: normalizedOutcome,
@@ -794,7 +798,8 @@ export const logLeadContact = async (req, res) => {
               callWindow: nextFollowUpWindow,
               channel: channel === 'whatsapp' ? 'whatsapp' : 'call',
               priority: lead.priority === 'HIGH' || lead.priority === 'URGENT' ? 'high' : 'medium',
-              status: 'pending'
+              status: 'pending',
+              createdBy: (userId && mongoose.Types.ObjectId.isValid(userId)) ? userId : null
           });
         } catch (fuErr) {
           console.warn('FollowUp DB create notice:', fuErr.message);
@@ -803,6 +808,9 @@ export const logLeadContact = async (req, res) => {
     }
 
     await lead.save();
+    await recordStaffActivity({ req, department: 'sales', action: 'LEAD_CONTACT_LOGGED', entityType: 'Lead', entityId: lead._id, entityKey: lead.referenceId, entityLabel: lead.name, metadata: { outcome: normalizedOutcome, channel } });
+    if (statusBeforeContact !== lead.status) await recordStaffActivity({ req, department: 'sales', action: 'LEAD_STATUS_CHANGED', entityType: 'Lead', entityId: lead._id, entityKey: lead.referenceId, entityLabel: lead.name, metadata: { fromStatus: statusBeforeContact, toStatus: lead.status, source: 'contact_outcome' } });
+    if (createdFollowUp) await recordStaffActivity({ req, department: 'sales', action: 'FOLLOW_UP_CREATED', entityType: 'FollowUp', entityId: createdFollowUp._id, entityKey: lead.referenceId, entityLabel: createdFollowUp.title, metadata: { leadId: String(lead._id), scheduledAt: createdFollowUp.scheduledAt } });
     await lead.populate('assignedToUser', 'name email role avatar phone');
 
     res.json({
@@ -861,6 +869,7 @@ export const updateLeadStatus = async (req, res) => {
       }
     }
 
+    const previousStatus = lead.status;
     if (status) lead.status = status;
     if (priority) lead.priority = priority;
     if (notes !== undefined) lead.notes = notes;
@@ -868,6 +877,7 @@ export const updateLeadStatus = async (req, res) => {
     if (lostReasonDetail) lead.lostReasonDetail = lostReasonDetail;
 
     await lead.save();
+    if (previousStatus !== lead.status) await recordStaffActivity({ req, department: 'sales', action: 'LEAD_STATUS_CHANGED', entityType: 'Lead', entityId: lead._id, entityKey: lead.referenceId, entityLabel: lead.name, metadata: { fromStatus: previousStatus, toStatus: lead.status } });
     await lead.populate('assignedToUser', 'name email role avatar phone');
 
     res.json({

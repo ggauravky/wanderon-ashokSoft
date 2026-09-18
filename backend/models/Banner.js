@@ -75,5 +75,7 @@ const bannerSchema = new mongoose.Schema(
 
 bannerSchema.index({ placement: 1, status: 1, priorityOrder: 1 });
 bannerSchema.index({ status: 1, startDate: 1, endDate: 1 });
+bannerSchema.index({ createdBy: 1, createdAt: -1 });
+bannerSchema.index({ updatedBy: 1, updatedAt: -1 });
 
 export default mongoose.model('Banner', bannerSchema);

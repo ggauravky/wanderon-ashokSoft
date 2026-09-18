@@ -1270,34 +1270,53 @@ export async function getSalesDashboardApi() {
 }
 
 // ================================================================
-// MANAGEMENT / MARKETING API HELPERS
+// MARKETING API HELPERS
 // ================================================================
 
-const managementRequest = async (path, options = {}) => {
+const marketingRequest = async (path, options = {}) => {
   const { public: publicRead = false, ...requestOptions } = options;
   const response = await request(`${API_BASE_URL}/marketing${path}`, {
     ...requestOptions,
     headers: publicRead ? { 'Content-Type': 'application/json' } : getHeaders()
   });
   const data = await parseApiResponse(response);
-  if (!response.ok) throw new Error(data.message || 'Management request failed');
+  if (!response.ok) throw new Error(data.message || 'Marketing request failed');
   return data;
 };
 
-const managementQuery = (params = {}) => {
+const marketingQuery = (params = {}) => {
   const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all')).toString();
   return query ? `?${query}` : '';
 };
 
-export const getMarketingDashboardApi = () => managementRequest('/dashboard');
-export const getCampaignsApi = (params = {}) => managementRequest(`/campaigns${managementQuery(params)}`);
-export const getCampaignByIdApi = (id) => managementRequest(`/campaigns/${encodeURIComponent(id)}`);
-export const createCampaignApi = (payload) => managementRequest('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
-export const updateCampaignApi = (id, payload) => managementRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-export const deleteCampaignApi = (id) => managementRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const getBannersApi = (params = {}) => managementRequest(`/banners${managementQuery(params)}`);
-export const getBannerByIdApi = (id) => managementRequest(`/banners/${encodeURIComponent(id)}`);
-export const createBannerApi = (payload) => managementRequest('/banners', { method: 'POST', body: JSON.stringify(payload) });
-export const updateBannerApi = (id, payload) => managementRequest(`/banners/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-export const deleteBannerApi = (id) => managementRequest(`/banners/${encodeURIComponent(id)}`, { method: 'DELETE' });
-export const getActiveMarketingBannersApi = (placement) => managementRequest(`/banners/active${managementQuery({ placement })}`, { public: true });
+export const getMarketingDashboardApi = () => marketingRequest('/dashboard');
+export const getCampaignsApi = (params = {}) => marketingRequest(`/campaigns${marketingQuery(params)}`);
+export const getCampaignByIdApi = (id) => marketingRequest(`/campaigns/${encodeURIComponent(id)}`);
+export const createCampaignApi = (payload) => marketingRequest('/campaigns', { method: 'POST', body: JSON.stringify(payload) });
+export const updateCampaignApi = (id, payload) => marketingRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const deleteCampaignApi = (id) => marketingRequest(`/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getBannersApi = (params = {}) => marketingRequest(`/banners${marketingQuery(params)}`);
+export const getBannerByIdApi = (id) => marketingRequest(`/banners/${encodeURIComponent(id)}`);
+export const createBannerApi = (payload) => marketingRequest('/banners', { method: 'POST', body: JSON.stringify(payload) });
+export const updateBannerApi = (id, payload) => marketingRequest(`/banners/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
+export const deleteBannerApi = (id) => marketingRequest(`/banners/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const getActiveMarketingBannersApi = (placement) => marketingRequest(`/banners/active${marketingQuery({ placement })}`, { public: true });
+
+const teamAnalyticsQuery = (params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '')).toString();
+  return query ? `?${query}` : '';
+};
+
+export async function getTeamAnalyticsMembersApi(category) {
+  const response = await request(`${API_BASE_URL}/admin/team-analytics/members${teamAnalyticsQuery({ category })}`, { headers: getHeaders() });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to load analytics members');
+  return data;
+}
+
+export async function getTeamMemberAnalyticsApi(userId, params) {
+  const response = await request(`${API_BASE_URL}/admin/team-analytics/members/${encodeURIComponent(userId)}${teamAnalyticsQuery(params)}`, { headers: getHeaders() });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to load member analytics');
+  return data;
+}

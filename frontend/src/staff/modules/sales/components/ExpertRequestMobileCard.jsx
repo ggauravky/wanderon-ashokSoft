@@ -1,7 +1,7 @@
 import React from 'react';
 import { CalendarClock, ChevronRight, MapPin, Users } from 'lucide-react';
 import ContactActionLinks from './ContactActionLinks.jsx';
-import { formatDate, getCallbackState, getPriorityClasses, getStatusClasses, getTripTitle } from '../salesUtils.js';
+import { formatDate, getCallbackState, getStatusClasses, getTripTitle } from '../salesUtils.js';
 
 const ExpertRequestMobileCard = ({ lead, onView }) => {
   const callback = getCallbackState(lead);
@@ -26,10 +26,8 @@ const ExpertRequestMobileCard = ({ lead, onView }) => {
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getStatusClasses(lead.status)}`}>{(lead.status || 'NEW').replaceAll('_', ' ')}</span>
-          <span className={`text-xs font-semibold ${getPriorityClasses(lead.effectivePriority)}`} title={(lead.priorityReasons || []).join(' · ')}>{lead.effectivePriority || lead.priority || 'MEDIUM'}</span>
           <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${callback.classes}`}>{callback.label}</span>
         </div>
-        <p className="mt-2 text-xs leading-5 text-slate-500">{(lead.priorityReasons || ['No immediate action due']).slice(0, 2).join(' · ')}</p>
       </button>
 
       <div className="mt-4 border-t border-slate-100 pt-3">

@@ -82,5 +82,7 @@ const followUpSchema = new mongoose.Schema(
 );
 
 followUpSchema.index({ salesUserId: 1, status: 1, scheduledAt: 1 });
+followUpSchema.index({ createdBy: 1, createdAt: -1 });
+followUpSchema.index({ completedBy: 1, completedAt: -1 });
 
 export default mongoose.model('FollowUp', followUpSchema);

@@ -665,6 +665,7 @@ quotationSchema.index({ schemaVersion: 1, commercialState: 1, updatedAt: -1 });
 quotationSchema.index({ assignedTo: 1, schemaVersion: 1, updatedAt: -1 });
 quotationSchema.index({ bookingCode: 1 });
 quotationSchema.index({ updatedAt: -1 });
+quotationSchema.index({ createdBy: 1, createdAt: -1 });
 
 const Quotation = mongoose.model('Quotation', quotationSchema);
 export default Quotation;

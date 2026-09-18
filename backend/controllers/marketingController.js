@@ -3,6 +3,7 @@ import Banner from '../models/Banner.js';
 import Campaign from '../models/Campaign.js';
 import MediaAsset from '../models/MediaAsset.js';
 import { sendErrorResponse } from '../utils/httpResponse.js';
+import { recordStaffActivity } from '../services/staffActivityService.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -10,7 +11,7 @@ const actorMongoId = (req) => req.authContext?.source === 'database' && mongoose
   ? req.authContext.mongoUserId : undefined;
 const requireDatabase = (res, publicRead = false) => {
   if (isDbConnected()) return true;
-  res.status(503).json({ success: false, message: publicRead ? 'Promotional content is temporarily unavailable.' : 'Management data is unavailable while the database is disconnected.' });
+  res.status(503).json({ success: false, message: publicRead ? 'Promotional content is temporarily unavailable.' : 'Marketing data is unavailable while the database is disconnected.' });
   return false;
 };
 const parseDate = (value, label, { endOfDay = false } = {}) => {
@@ -77,7 +78,7 @@ export const getMarketingDashboard = async (req, res) => {
       populateBanner(Banner.find().sort({ updatedAt: -1 }).limit(5))
     ]);
     res.json({ success: true, dashboard: { totalCampaigns, activeCampaigns, scheduledCampaigns, totalBanners, activeBanners, scheduledBanners, expiredPromotions, recentCampaigns: recentCampaigns.map(serializeCampaign), recentBanners: recentBanners.map(serializeBanner) } });
-  } catch (error) { return sendErrorResponse(res, error, 'Unable to load the Management overview.'); }
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load the Marketing overview.'); }
 };
 
 export const getCampaigns = async (req, res) => {
@@ -131,6 +132,7 @@ export const createCampaign = async (req, res) => {
     const input = campaignInput(req.body);
     if (await Campaign.exists({ code: input.code })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
     const campaign = await Campaign.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) });
+    await recordStaffActivity({ req, department: 'marketing', action: 'CAMPAIGN_CREATED', entityType: 'Campaign', entityId: campaign._id, entityKey: campaign.code, entityLabel: campaign.name, metadata: { status: campaign.status } });
     res.status(201).json({ success: true, message: 'Campaign configured.', campaign: serializeCampaign(campaign) });
   } catch (error) { return sendErrorResponse(res, error, 'Unable to create the campaign.'); }
 };
@@ -142,7 +144,9 @@ export const updateCampaign = async (req, res) => {
     if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found.' });
     const input = campaignInput(req.body, campaign.toObject());
     if (await Campaign.exists({ code: input.code, _id: { $ne: campaign._id } })) return res.status(409).json({ success: false, message: 'Campaign code already exists.' });
+    const previousStatus = campaign.status;
     Object.assign(campaign, input, { updatedBy: actorMongoId(req) }); await campaign.save();
+    await recordStaffActivity({ req, department: 'marketing', action: previousStatus !== campaign.status ? 'CAMPAIGN_STATUS_CHANGED' : 'CAMPAIGN_UPDATED', entityType: 'Campaign', entityId: campaign._id, entityKey: campaign.code, entityLabel: campaign.name, metadata: previousStatus !== campaign.status ? { fromStatus: previousStatus, toStatus: campaign.status } : {} });
     res.json({ success: true, message: 'Campaign updated.', campaign: serializeCampaign(campaign) });
   } catch (error) { return sendErrorResponse(res, error, 'Unable to update the campaign.'); }
 };
@@ -152,6 +156,7 @@ export const deleteCampaign = async (req, res) => {
     if (!requireDatabase(res)) return;
     const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Campaign.findByIdAndDelete(req.params.id) : null;
     if (!deleted) return res.status(404).json({ success: false, message: 'Campaign not found.' });
+    await recordStaffActivity({ req, department: 'marketing', action: 'CAMPAIGN_DELETED', entityType: 'Campaign', entityId: deleted._id, entityKey: deleted.code, entityLabel: deleted.name, metadata: { lastStatus: deleted.status } });
     res.json({ success: true, id: deleted._id, message: 'Campaign deleted.' });
   } catch (error) { return sendErrorResponse(res, error, 'Unable to delete the campaign.'); }
 };
@@ -216,16 +221,16 @@ const bannerInput = async (body, existing = {}) => {
 };
 
 export const createBanner = async (req, res) => {
-  try { if (!requireDatabase(res)) return; const input = await bannerInput(req.body); const banner = await Banner.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) }); res.status(201).json({ success: true, message: 'Banner configured.', banner: serializeBanner(banner) }); }
+  try { if (!requireDatabase(res)) return; const input = await bannerInput(req.body); const banner = await Banner.create({ ...input, createdBy: actorMongoId(req), updatedBy: actorMongoId(req) }); await recordStaffActivity({ req, department: 'marketing', action: 'BANNER_CREATED', entityType: 'Banner', entityId: banner._id, entityKey: String(banner._id), entityLabel: banner.title, metadata: { status: banner.status, placement: banner.placement } }); res.status(201).json({ success: true, message: 'Banner configured.', banner: serializeBanner(banner) }); }
   catch (error) { return sendErrorResponse(res, error, 'Unable to create the banner.'); }
 };
 
 export const updateBanner = async (req, res) => {
-  try { if (!requireDatabase(res)) return; const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findById(req.params.id) : null; if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' }); const input = await bannerInput(req.body, banner.toObject()); Object.assign(banner, input, { updatedBy: actorMongoId(req) }); await banner.save(); res.json({ success: true, message: 'Banner updated.', banner: serializeBanner(banner) }); }
+  try { if (!requireDatabase(res)) return; const banner = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findById(req.params.id) : null; if (!banner) return res.status(404).json({ success: false, message: 'Banner not found.' }); const previousStatus = banner.status; const input = await bannerInput(req.body, banner.toObject()); Object.assign(banner, input, { updatedBy: actorMongoId(req) }); await banner.save(); await recordStaffActivity({ req, department: 'marketing', action: previousStatus !== banner.status ? 'BANNER_STATUS_CHANGED' : 'BANNER_UPDATED', entityType: 'Banner', entityId: banner._id, entityKey: String(banner._id), entityLabel: banner.title, metadata: previousStatus !== banner.status ? { fromStatus: previousStatus, toStatus: banner.status } : { placement: banner.placement } }); res.json({ success: true, message: 'Banner updated.', banner: serializeBanner(banner) }); }
   catch (error) { return sendErrorResponse(res, error, 'Unable to update the banner.'); }
 };
 
 export const deleteBanner = async (req, res) => {
-  try { if (!requireDatabase(res)) return; const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findByIdAndDelete(req.params.id) : null; if (!deleted) return res.status(404).json({ success: false, message: 'Banner not found.' }); res.json({ success: true, id: deleted._id, message: 'Banner deleted.' }); }
+  try { if (!requireDatabase(res)) return; const deleted = mongoose.Types.ObjectId.isValid(req.params.id) ? await Banner.findByIdAndDelete(req.params.id) : null; if (!deleted) return res.status(404).json({ success: false, message: 'Banner not found.' }); await recordStaffActivity({ req, department: 'marketing', action: 'BANNER_DELETED', entityType: 'Banner', entityId: deleted._id, entityKey: String(deleted._id), entityLabel: deleted.title, metadata: { lastStatus: deleted.status, placement: deleted.placement } }); res.json({ success: true, id: deleted._id, message: 'Banner deleted.' }); }
   catch (error) { return sendErrorResponse(res, error, 'Unable to delete the banner.'); }
 };

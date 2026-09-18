@@ -265,5 +265,7 @@ leadSchema.index({ leadType: 1, createdAt: -1 });
 leadSchema.index({ destination: 1, status: 1 });
 leadSchema.index({ priority: 1, createdAt: -1 });
 leadSchema.index({ preferredCallDate: 1 });
+// Supports selected-member contact attribution without introducing lead ownership.
+leadSchema.index({ 'callOutcomes.loggedBy': 1, 'callOutcomes.loggedAt': -1 });
 
 export default mongoose.model('Lead', leadSchema);

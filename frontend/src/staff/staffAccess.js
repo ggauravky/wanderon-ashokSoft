@@ -4,7 +4,7 @@ const STAFF_ROLE_LABELS = Object.freeze({
   super_admin: 'Super Administrator',
   admin: 'Administrator',
   sales: 'Sales Specialist',
-  marketing: 'Management',
+  marketing: 'Marketing',
   operations: 'Operations'
 });
 

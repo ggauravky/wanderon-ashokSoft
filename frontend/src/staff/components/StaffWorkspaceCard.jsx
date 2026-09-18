@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 const ICONS = {
   admin: ShieldCheck,
   sales: Headphones,
-  management: Megaphone
+  marketing: Megaphone
 };
 
 const StaffWorkspaceCard = ({ module }) => {

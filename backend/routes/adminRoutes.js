@@ -6,6 +6,7 @@ import {
 } from '../controllers/adminController.js';
 import { getCoupons, createCoupon, updateCoupon, toggleCoupon, deleteCoupon } from '../controllers/couponAdminController.js';
 import { createPayout, getEligiblePayoutCreators, getPayoutById, getPayouts, updatePayoutStatus } from '../controllers/payoutAdminController.js';
+import { getTeamAnalyticsMembers, getTeamMemberAnalytics } from '../controllers/teamAnalyticsController.js';
 import { protect, adminOnly, checkPermission } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -15,6 +16,8 @@ router.use(protect);
 router.use(adminOnly);
 
 router.get('/stats', getAdminStats);
+router.get('/team-analytics/members', getTeamAnalyticsMembers);
+router.get('/team-analytics/members/:userId', getTeamMemberAnalytics);
 router.get('/coupons', getCoupons);
 router.post('/coupons', createCoupon);
 router.put('/coupons/:id', updateCoupon);

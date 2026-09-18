@@ -2,7 +2,7 @@ export const STAFF_NAVIGATION_SECTIONS = Object.freeze({
   overview: Object.freeze({ id: 'overview', label: null }),
   administration: Object.freeze({ id: 'administration', label: 'Administration' }),
   sales: Object.freeze({ id: 'sales', label: 'Sales' }),
-  management: Object.freeze({ id: 'management', label: 'Management' })
+  marketing: Object.freeze({ id: 'marketing', label: 'Marketing' })
 });
 
 export const STAFF_MODULES = Object.freeze([
@@ -27,6 +27,16 @@ export const STAFF_MODULES = Object.freeze([
     section: 'administration',
     description: 'Supervise platform operations and administration.',
     exact: true
+  }),
+  Object.freeze({
+    id: 'admin_team_analytics',
+    label: 'Team Analytics',
+    path: '/staff/admin/team-analytics',
+    icon: 'admin_team_analytics',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Review factual Sales, Marketing, and Creator activity and outcomes.',
+    navigationOnly: true
   }),
   Object.freeze({
     id: 'trips',
@@ -150,33 +160,33 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
-    id: 'management',
-    label: 'Management Overview',
-    cardLabel: 'Management',
-    path: '/staff/management',
-    icon: 'management',
+    id: 'marketing',
+    label: 'Marketing Overview',
+    cardLabel: 'Marketing',
+    path: '/staff/marketing',
+    icon: 'marketing',
     roles: Object.freeze(['super_admin', 'admin', 'marketing']),
-    section: 'management',
+    section: 'marketing',
     description: 'Monitor campaigns, promotions, and operational marketing records.',
     exact: true
   }),
   Object.freeze({
-    id: 'management_campaigns',
+    id: 'marketing_campaigns',
     label: 'Campaigns',
-    path: '/staff/management/campaigns',
-    icon: 'management_campaigns',
+    path: '/staff/marketing/campaigns',
+    icon: 'marketing_campaigns',
     roles: Object.freeze(['super_admin', 'admin', 'marketing']),
-    section: 'management',
+    section: 'marketing',
     description: 'Plan and maintain campaign records.',
     navigationOnly: true
   }),
   Object.freeze({
-    id: 'management_banners',
+    id: 'marketing_banners',
     label: 'Banners & Promotions',
-    path: '/staff/management/banners',
-    icon: 'management_banners',
+    path: '/staff/marketing/banners',
+    icon: 'marketing_banners',
     roles: Object.freeze(['super_admin', 'admin', 'marketing']),
-    section: 'management',
+    section: 'marketing',
     description: 'Schedule eligible website promotions.',
     navigationOnly: true
   })

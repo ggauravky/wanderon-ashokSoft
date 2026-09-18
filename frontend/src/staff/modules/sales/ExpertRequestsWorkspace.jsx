@@ -44,7 +44,6 @@ const ExpertRequestsWorkspace = () => {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
   const [status, setStatus] = useState('all');
-  const [priority, setPriority] = useState('all');
   const [callbackTiming, setCallbackTiming] = useState('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,10 +84,9 @@ const ExpertRequestsWorkspace = () => {
         leadType: 'callback_request',
         quickFilter: view === 'all' ? undefined : view,
         status,
-        priority,
         search: debouncedSearch,
         limit: 100,
-        sortBy: 'effective_priority'
+        sortBy: 'newest'
       });
       setLeads(Array.isArray(data?.items) ? data.items : []);
     } catch (loadError) {
@@ -98,7 +96,7 @@ const ExpertRequestsWorkspace = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [debouncedSearch, priority, status, view]);
+  }, [debouncedSearch, status, view]);
 
   useEffect(() => {
     loadQueue();
@@ -251,12 +249,10 @@ const ExpertRequestsWorkspace = () => {
         metrics={metrics}
         search={search}
         status={status}
-        priority={priority}
         callbackTiming={callbackTiming}
         onViewChange={handleViewChange}
         onSearchChange={setSearch}
         onStatusChange={setStatus}
-        onPriorityChange={setPriority}
         onCallbackTimingChange={setCallbackTiming}
       />
 
@@ -274,7 +270,7 @@ const ExpertRequestsWorkspace = () => {
       ) : filteredLeads.length === 0 ? (
         <section className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-14 text-center">
           <Headphones size={28} className="mx-auto text-slate-300" aria-hidden="true" />
-          <h3 className="mt-3 font-semibold text-slate-900">{leads.length === 0 && !search && status === 'all' && priority === 'all' ? 'No Expert Requests found' : 'No requests match these filters'}</h3>
+          <h3 className="mt-3 font-semibold text-slate-900">{leads.length === 0 && !search && status === 'all' ? 'No Expert Requests found' : 'No requests match these filters'}</h3>
           <p className="mt-1 text-sm text-slate-500">Try another queue view or clear a filter.</p>
         </section>
       ) : (

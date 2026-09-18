@@ -3,6 +3,7 @@ import FollowUp from '../models/FollowUp.js';
 import Lead from '../models/Lead.js';
 import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 import { sendErrorResponse } from '../utils/httpResponse.js';
+import { recordStaffActivity } from '../services/staffActivityService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -152,6 +153,7 @@ export const createFollowUp = async (req, res) => {
         await syncLeadNextFollowUp(lead._id);
       }
     }
+    await recordStaffActivity({ req, department: 'sales', action: 'FOLLOW_UP_CREATED', entityType: 'FollowUp', entityId: newFollowUp._id, entityKey: String(newFollowUp.leadId), entityLabel: newFollowUp.title, metadata: { leadId: String(newFollowUp.leadId), scheduledAt: newFollowUp.scheduledAt } });
 
     res.status(201).json({
       success: true,
@@ -179,6 +181,9 @@ export const updateFollowUp = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
     }
 
+    const previousStatus = followUp.status;
+    const previousScheduledAt = followUp.scheduledAt;
+
     if (title) followUp.title = title.trim();
     if (notes !== undefined) followUp.notes = notes;
     if (scheduledAt) followUp.scheduledAt = new Date(scheduledAt);
@@ -189,6 +194,9 @@ export const updateFollowUp = async (req, res) => {
 
     await followUp.save();
     await syncLeadNextFollowUp(followUp.leadId);
+    const wasRescheduled = scheduledAt && new Date(previousScheduledAt).getTime() !== new Date(followUp.scheduledAt).getTime();
+    const activityAction = status === 'cancelled' ? 'FOLLOW_UP_CANCELLED' : (wasRescheduled || status === 'rescheduled') ? 'FOLLOW_UP_RESCHEDULED' : 'FOLLOW_UP_UPDATED';
+    await recordStaffActivity({ req, department: 'sales', action: activityAction, entityType: 'FollowUp', entityId: followUp._id, entityKey: String(followUp.leadId), entityLabel: followUp.title, metadata: { fromStatus: previousStatus, toStatus: followUp.status, scheduledAt: followUp.scheduledAt } });
 
     res.json({
       success: true,
@@ -222,6 +230,7 @@ export const completeFollowUp = async (req, res) => {
 
     await followUp.save();
     await syncLeadNextFollowUp(followUp.leadId);
+    await recordStaffActivity({ req, department: 'sales', action: 'FOLLOW_UP_COMPLETED', entityType: 'FollowUp', entityId: followUp._id, entityKey: String(followUp.leadId), entityLabel: followUp.title, metadata: { leadId: String(followUp.leadId) } });
 
     // Optional: update parent lead status if provided
     if (leadStatusUpdate && followUp.leadId && isDbConnected()) {
@@ -251,6 +260,7 @@ export const deleteFollowUp = async (req, res) => {
     const deleted = mongoose.Types.ObjectId.isValid(id) ? await FollowUp.findByIdAndDelete(id) : null;
     if (!deleted) return res.status(404).json({ success: false, message: 'Follow-up not found.' });
     await syncLeadNextFollowUp(deleted.leadId);
+    await recordStaffActivity({ req, department: 'sales', action: 'FOLLOW_UP_CANCELLED', entityType: 'FollowUp', entityId: deleted._id, entityKey: String(deleted.leadId), entityLabel: deleted.title, metadata: { deleted: true, scheduledAt: deleted.scheduledAt } });
 
     res.json({
       success: true,

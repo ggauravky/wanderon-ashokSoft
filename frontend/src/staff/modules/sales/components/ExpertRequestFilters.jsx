@@ -1,18 +1,16 @@
 import React from 'react';
 import { Search } from 'lucide-react';
-import { LEAD_PRIORITIES, LEAD_STATUSES, SALES_QUICK_VIEWS, getMetricValue } from '../salesNavigation.js';
+import { LEAD_STATUSES, SALES_QUICK_VIEWS, getMetricValue } from '../salesNavigation.js';
 
 const ExpertRequestFilters = ({
   view,
   metrics,
   search,
   status,
-  priority,
   callbackTiming,
   onViewChange,
   onSearchChange,
   onStatusChange,
-  onPriorityChange,
   onCallbackTimingChange
 }) => (
   <section className="space-y-3" aria-label="Expert request filters">
@@ -38,7 +36,7 @@ const ExpertRequestFilters = ({
       })}
     </div>
 
-    <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[minmax(15rem,1fr)_repeat(3,minmax(9rem,auto))]">
+    <div className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-[minmax(15rem,1fr)_repeat(2,minmax(9rem,auto))]">
       <label className="relative block">
         <span className="sr-only">Search expert requests</span>
         <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -56,14 +54,6 @@ const ExpertRequestFilters = ({
         <select value={status} onChange={(event) => onStatusChange(event.target.value)} className="min-h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
           <option value="all">All statuses</option>
           {LEAD_STATUSES.map((item) => <option key={item} value={item}>{item.replaceAll('_', ' ')}</option>)}
-        </select>
-      </label>
-
-      <label className="relative">
-        <span className="sr-only">Priority</span>
-        <select value={priority} onChange={(event) => onPriorityChange(event.target.value)} className="min-h-10 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100">
-          <option value="all">All priorities</option>
-          {LEAD_PRIORITIES.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
 

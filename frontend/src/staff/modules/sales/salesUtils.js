@@ -95,10 +95,3 @@ export const getStatusClasses = (status) => ({
   CONVERTED: 'border-teal-200 bg-teal-50 text-teal-700',
   LOST: 'border-slate-200 bg-slate-100 text-slate-600'
 }[status] || 'border-slate-200 bg-slate-50 text-slate-600');
-
-export const getPriorityClasses = (priority) => ({
-  LOW: 'text-slate-500',
-  MEDIUM: 'text-sky-700',
-  HIGH: 'text-amber-700',
-  URGENT: 'text-rose-700'
-}[priority] || 'text-slate-500');
