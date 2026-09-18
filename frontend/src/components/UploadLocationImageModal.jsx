@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { uploadImageApi, createMediaAssetApi, createQuotationHotelMediaAssetApi } from '../services/api.js';
+import { validateImageUploadFile } from '../utils/uploadResult.js';
 
 export default function UploadLocationImageModal({
   isOpen,
@@ -69,14 +70,10 @@ export default function UploadLocationImageModal({
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) {
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+      const validationError = validateImageUploadFile(selected);
+      if (validationError) {
         setFile(null);
-        setErrorMsg('Use a JPG, PNG, or WEBP image.');
-        return;
-      }
-      if (selected.size > 10 * 1024 * 1024) {
-        setFile(null);
-        setErrorMsg('Image must be 10 MB or smaller.');
+        setErrorMsg(validationError);
         return;
       }
       if (filePreview && filePreview.startsWith('blob:')) {
@@ -114,15 +111,15 @@ export default function UploadLocationImageModal({
         setUploading(true);
         const uploadRes = uploadedFileData || await uploadImageApi(file, isHotel ? 'wanderluxe/quotation-hotels' : 'wanderluxe/locations');
         setUploadedFileData(uploadRes);
-        finalImageUrl = uploadRes.secure_url || uploadRes.url;
-        publicId = uploadRes.public_id || '';
+        finalImageUrl = uploadRes.secureUrl;
+        publicId = uploadRes.publicId;
         if (uploadRes.width) width = uploadRes.width;
         if (uploadRes.height) height = uploadRes.height;
         if (uploadRes.format) format = uploadRes.format;
         if (uploadRes.bytes) bytes = uploadRes.bytes;
-      } catch {
+      } catch (uploadError) {
         setUploading(false);
-        setErrorMsg('Unable to upload image. Please try again.');
+        setErrorMsg(uploadError.message || 'Unable to upload image. Please try again.');
         return;
       }
     } else {
@@ -138,7 +135,11 @@ export default function UploadLocationImageModal({
       return;
     }
 
-    if (!title.trim() || !destination.trim()) {
+    const resolvedDestination = isHotel
+      ? (city.trim() || locality.trim() || initialDestination.trim() || destination.trim())
+      : destination.trim();
+
+    if (!title.trim() || !resolvedDestination) {
       setErrorMsg('Title and Destination are required.');
       setUploading(false);
       return;
@@ -154,7 +155,7 @@ export default function UploadLocationImageModal({
       const assetPayload = {
         title: title.trim(),
         caption: caption.trim() || title.trim(),
-        altText: altText.trim() || `${poi || locality || title}, ${destination}`,
+        altText: altText.trim() || `${poi || locality || title}, ${resolvedDestination}`,
         storage: {
           provider: publicId ? 'cloudinary' : 'external',
           secureUrl: finalImageUrl,
@@ -167,15 +168,21 @@ export default function UploadLocationImageModal({
         geography: {
           country: country.trim() || 'India',
           state: state.trim(),
-          destination: destination.trim(),
+          destination: resolvedDestination,
           city: city.trim(),
           locality: locality.trim(),
           poi: poi.trim()
         },
+        hotel: isHotel ? {
+          city: city.trim(),
+          location: locality.trim() || poi.trim()
+        } : undefined,
+        quotationDestination: isHotel ? initialDestination.trim() : undefined,
+        destination: resolvedDestination,
         location: {
           country: country.trim() || 'India',
           state: state.trim(),
-          destination: destination.trim(),
+          destination: resolvedDestination,
           city: city.trim(),
           locality: locality.trim(),
           poi: poi.trim()
@@ -200,7 +207,7 @@ export default function UploadLocationImageModal({
       onClose();
     } catch (createErr) {
       setErrorMsg(isHotel
-        ? 'Image uploaded, but it could not be added to the media library. Please try again.'
+        ? (createErr.message || 'Image uploaded, but it could not be added to the media library. Please try again.')
         : 'Failed to register media asset in database: ' + createErr.message);
     } finally {
       setUploading(false);

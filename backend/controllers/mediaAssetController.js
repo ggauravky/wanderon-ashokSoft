@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import MediaAsset, { generateLocationKeys } from '../models/MediaAsset.js';
+import { isAllowedHotelMediaCategory, normalizeQuotationHotelMediaInput } from '../services/quotationHotelMediaService.js';
 import Trip from '../models/Trip.js';
 import Quotation from '../models/Quotation.js';
 import Page from '../models/Page.js';
@@ -280,34 +281,28 @@ export const createMediaAsset = async (req, res) => {
 export const createQuotationHotelMediaAsset = async (req, res) => {
   try {
     if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets cannot be created while the database is disconnected.' });
-    const { title, altText, caption = '', storage, geography = {}, tags = [], categories = ['Hotel'] } = req.body || {};
-    if (!title?.trim() || !altText?.trim() || !storage?.secureUrl || !geography?.destination?.trim()) {
-      return res.status(400).json({ success: false, message: 'Title, alt text, destination, and uploaded image are required.' });
-    }
+    const { title, altText, caption, storage, geography, tags, categories, orientation } = normalizeQuotationHotelMediaInput(req.body);
+    if (!title) return res.status(400).json({ success: false, message: 'Title is required before adding hotel media.' });
+    if (!altText) return res.status(400).json({ success: false, message: 'Alt text is required before adding hotel media.' });
+    if (!geography.destination) return res.status(400).json({ success: false, message: 'Destination is required before adding hotel media.' });
+    if (!storage.secureUrl) return res.status(400).json({ success: false, message: 'The uploaded image URL is missing. Please upload the image again.' });
     if (!isSafeRemoteUrl(storage.secureUrl)) {
       return res.status(400).json({ success: false, message: 'The uploaded image URL is invalid.' });
     }
-    const normalizedCategories = Array.isArray(categories)
-      ? categories.map((value) => String(value).trim()).filter(Boolean).slice(0, 5)
-      : ['Hotel'];
-    const allowedCategories = new Set(['Hotel', 'Resort', 'Room', 'Property', 'Boutique Hotel', 'Luxury Hotel', 'Mountain Resort', 'Beach Resort', 'Homestay', 'Villa']);
-    if (!normalizedCategories.length || normalizedCategories.some((value) => !allowedCategories.has(value))) {
-      return res.status(422).json({ success: false, message: 'Select a valid hotel media category.' });
+    if (!categories.length || categories.some((value) => !isAllowedHotelMediaCategory(value))) {
+      return res.status(400).json({ success: false, message: 'Select a valid hotel media category.' });
     }
-    const normalizedTags = Array.isArray(tags)
-      ? [...new Set([...tags.map((value) => String(value).toLowerCase().trim()).filter(Boolean), 'hotel', 'property'])]
-      : ['hotel', 'property'];
     const asset = await MediaAsset.create({
       type: 'IMAGE',
-      title: title.trim(),
-      altText: altText.trim(),
-      caption: String(caption || title).trim(),
+      title,
+      altText,
+      caption,
       storage,
-      geography: { ...geography, destination: geography.destination.trim() },
-      locationKeys: generateLocationKeys(geography, title, normalizedTags),
-      tags: normalizedTags,
-      categories: normalizedCategories,
-      orientation: req.body?.orientation || 'LANDSCAPE',
+      geography,
+      locationKeys: generateLocationKeys(geography, title, tags),
+      tags,
+      categories,
+      orientation,
       usage: { itinerary: false, destination: false, tripCard: false, hero: false, gallery: true, hotel: true },
       source: { sourceType: 'STAFF_UPLOAD', attribution: 'WanderLuxe Staff Upload', license: 'Staff-provided quotation media' },
       active: true,
@@ -316,8 +311,14 @@ export const createQuotationHotelMediaAsset = async (req, res) => {
     });
     return res.status(201).json({ success: true, message: 'Hotel image added to the media library.', data: asset });
   } catch (error) {
-    console.error('Create Quotation Hotel Media Error:', error, { publicId: req.body?.storage?.publicId || '' });
-    return res.status(error?.name === 'ValidationError' ? 422 : 500).json({ success: false, message: 'Unable to add the uploaded image to the media library.' });
+    const publicId = req.body?.storage?.publicId || req.body?.storage?.public_id || req.body?.publicId || req.body?.public_id || '';
+    console.error('Create Quotation Hotel Media Error:', error, { orphanPublicId: publicId });
+    return res.status(error?.name === 'ValidationError' ? 400 : 500).json({
+      success: false,
+      message: error?.name === 'ValidationError'
+        ? 'Hotel media metadata contains an invalid value.'
+        : 'The image uploaded, but its media record could not be saved. Please retry without uploading the file again.'
+    });
   }
 };
 

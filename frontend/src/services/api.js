@@ -1,4 +1,5 @@
 import { API_BASE_URL, getHeaders, parseApiResponse, request, toQueryString } from './apiConfig.js';
+import { normalizeImageUploadResult } from '../utils/uploadResult.js';
 
 export * from './quotationService.js';
 export { getHeaders } from './apiConfig.js';
@@ -1081,7 +1082,7 @@ export async function uploadImageApi(file, folder = 'wanderluxe/trips') {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to upload image asset');
   }
-  return data.data;
+  return normalizeImageUploadResult(data.data || data);
 }
 
 // ==========================================
