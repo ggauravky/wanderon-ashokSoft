@@ -13,8 +13,9 @@ test('custom India date boundaries preserve the selected calendar days', () => {
 });
 
 test('invalid and reversed custom ranges are rejected before Mongo receives them', () => {
-  assert.throws(() => resolveAnalyticsRange({ range: 'custom', from: 'Invalid Date', to: '2026-09-02' }), /YYYY-MM-DD/);
-  assert.throws(() => resolveAnalyticsRange({ range: 'custom', from: '2026-09-03', to: '2026-09-02' }), /on or before/);
+  assert.throws(() => resolveAnalyticsRange({ range: 'custom', from: 'Invalid Date', to: '2026-09-02' }), /Invalid analytics date range/);
+  assert.throws(() => resolveAnalyticsRange({ range: 'custom', from: '2026-02-30', to: '2026-03-02' }), /Invalid analytics date range/);
+  assert.throws(() => resolveAnalyticsRange({ range: 'custom', from: '2026-09-03', to: '2026-09-02' }), /Invalid analytics date range/);
 });
 
 test('all-time ranges do not invent a previous comparison period', () => {

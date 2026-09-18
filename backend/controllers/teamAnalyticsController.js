@@ -26,6 +26,12 @@ import {
 
 const connected = () => mongoose.connection?.readyState === 1;
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
+const unavailable = (res) => res.status(503).json({ success: false, message: 'Team analytics are temporarily unavailable.' });
+const analyticsError = (res, error, fallback) => {
+  const databaseError = !connected() || /^(Mongo|Mongoose)/.test(String(error?.name || ''));
+  if (databaseError) return unavailable(res);
+  return sendErrorResponse(res, error, fallback);
+};
 const countMap = (rows = []) => Object.fromEntries(rows.map((row) => [String(row._id || '').toLowerCase(), row.count]));
 const pct = (numerator, denominator) => denominator ? Math.round((numerator / denominator) * 1000) / 10 : 0;
 const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
@@ -59,7 +65,7 @@ const timelineItem = ({ id, at, action, label, detail = '', href = '' }) => ({ i
 
 export const getTeamAnalyticsMembers = async (req, res) => {
   try {
-    if (!connected()) return res.status(503).json({ success: false, message: 'Team analytics are unavailable while the database is disconnected.' });
+    if (!connected()) return unavailable(res);
     const category = String(req.query.category || '').toLowerCase();
     const role = CATEGORY_ROLE[category];
     if (!role) return res.status(400).json({ success: false, message: 'Category must be sales, marketing, or creator.' });
@@ -68,7 +74,7 @@ export const getTeamAnalyticsMembers = async (req, res) => {
     const members = await User.find(filter).select('name email avatar role isActive influencerStatus').sort({ isActive: -1, name: 1 }).lean();
     return res.json({ success: true, category, members });
   } catch (error) {
-    return sendErrorResponse(res, error, 'Unable to load analytics members.');
+    return analyticsError(res, error, 'Unable to load analytics members.');
   }
 };
 
@@ -128,7 +134,7 @@ const salesAnalytics = async (userId, range) => {
   const callOutcomeKeys = ['CONNECTED', 'NO_ANSWER', 'BUSY', 'CALL_LATER', 'WRONG_NUMBER'];
   const callActions = callOutcomeKeys.reduce((total, key) => total + Number(outcomes[key] || 0), 0);
 
-  const [leadBreakdown, bookingRows, quoteEventRows, revisions, shares, contactsTrend, followsTrend, quotesTrend, bookingTrend, recentQuoteEvents] = await Promise.all([
+  const [leadBreakdown, bookingRows, staffQuoteEventRows, quoteOutcomeEventRows, revisions, shares, contactsTrend, followsTrend, quotesTrend, bookingTrend, recentQuoteEvents] = await Promise.all([
     touchedIds.length ? Lead.aggregate([
       { $match: { _id: { $in: touchedIds }, leadType: 'callback_request' } },
       { $facet: {
@@ -137,24 +143,39 @@ const salesAnalytics = async (userId, range) => {
         assisted: [{ $match: { $or: [{ status: 'CONVERTED' }, { convertedBookingId: { $ne: null } }] } }, { $count: 'count' }]
       } }
     ]) : [],
-    quote.ids.length ? Booking.aggregate([
-      { $match: { sourceQuotationId: { $in: quote.ids }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } },
+    Booking.aggregate([
+      { $match: { sourceQuotationId: { $ne: null }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } },
+      { $lookup: { from: Quotation.collection.name, let: { sourceQuotationId: '$sourceQuotationId' }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$_id', '$$sourceQuotationId'] }, { $eq: ['$createdBy', userObjectId] }] } } }], as: 'sourceQuotation' } },
+      { $match: { 'sourceQuotation.0': { $exists: true } } },
       { $group: { _id: null, count: { $sum: 1 }, customers: { $addToSet: { $ifNull: ['$userId', '$customer.email'] } }, paidCustomers: { $addToSet: { $cond: [{ $in: ['$paymentStatus', ['PAID', 'PARTIALLY_PAID']] }, { $ifNull: ['$userId', '$customer.email'] }, '$$REMOVE'] } }, paidRevenue: { $sum: '$pricing.amountPaid' }, bookingValue: { $sum: '$pricing.finalAmount' } } }
-    ]) : [],
-    quote.ids.length ? QuotationEvent.aggregate([{ $match: { quotationId: { $in: quote.ids }, ...dateMatch('createdAt', range) } }, { $group: { _id: '$type', count: { $sum: 1 } } }]) : [],
+    ]),
+    QuotationEvent.aggregate([{ $match: { actorId: userObjectId, actorType: 'STAFF', ...dateMatch('createdAt', range) } }, { $group: { _id: '$type', count: { $sum: 1 } } }]),
+    QuotationEvent.aggregate([
+      { $match: { type: { $in: ['PUBLIC_VIEWED', 'CUSTOMER_APPROVED', 'CUSTOMER_CHANGES_REQUESTED', 'ADMIN_APPROVAL_OVERRIDE', 'BOOKING_CREATED'] }, ...dateMatch('createdAt', range) } },
+      { $lookup: { from: Quotation.collection.name, let: { quotationId: '$quotationId' }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$_id', '$$quotationId'] }, { $eq: ['$createdBy', userObjectId] }] } } }], as: 'sourceQuotation' } },
+      { $match: { 'sourceQuotation.0': { $exists: true } } },
+      { $group: { _id: '$type', count: { $sum: 1 } } }
+    ]),
     QuotationRevision.countDocuments({ createdBy: userObjectId, ...dateMatch('createdAt', range) }),
     QuotationShare.countDocuments({ createdBy: userObjectId, ...dateMatch('createdAt', range) }),
     Lead.aggregate([{ $match: { leadType: 'callback_request' } }, { $unwind: '$callOutcomes' }, { $match: contactMatch }, { $group: { _id: { $dateTrunc: { date: '$callOutcomes.loggedAt', unit, timezone: 'Asia/Kolkata' } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
     FollowUp.aggregate([{ $match: { completedBy: userObjectId, completedAt: eventRange } }, { $group: { _id: { $dateTrunc: { date: '$completedAt', unit, timezone: 'Asia/Kolkata' } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
     Quotation.aggregate([{ $match: { createdBy: userObjectId, ...dateMatch('createdAt', range) } }, { $group: { _id: { $dateTrunc: { date: '$createdAt', unit, timezone: 'Asia/Kolkata' } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]),
-    quote.ids.length ? Booking.aggregate([{ $match: { sourceQuotationId: { $in: quote.ids }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: { $dateTrunc: { date: '$createdAt', unit, timezone: 'Asia/Kolkata' } }, count: { $sum: 1 } } }, { $sort: { _id: 1 } }]) : [],
+    Booking.aggregate([
+      { $match: { sourceQuotationId: { $ne: null }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } },
+      { $lookup: { from: Quotation.collection.name, let: { sourceQuotationId: '$sourceQuotationId' }, pipeline: [{ $match: { $expr: { $and: [{ $eq: ['$_id', '$$sourceQuotationId'] }, { $eq: ['$createdBy', userObjectId] }] } } }], as: 'sourceQuotation' } },
+      { $match: { 'sourceQuotation.0': { $exists: true } } },
+      { $group: { _id: { $dateTrunc: { date: '$createdAt', unit, timezone: 'Asia/Kolkata' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]),
     QuotationEvent.find({ actorId: userObjectId, ...dateMatch('createdAt', range) }).sort({ createdAt: -1 }).limit(20).populate('quotationId', 'quotationNumber').lean()
   ]);
 
   const stages = countMap(leadBreakdown[0]?.stages);
   const assisted = leadBreakdown[0]?.assisted?.[0]?.count || 0;
   const booking = bookingRows[0] || { count: 0, customers: [], paidCustomers: [], paidRevenue: 0, bookingValue: 0 };
-  const eventCounts = countMap(quoteEventRows);
+  const staffEventCounts = countMap(staffQuoteEventRows);
+  const outcomeEventCounts = countMap(quoteOutcomeEventRows);
   const recentActivity = [
     ...staffEvents.map((event) => timelineItem({ id: event._id, at: event.createdAt, action: event.action, label: event.entityLabel || event.entityKey || event.entityType, detail: event.metadata?.outcome || '', href: event.entityType === 'Lead' ? `/staff/sales/expert-requests?leadId=${event.entityId}` : '' })),
     ...recentQuoteEvents.map((event) => timelineItem({ id: event._id, at: event.createdAt, action: event.type, label: event.quotationId?.quotationNumber || 'Quotation', href: event.quotationId?._id ? `/staff/sales/quotations/${event.quotationId._id}` : '' }))
@@ -174,7 +195,7 @@ const salesAnalytics = async (userId, range) => {
       paidCustomers: booking.paidCustomers.length,
       paidRevenue: booking.paidRevenue,
       bookingValue: booking.bookingValue,
-      trackedActions: staffActionCount + sum(quoteEventRows, 'count'),
+      trackedActions: staffActionCount + sum(staffQuoteEventRows, 'count'),
       recordsWorkedOn: touchedIds.length + quote.ids.length,
       lastActivity: recentActivity[0]?.at || null
     },
@@ -189,10 +210,12 @@ const salesAnalytics = async (userId, range) => {
       quotations: {
         revisionsCreated: revisions,
         sharesCreated: shares,
-        customerViews: eventCounts.public_viewed || 0,
-        customerApprovals: (eventCounts.customer_approved || 0) + (eventCounts.admin_approval_override || 0),
-        changeRequests: eventCounts.customer_changes_requested || 0,
-        bookingConversions: eventCounts.booking_created || booking.count,
+        staffActions: sum(staffQuoteEventRows, 'count'),
+        pricingFinalized: staffEventCounts.pricing_finalized || 0,
+        customerViews: outcomeEventCounts.public_viewed || 0,
+        customerApprovals: (outcomeEventCounts.customer_approved || 0) + (outcomeEventCounts.admin_approval_override || 0),
+        changeRequests: outcomeEventCounts.customer_changes_requested || 0,
+        bookingConversions: outcomeEventCounts.booking_created || booking.count,
         assistedLeadConversionRate: pct(assisted, touchedIds.length),
         quotationToBookingRate: pct(booking.count, quote.created)
       }
@@ -247,16 +270,22 @@ const creatorAnalytics = async (userId, range) => {
   const coupons = await Coupon.find({ creatorUserId: userObjectId }).select('code status isActive usageCount totalRedemptions revenueGenerated commissionEarned startsAt endsAt').lean();
   const couponIds = coupons.map((coupon) => coupon._id);
   const couponCodes = coupons.map((coupon) => coupon.code);
+  const attributedBookingFilter = {
+    $or: [
+      ...(couponIds.length ? [{ 'couponRedemption.couponId': { $in: couponIds } }] : []),
+      ...(couponCodes.length ? [{ 'influencerAttribution.couponCode': { $in: couponCodes } }] : [])
+    ]
+  };
   const [bookingRows, bookingByCoupon, commissionRows, payoutRows, recentBookings, recentCommissions, recentPayouts, creatorTrend, previousReferralBookings, commissionByCoupon] = await Promise.all([
-    couponIds.length ? Booking.aggregate([{ $match: { 'couponRedemption.couponId': { $in: couponIds }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: null, bookings: { $sum: 1 }, paidBookings: { $sum: { $cond: [{ $in: ['$paymentStatus', ['PAID', 'PARTIALLY_PAID']] }, 1, 0] } }, referralRevenue: { $sum: '$pricing.finalAmount' }, collectedRevenue: { $sum: '$pricing.amountPaid' } } }]) : [],
+    couponIds.length ? Booking.aggregate([{ $match: { ...attributedBookingFilter, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: null, bookings: { $sum: 1 }, paidBookings: { $sum: { $cond: [{ $in: ['$paymentStatus', ['PAID', 'PARTIALLY_PAID']] }, 1, 0] } }, referralRevenue: { $sum: '$pricing.finalAmount' }, collectedRevenue: { $sum: '$pricing.amountPaid' } } }]) : [],
     couponIds.length ? Booking.aggregate([{ $match: { 'couponRedemption.couponId': { $in: couponIds }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: '$couponRedemption.couponId', redemptions: { $sum: 1 }, revenue: { $sum: '$pricing.finalAmount' }, collectedRevenue: { $sum: '$pricing.amountPaid' } } }, { $sort: { revenue: -1 } }]) : [],
     couponCodes.length ? Commission.aggregate([{ $match: { couponCode: { $in: couponCodes }, ...dateMatch('createdAt', range) } }, { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } }]) : [],
     Payout.aggregate([{ $match: { creatorUserId: userObjectId, ...dateMatch('createdAt', range) } }, { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$amount' } } }]),
-    couponIds.length ? Booking.find({ 'couponRedemption.couponId': { $in: couponIds }, ...dateMatch('createdAt', range) }).sort({ createdAt: -1 }).limit(12).select('bookingId couponRedemption pricing paymentStatus createdAt').lean() : [],
+    couponIds.length ? Booking.find({ ...attributedBookingFilter, ...dateMatch('createdAt', range) }).sort({ createdAt: -1 }).limit(12).select('bookingId couponRedemption influencerAttribution pricing paymentStatus createdAt').lean() : [],
     couponCodes.length ? Commission.find({ couponCode: { $in: couponCodes }, ...dateMatch('createdAt', range) }).sort({ createdAt: -1 }).limit(12).lean() : [],
     Payout.find({ creatorUserId: userObjectId, ...dateMatch('createdAt', range) }).sort({ createdAt: -1 }).limit(12).lean(),
-    couponIds.length ? Booking.aggregate([{ $match: { 'couponRedemption.couponId': { $in: couponIds }, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: { $dateTrunc: { date: '$createdAt', unit, timezone: 'Asia/Kolkata' } }, redemptions: { $sum: 1 }, revenue: { $sum: '$pricing.finalAmount' }, collectedRevenue: { $sum: '$pricing.amountPaid' } } }, { $sort: { _id: 1 } }]) : [],
-    couponIds.length && range.previousFrom ? Booking.countDocuments({ 'couponRedemption.couponId': { $in: couponIds }, createdAt: { $gte: range.previousFrom, $lte: range.previousTo }, bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } }) : 0,
+    couponIds.length ? Booking.aggregate([{ $match: { ...attributedBookingFilter, ...dateMatch('createdAt', range), bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } } }, { $group: { _id: { $dateTrunc: { date: '$createdAt', unit, timezone: 'Asia/Kolkata' } }, redemptions: { $sum: 1 }, revenue: { $sum: '$pricing.finalAmount' }, collectedRevenue: { $sum: '$pricing.amountPaid' } } }, { $sort: { _id: 1 } }]) : [],
+    couponIds.length && range.previousFrom ? Booking.countDocuments({ ...attributedBookingFilter, createdAt: { $gte: range.previousFrom, $lte: range.previousTo }, bookingStatus: { $nin: ['CANCELLED', 'FAILED'] } }) : 0,
     couponCodes.length ? Commission.aggregate([{ $match: { couponCode: { $in: couponCodes }, ...dateMatch('createdAt', range), status: { $nin: ['REVERSED', 'DISPUTED'] } } }, { $group: { _id: '$couponCode', amount: { $sum: '$amount' } } }]) : []
   ]);
   const booking = bookingRows[0] || { bookings: 0, paidBookings: 0, referralRevenue: 0, collectedRevenue: 0 };
@@ -289,16 +318,18 @@ const creatorAnalytics = async (userId, range) => {
 
 export const getTeamMemberAnalytics = async (req, res) => {
   try {
-    if (!connected()) return res.status(503).json({ success: false, message: 'Team analytics are unavailable while the database is disconnected.' });
+    if (!connected()) return unavailable(res);
     const category = String(req.query.category || '').toLowerCase();
     const expectedRole = CATEGORY_ROLE[category];
-    if (!expectedRole || !mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ success: false, message: 'Select a valid category and member.' });
+    if (!expectedRole) return res.status(400).json({ success: false, message: 'Category must be sales, marketing, or creator.' });
+    if (!mongoose.Types.ObjectId.isValid(req.params.userId)) return res.status(400).json({ success: false, message: 'Invalid team member ID.' });
     const member = await User.findById(req.params.userId).select('name email avatar role isActive influencerStatus influencerApplication').lean();
-    if (!member || member.role !== expectedRole || (category === 'creator' && member.influencerStatus !== 'approved')) return res.status(400).json({ success: false, message: 'Invalid category-member combination.' });
+    if (!member) return res.status(404).json({ success: false, message: 'Team member not found.' });
+    if (member.role !== expectedRole || (category === 'creator' && member.influencerStatus !== 'approved')) return res.status(400).json({ success: false, message: 'Selected member does not belong to this category.' });
     const range = resolveAnalyticsRange(req.query);
     const analytics = category === 'sales' ? await salesAnalytics(member._id, range) : category === 'marketing' ? await marketingAnalytics(member._id, range) : await creatorAnalytics(member._id, range);
     return res.json({ success: true, member: memberPayload(member, category), range: serializeRange(range), category, ...analytics });
   } catch (error) {
-    return sendErrorResponse(res, error, 'Unable to load member analytics.');
+    return analyticsError(res, error, 'Unable to load member analytics.');
   }
 };

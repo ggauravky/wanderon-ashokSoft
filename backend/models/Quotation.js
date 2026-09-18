@@ -1,15 +1,19 @@
 import mongoose from 'mongoose';
+import {
+  QUOTATION_ATTACHMENT_CATEGORIES,
+  QUOTATION_ATTACHMENT_VISIBILITIES,
+  TRANSPORT_DOCUMENT_TYPES,
+  normalizeAttachmentVisibility,
+  normalizeQuotationAttachment,
+  normalizeTransportDocumentType
+} from '../constants/quotationAttachments.js';
 
 const quotationAttachmentSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
     category: {
       type: String,
-      enum: [
-        'HOTEL_VOUCHER', 'HOTEL_CONFIRMATION', 'FLIGHT_TICKET', 'TRAIN_TICKET',
-        'BUS_TICKET', 'TRANSPORT_VOUCHER', 'ACTIVITY_TICKET', 'ACTIVITY_VOUCHER',
-        'PERMIT', 'INSURANCE', 'INVOICE', 'GENERAL', 'OTHER'
-      ],
+      enum: QUOTATION_ATTACHMENT_CATEGORIES,
       default: 'GENERAL'
     },
     sectionType: { type: String, enum: ['GENERAL', 'HOTEL', 'TRANSPORT', 'ACTIVITY', 'ADD_ON'], default: 'GENERAL' },
@@ -23,7 +27,7 @@ const quotationAttachmentSchema = new mongoose.Schema(
     secureUrl: { type: String, required: true },
     visibility: {
       type: String,
-      enum: ['INTERNAL_ONLY', 'CUSTOMER_VISIBLE', 'CUSTOMER_VISIBLE_AFTER_APPROVAL', 'CUSTOMER_VISIBLE_AFTER_BOOKING'],
+      enum: QUOTATION_ATTACHMENT_VISIBILITIES,
       default: 'INTERNAL_ONLY'
     },
     bookingReference: { type: String, default: '' },
@@ -99,17 +103,7 @@ const transportDocumentSchema = new mongoose.Schema(
     id: { type: String, default: () => `tdoc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` },
     type: {
       type: String,
-      enum: [
-        'FLIGHT_TICKET',
-        'TRAIN_TICKET',
-        'BUS_TICKET',
-        'TRANSPORT_VOUCHER',
-        'BOOKING_CONFIRMATION',
-        'BOARDING_DOCUMENT',
-        'PERMIT',
-        'SUPPLIER_INVOICE',
-        'OTHER'
-      ],
+      enum: TRANSPORT_DOCUMENT_TYPES,
       default: 'TRANSPORT_VOUCHER'
     },
     title: { type: String, default: '' },
@@ -121,7 +115,7 @@ const transportDocumentSchema = new mongoose.Schema(
     secureUrl: { type: String, required: true },
     visibility: {
       type: String,
-      enum: ['CUSTOMER_VISIBLE', 'INTERNAL_ONLY', 'CUSTOMER_VISIBLE_AFTER_BOOKING'],
+      enum: QUOTATION_ATTACHMENT_VISIBILITIES,
       default: 'CUSTOMER_VISIBLE'
     },
     passengerName: { type: String, default: '' },
@@ -658,6 +652,34 @@ const quotationSchema = new mongoose.Schema(
     timestamps: true 
   }
 );
+
+const plain = (value) => value?.toObject ? value.toObject() : value;
+
+// Normalize recognized legacy display labels on every document-save path. This
+// keeps old drafts editable while the whitelist still rejects unknown values.
+quotationSchema.pre('validate', function normalizeLegacyAttachmentEnums() {
+  this.attachments = (this.attachments || []).map((item) => normalizeQuotationAttachment(plain(item)));
+  this.hotelOptions = (this.hotelOptions || []).map((item) => ({
+    ...plain(item),
+    documents: (item.documents || []).map((document) => normalizeQuotationAttachment(plain(document)))
+  }));
+  this.transportOptions = (this.transportOptions || []).map((item) => ({
+    ...plain(item),
+    documents: (item.documents || []).map((document) => ({
+      ...plain(document),
+      type: normalizeTransportDocumentType(document.type),
+      visibility: normalizeAttachmentVisibility(document.visibility, 'CUSTOMER_VISIBLE')
+    }))
+  }));
+  this.activities = (this.activities || []).map((item) => ({
+    ...plain(item),
+    attachments: (item.attachments || []).map((attachment) => normalizeQuotationAttachment(plain(attachment)))
+  }));
+  this.addOns = (this.addOns || []).map((item) => ({
+    ...plain(item),
+    attachments: (item.attachments || []).map((attachment) => normalizeQuotationAttachment(plain(attachment)))
+  }));
+});
 
 // Compound and fast-lookup indexes for pipeline querying
 quotationSchema.index({ status: 1, createdAt: -1 });

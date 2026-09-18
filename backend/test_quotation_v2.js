@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 
 process.env.JWT_SECRET ||= 'quotation-v2-test-secret-that-is-long-enough';
 
@@ -10,6 +11,12 @@ const {
   validateQuotationV2,
   verificationHash
 } = await import('./services/quotationV2Service.js');
+const {
+  QUOTATION_ATTACHMENT_CATEGORIES,
+  QUOTATION_ATTACHMENT_VISIBILITIES,
+  normalizeQuotationAttachmentPayload
+} = await import('./constants/quotationAttachments.js');
+const { default: Quotation } = await import('./models/Quotation.js');
 
 const baseQuotation = () => ({
   _id: 'quotation-1',
@@ -68,6 +75,69 @@ test('public revision DTO strips internal supplier fields and internal attachmen
   assert.equal('pricePerNight' in dto.hotelOptions[0], false);
   assert.equal('unitCost' in dto.transportOptions[0], false);
   assert.equal('driverDetails' in dto.transportOptions[0], false);
+});
+
+test('legacy attachment display labels normalize across every quotation attachment path', () => {
+  const normalized = normalizeQuotationAttachmentPayload({
+    attachments: [{ category: 'TRAIN TICKET', visibility: 'customer visible after approval' }],
+    hotelOptions: [{ documents: [{ category: 'HOTEL VOUCHER', visibility: 'CUSTOMER VISIBLE' }] }],
+    transportOptions: [{ documents: [{ type: 'TRAIN TICKET', visibility: 'CUSTOMER VISIBLE AFTER APPROVAL' }] }],
+    activities: [{ attachments: [{ category: 'ACTIVITY TICKET', visibility: 'CUSTOMER VISIBLE AFTER BOOKING' }] }],
+    addOns: [{ attachments: [{ category: 'insurance', visibility: 'internal only' }] }]
+  });
+  assert.equal(normalized.attachments[0].category, 'TRAIN_TICKET');
+  assert.equal(normalized.attachments[0].visibility, 'CUSTOMER_VISIBLE_AFTER_APPROVAL');
+  assert.equal(normalized.hotelOptions[0].documents[0].category, 'HOTEL_VOUCHER');
+  assert.equal(normalized.transportOptions[0].documents[0].type, 'TRAIN_TICKET');
+  assert.equal(normalized.transportOptions[0].documents[0].visibility, 'CUSTOMER_VISIBLE_AFTER_APPROVAL');
+  assert.equal(normalized.activities[0].attachments[0].visibility, 'CUSTOMER_VISIBLE_AFTER_BOOKING');
+  assert.equal(normalized.addOns[0].attachments[0].category, 'INSURANCE');
+});
+
+test('unknown attachment labels are rejected before Mongoose validation', () => {
+  assert.throws(() => normalizeQuotationAttachmentPayload({ attachments: [{ category: 'TRAIN RECEIPT' }] }), /Invalid attachment category/);
+  assert.throws(() => normalizeQuotationAttachmentPayload({ attachments: [{ visibility: 'EVERYONE' }] }), /Invalid attachment visibility/);
+});
+
+test('quotation schema and shared constants accept every supported attachment enum', () => {
+  const attachmentSchema = Quotation.schema.path('attachments').schema;
+  assert.deepEqual(attachmentSchema.path('category').enumValues, [...QUOTATION_ATTACHMENT_CATEGORIES]);
+  assert.deepEqual(attachmentSchema.path('visibility').enumValues, [...QUOTATION_ATTACHMENT_VISIBILITIES]);
+  const transportVisibility = Quotation.schema.path('transportOptions').schema.path('documents').schema.path('visibility').enumValues;
+  assert.deepEqual(transportVisibility, [...QUOTATION_ATTACHMENT_VISIBILITIES]);
+});
+
+test('model validation repairs recognized spaced enum values on an existing draft', async () => {
+  const actorId = new mongoose.Types.ObjectId();
+  const draft = new Quotation({
+    quotationNumber: 'WLX-Q-2026-LEGACY',
+    createdBy: actorId,
+    validUntil: new Date(Date.now() + 86_400_000),
+    customerSnapshot: { name: 'Traveler', email: 'traveler@example.com', phone: '9876543210' },
+    tripRequirements: { title: 'Legacy draft', destination: 'Spiti Valley' },
+    attachments: [{ id: 'legacy', category: 'TRAIN TICKET', title: 'Train ticket', mimeType: 'application/pdf', secureUrl: 'https://example.com/train.pdf', visibility: 'CUSTOMER VISIBLE AFTER APPROVAL' }]
+  });
+  await draft.validate();
+  assert.equal(draft.attachments[0].category, 'TRAIN_TICKET');
+  assert.equal(draft.attachments[0].visibility, 'CUSTOMER_VISIBLE_AFTER_APPROVAL');
+});
+
+test('approval and booking attachment visibility is enforced by the public DTO', () => {
+  const quotation = baseQuotation();
+  quotation.bookingId = 'booking-1';
+  const snapshot = {
+    ...quotation,
+    attachments: [
+      { id: 'approval', title: 'Approval document', mimeType: 'application/pdf', secureUrl: 'https://approval', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL' },
+      { id: 'booking', title: 'Booking document', mimeType: 'application/pdf', secureUrl: 'https://booking', visibility: 'CUSTOMER_VISIBLE_AFTER_BOOKING' }
+    ]
+  };
+  const dto = buildPublicRevisionDto({
+    quotation,
+    revision: { _id: 'revision-1', version: 1, status: 'APPROVED', snapshot, approval: { approvedAt: new Date(), method: 'CUSTOMER_ACCOUNT', approvedByName: 'Traveler' } },
+    share: { _id: 'share-1', templateKey: 'journey', allowAttachments: true, allowPdfDownload: true, requireEmailVerification: true, approvalEnabled: true, isActive: true, expiresAt: new Date(Date.now() + 86_400_000) }
+  });
+  assert.deepEqual(dto.attachments.map((item) => item.id).sort(), ['approval', 'booking']);
 });
 
 test('share and verification secrets are one-way deterministic hashes', () => {

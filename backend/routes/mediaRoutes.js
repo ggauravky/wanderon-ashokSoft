@@ -3,13 +3,14 @@ import {
   listMediaAssets,
   getMediaAssetById,
   createMediaAsset,
+  createQuotationHotelMediaAsset,
   updateMediaAsset,
   deleteMediaAsset,
   resolveItineraryMediaController,
   getMediaCoverageReport,
   getMediaHealth
 } from '../controllers/mediaAssetController.js';
-import { protect, adminOnly } from '../middlewares/authMiddleware.js';
+import { protect, adminOnly, requireRoles } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.get('/admin', protect, adminOnly, (req, res) => {
   req.mediaAdmin = true;
   return listMediaAssets(req, res);
 });
+router.post('/quotation-hotel', protect, requireRoles('super_admin', 'admin', 'sales'), createQuotationHotelMediaAsset);
 router.post('/', protect, adminOnly, createMediaAsset);
 router.get('/:id', protect, adminOnly, getMediaAssetById);
 router.put('/:id', protect, adminOnly, updateMediaAsset);

@@ -1,14 +1,10 @@
 import crypto from 'node:crypto';
 import QuotationEvent from '../models/QuotationEvent.js';
 import { getJwtSecret } from '../config/environment.js';
+import { QUOTATION_ATTACHMENT_VISIBILITIES } from '../constants/quotationAttachments.js';
 
 export const V2_TEMPLATES = Object.freeze(['minimal', 'journey', 'signature_luxe']);
-export const ATTACHMENT_VISIBILITIES = Object.freeze([
-  'INTERNAL_ONLY',
-  'CUSTOMER_VISIBLE',
-  'CUSTOMER_VISIBLE_AFTER_APPROVAL',
-  'CUSTOMER_VISIBLE_AFTER_BOOKING'
-]);
+export const ATTACHMENT_VISIBILITIES = QUOTATION_ATTACHMENT_VISIBILITIES;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const deepClone = (value) => JSON.parse(JSON.stringify(value ?? null));

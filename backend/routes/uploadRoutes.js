@@ -4,7 +4,7 @@ import {
 } from '../controllers/uploadController.js';
 import { 
   uploadSingleImage, uploadMultipleImages, uploadSingleVideo, 
-  uploadSingleDocument, uploadMultipleDocuments 
+  uploadSingleDocument, uploadMultipleDocuments, handleMulterError
 } from '../middlewares/uploadMiddleware.js';
 import { protect, requireRoles } from '../middlewares/authMiddleware.js';
 
@@ -17,5 +17,6 @@ router.post('/images', protect, staffUpload, uploadMultipleImages, uploadImageCo
 router.post('/document', protect, staffUpload, uploadSingleDocument, uploadDocumentController);
 router.post('/documents', protect, staffUpload, uploadMultipleDocuments, uploadDocumentController);
 router.post('/video', protect, staffUpload, uploadSingleVideo, uploadVideoController);
+router.use(handleMulterError);
 
 export default router;

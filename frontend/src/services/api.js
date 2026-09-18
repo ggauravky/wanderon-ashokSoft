@@ -1225,6 +1225,17 @@ export async function createMediaAssetApi(assetData) {
   return data.data;
 }
 
+export async function createQuotationHotelMediaAssetApi(assetData) {
+  const response = await request(`${API_BASE_URL}/media/quotation-hotel`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(assetData)
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to add the hotel image to the media library');
+  return data.data;
+}
+
 export async function updateMediaAssetApi(id, assetData) {
   const response = await request(`${API_BASE_URL}/media/${id}`, {
     method: 'PUT',

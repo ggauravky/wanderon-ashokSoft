@@ -11,8 +11,11 @@ import User from '../models/User.js';
 import { getJwtSecret } from '../config/environment.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
 import {
+  normalizeQuotationAttachment,
+  normalizeQuotationAttachmentPayload
+} from '../constants/quotationAttachments.js';
+import {
   V2_TEMPLATES,
-  ATTACHMENT_VISIBILITIES,
   buildPublicRevisionDto,
   buildRevisionSnapshot,
   calculateComponentReference,
@@ -32,6 +35,15 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
 const fail = (res, status, message, details) => res.status(status).json({ success: false, message, ...(details ? { details } : {}) });
+
+const quotationFailure = (res, error, fallback) => {
+  if (error?.status === 422) return fail(res, 422, error.message);
+  if (error?.name === 'ValidationError') {
+    const invalidAttachment = Object.keys(error.errors || {}).some((path) => /attachments|documents/.test(path));
+    return fail(res, 422, invalidAttachment ? 'Please correct the attachment category or visibility.' : 'Quotation details contain an invalid value.');
+  }
+  return fail(res, 500, fallback);
+};
 
 const ensureDatabase = (res) => {
   if (isDbConnected()) return true;
@@ -161,7 +173,7 @@ const approvalIdentity = (req, share) => {
 export const createQuotationV2 = async (req, res) => {
   try {
     if (!ensureDatabase(res)) return;
-    const payload = req.body || {};
+    const payload = normalizeQuotationAttachmentPayload(req.body || {});
     const userId = req.user._id || req.user.id;
     const quotation = new Quotation({
       schemaVersion: 2,
@@ -210,7 +222,7 @@ export const createQuotationV2 = async (req, res) => {
     return res.status(201).json({ success: true, quotation, validation: validateQuotationV2(quotation) });
   } catch (error) {
     console.error('Create Quotation V2 Error:', error);
-    return fail(res, error?.name === 'ValidationError' ? 400 : 500, error.message || 'Unable to create quotation.');
+    return quotationFailure(res, error, 'Unable to create quotation.');
   }
 };
 
@@ -225,7 +237,8 @@ export const updateQuotationV2 = async (req, res) => {
     if (!isCommercialAdmin(req.user) && Object.prototype.hasOwnProperty.call(req.body || {}, 'manualPricing')) {
       return fail(res, 403, 'Only Admin or Super Admin can edit commercial pricing.');
     }
-    applyEditableFields(quotation, req.body || {});
+    const normalizedInput = normalizeQuotationAttachmentPayload(req.body || {});
+    applyEditableFields(quotation, normalizedInput);
     if (isCommercialAdmin(req.user) && req.body?.manualPricing) {
       const commercial = req.body.manualPricing;
       quotation.manualPricing.currency = commercial.currency || quotation.manualPricing.currency || 'INR';
@@ -242,7 +255,7 @@ export const updateQuotationV2 = async (req, res) => {
     return res.json({ success: true, quotation, validation: validateQuotationV2(quotation) });
   } catch (error) {
     console.error('Update Quotation V2 Error:', error);
-    return fail(res, error?.name === 'ValidationError' ? 400 : 500, error.message || 'Unable to update quotation.');
+    return quotationFailure(res, error, 'Unable to update quotation.');
   }
 };
 
@@ -521,7 +534,7 @@ export const duplicateQuotationV2 = async (req, res) => {
     return res.status(201).json({ success: true, quotation: copy });
   } catch (error) {
     console.error('Duplicate Quotation V2 Error:', error);
-    return fail(res, 500, error.message || 'Unable to duplicate quotation.');
+    return quotationFailure(res, error, 'Unable to duplicate quotation.');
   }
 };
 
@@ -531,11 +544,11 @@ export const addQuotationAttachment = async (req, res) => {
     const quotation = await loadAuthorized(req, res, { edit: true });
     if (!quotation) return;
     if (quotation.manualPricing?.finalizedAt) return fail(res, 409, 'This revision is frozen. Create a new revision before adding documents.');
-    const input = req.body || {};
+    const input = normalizeQuotationAttachment(req.body || {});
     if (!input.secureUrl || !input.mimeType || !String(input.title || input.fileName || '').trim()) return fail(res, 422, 'Document title, file type, and secure URL are required.');
     const attachment = {
       id: input.id || `qdoc_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
-      category: input.category || 'GENERAL',
+      category: input.category,
       sectionType: input.sectionType || 'GENERAL',
       sectionId: input.sectionId || '',
       title: input.title || input.fileName,
@@ -545,7 +558,7 @@ export const addQuotationAttachment = async (req, res) => {
       storageProvider: input.storageProvider || 'cloudinary',
       publicId: input.publicId || '',
       secureUrl: input.secureUrl,
-      visibility: ATTACHMENT_VISIBILITIES.includes(input.visibility) ? input.visibility : 'INTERNAL_ONLY',
+      visibility: input.visibility,
       bookingReference: input.bookingReference || '',
       passengerName: input.passengerName || '',
       uploadedBy: req.user._id,
@@ -559,7 +572,7 @@ export const addQuotationAttachment = async (req, res) => {
     return res.status(201).json({ success: true, attachment, quotation });
   } catch (error) {
     console.error('Add Quotation Attachment Error:', error);
-    return fail(res, error?.name === 'ValidationError' ? 400 : 500, error.message || 'Unable to attach document.');
+    return quotationFailure(res, error, 'Unable to attach document.');
   }
 };
 

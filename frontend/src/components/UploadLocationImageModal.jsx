@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X, Upload, Check, AlertCircle,
   RefreshCw, Camera
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { uploadImageApi, createMediaAssetApi } from '../services/api.js';
+import { uploadImageApi, createMediaAssetApi, createQuotationHotelMediaAssetApi } from '../services/api.js';
 
 export default function UploadLocationImageModal({
   isOpen,
   onClose,
   onAssetCreated,
   initialDestination = '',
-  initialLocationName = ''
+  initialLocationName = '',
+  initialCity = '',
+  purpose = 'generic'
 }) {
+  const isHotel = purpose === 'hotel';
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState('');
   const [directUrl, setDirectUrl] = useState('');
@@ -21,26 +24,67 @@ export default function UploadLocationImageModal({
   const [destination, setDestination] = useState(initialDestination || '');
   const [locality, setLocality] = useState(initialLocationName || '');
   const [poi, setPoi] = useState(initialLocationName || '');
-  const [city, setCity] = useState('');
+  const [city, setCity] = useState(initialCity || '');
   const [state] = useState('');
   const [country] = useState('India');
-  const [title, setTitle] = useState(initialLocationName ? `${initialLocationName} View` : '');
+  const [title, setTitle] = useState(initialLocationName ? (isHotel ? initialLocationName : `${initialLocationName} View`) : '');
   const [caption] = useState('');
-  const [altText] = useState('');
-  const [credit, setCredit] = useState('WanderLuxe Archival Collection');
+  const [altText, setAltText] = useState('');
+  const [category, setCategory] = useState('Hotel');
+  const [credit, setCredit] = useState(isHotel ? 'WanderLuxe Staff Upload' : 'WanderLuxe Archival Collection');
   const [tags, setTags] = useState('');
   const [featured, setFeatured] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [uploadedFileData, setUploadedFileData] = useState(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (isHotel) {
+      setFile(null);
+      setFilePreview('');
+      setUploadedFileData(null);
+      setErrorMsg('');
+      setDestination(initialDestination || '');
+      setCity(initialCity || '');
+      setLocality(initialLocationName || '');
+      setPoi(initialLocationName || '');
+      setTitle(initialLocationName || '');
+      setAltText('');
+      setCategory('Hotel');
+    } else {
+      setDestination((value) => value || initialDestination || '');
+      setCity((value) => value || initialCity || '');
+      setLocality((value) => value || initialLocationName || '');
+      setPoi((value) => value || initialLocationName || '');
+      setTitle((value) => value || (initialLocationName ? `${initialLocationName} View` : ''));
+    }
+  }, [initialCity, initialDestination, initialLocationName, isHotel, isOpen]);
+
+  useEffect(() => () => {
+    if (filePreview.startsWith('blob:')) URL.revokeObjectURL(filePreview);
+  }, [filePreview]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+        setFile(null);
+        setErrorMsg('Use a JPG, PNG, or WEBP image.');
+        return;
+      }
+      if (selected.size > 10 * 1024 * 1024) {
+        setFile(null);
+        setErrorMsg('Image must be 10 MB or smaller.');
+        return;
+      }
       if (filePreview && filePreview.startsWith('blob:')) {
         try { URL.revokeObjectURL(filePreview); } catch {}
       }
       setFile(selected);
+      setUploadedFileData(null);
+      setErrorMsg('');
       setFilePreview(URL.createObjectURL(selected));
       if (!title) {
         const cleanName = selected.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
@@ -53,14 +97,14 @@ export default function UploadLocationImageModal({
     e.preventDefault();
     setErrorMsg('');
 
-    let finalImageUrl = directUrl.trim();
+    let finalImageUrl = isHotel ? '' : directUrl.trim();
     let publicId = '';
     let width = 1600;
     let height = 900;
     let format = 'jpg';
     let bytes = 0;
 
-    if (uploadMode === 'file') {
+    if (isHotel || uploadMode === 'file') {
       if (!file) {
         setErrorMsg('Please select an image file to upload.');
         return;
@@ -68,16 +112,17 @@ export default function UploadLocationImageModal({
 
       try {
         setUploading(true);
-        const uploadRes = await uploadImageApi(file, 'wanderluxe/locations');
+        const uploadRes = uploadedFileData || await uploadImageApi(file, isHotel ? 'wanderluxe/quotation-hotels' : 'wanderluxe/locations');
+        setUploadedFileData(uploadRes);
         finalImageUrl = uploadRes.secure_url || uploadRes.url;
         publicId = uploadRes.public_id || '';
         if (uploadRes.width) width = uploadRes.width;
         if (uploadRes.height) height = uploadRes.height;
         if (uploadRes.format) format = uploadRes.format;
         if (uploadRes.bytes) bytes = uploadRes.bytes;
-      } catch (uploadErr) {
+      } catch {
         setUploading(false);
-        setErrorMsg('Image upload failed: ' + uploadErr.message);
+        setErrorMsg('Unable to upload image. Please try again.');
         return;
       }
     } else {
@@ -136,21 +181,27 @@ export default function UploadLocationImageModal({
           poi: poi.trim()
         },
         source: {
-          sourceType: 'ADMIN_UPLOAD',
-          attribution: credit.trim() || 'WanderLuxe Archival Collection'
+          sourceType: isHotel ? 'STAFF_UPLOAD' : 'ADMIN_UPLOAD',
+          attribution: credit.trim() || 'WanderLuxe Staff Upload'
         },
-        tags: tagArray,
+        tags: isHotel ? [...new Set([...tagArray, 'hotel', 'property'])] : tagArray,
+        categories: isHotel ? [category] : undefined,
+        usage: isHotel ? { itinerary: false, destination: false, tripCard: false, hero: false, gallery: true, hotel: true } : undefined,
         featured,
         active: true
       };
 
-      const newAsset = await createMediaAssetApi(assetPayload);
+      const newAsset = isHotel
+        ? await createQuotationHotelMediaAssetApi(assetPayload)
+        : await createMediaAssetApi(assetPayload);
       if (onAssetCreated) {
         onAssetCreated(newAsset);
       }
       onClose();
     } catch (createErr) {
-      setErrorMsg('Failed to register media asset in database: ' + createErr.message);
+      setErrorMsg(isHotel
+        ? 'Image uploaded, but it could not be added to the media library. Please try again.'
+        : 'Failed to register media asset in database: ' + createErr.message);
     } finally {
       setUploading(false);
     }
@@ -164,7 +215,7 @@ export default function UploadLocationImageModal({
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
-        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] z-60"
       >
         {/* Header */}
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white shrink-0">
@@ -173,9 +224,9 @@ export default function UploadLocationImageModal({
               <Upload size={20} />
             </div>
             <div>
-              <h2 className="text-base font-black tracking-tight">Index Location Media Asset</h2>
+              <h2 className="text-base font-black tracking-tight">{isHotel ? 'Upload Hotel Image' : 'Index Location Media Asset'}</h2>
               <p className="text-xs text-slate-400 font-medium">
-                Add verified photography to canonical database for matching
+                {isHotel ? 'Add approved property imagery for this quotation' : 'Add verified photography to canonical database for matching'}
               </p>
             </div>
           </div>
@@ -199,7 +250,7 @@ export default function UploadLocationImageModal({
           )}
 
           {/* Mode Switcher */}
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+          {!isHotel && <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
             <button
               type="button"
               onClick={() => setUploadMode('file')}
@@ -218,16 +269,16 @@ export default function UploadLocationImageModal({
             >
               Enter Direct Image URL
             </button>
-          </div>
+          </div>}
 
           {/* File Upload Zone */}
-          {uploadMode === 'file' ? (
+          {isHotel || uploadMode === 'file' ? (
             <div>
               <label className="block text-xs font-black uppercase text-slate-700 mb-1">Select Image *</label>
               <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-4 text-center bg-slate-50 transition-colors cursor-pointer relative">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
                   onChange={handleFileChange}
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                 />
@@ -279,10 +330,15 @@ export default function UploadLocationImageModal({
             />
           </div>
 
+          {isHotel && <div>
+            <label className="block text-xs font-black uppercase text-slate-700 mb-1">Alt Text *</label>
+            <input type="text" required value={altText} onChange={(e) => setAltText(e.target.value)} placeholder="Deluxe hotel room with mountain view" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 outline-none focus:border-emerald-500" />
+          </div>}
+
           {/* Geographic Metadata */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-black uppercase text-slate-700 mb-1">Destination Region / State *</label>
+              <label className="block text-xs font-black uppercase text-slate-700 mb-1">Destination *</label>
               <input
                 type="text"
                 required
@@ -293,7 +349,7 @@ export default function UploadLocationImageModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-black uppercase text-slate-700 mb-1">Exact POI / Attraction Name</label>
+              <label className="block text-xs font-black uppercase text-slate-700 mb-1">{isHotel ? 'Property / Location Name' : 'Exact POI / Attraction Name'}</label>
               <input
                 type="text"
                 value={poi}
@@ -303,6 +359,13 @@ export default function UploadLocationImageModal({
               />
             </div>
           </div>
+
+          {isHotel && <div>
+            <label className="block text-xs font-black uppercase text-slate-700 mb-1">Category *</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 outline-none focus:border-emerald-500">
+              {['Hotel', 'Resort', 'Room', 'Property', 'Boutique Hotel', 'Luxury Hotel', 'Mountain Resort', 'Beach Resort', 'Homestay', 'Villa'].map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </div>}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -316,7 +379,7 @@ export default function UploadLocationImageModal({
               />
             </div>
             <div>
-              <label className="block text-xs font-black uppercase text-slate-700 mb-1">City / Base Camp</label>
+              <label className="block text-xs font-black uppercase text-slate-700 mb-1">{isHotel ? 'City / Location (optional)' : 'City / Base Camp'}</label>
               <input
                 type="text"
                 value={city}
@@ -339,7 +402,7 @@ export default function UploadLocationImageModal({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {!isHotel && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-black uppercase text-slate-700 mb-1">Photo Credit / Attribution</label>
               <input
@@ -361,7 +424,7 @@ export default function UploadLocationImageModal({
                 Mark as Featured Destination Asset
               </label>
             </div>
-          </div>
+          </div>}
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
@@ -379,11 +442,11 @@ export default function UploadLocationImageModal({
             >
               {uploading ? (
                 <>
-                  <RefreshCw size={14} className="animate-spin" /> Indexing Asset...
+                  <RefreshCw size={14} className="animate-spin" /> {isHotel ? 'Uploading…' : 'Indexing Asset...'}
                 </>
               ) : (
                 <>
-                  <Check size={14} /> Save & Index Asset
+                  <Check size={14} /> {isHotel ? 'Upload & Use' : 'Save & Index Asset'}
                 </>
               )}
             </button>

@@ -6,9 +6,14 @@ const invalidRange = (message) => Object.assign(new Error(message), { status: 40
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
 
 const parseIndiaDate = (value, end = false) => {
-  if (!dateOnly.test(String(value || ''))) throw invalidRange('Custom dates must use YYYY-MM-DD.');
+  if (!dateOnly.test(String(value || ''))) throw invalidRange('Invalid analytics date range.');
+  const [year, month, day] = String(value).split('-').map(Number);
+  const calendarCheck = new Date(Date.UTC(year, month - 1, day));
+  if (calendarCheck.getUTCFullYear() !== year || calendarCheck.getUTCMonth() !== month - 1 || calendarCheck.getUTCDate() !== day) {
+    throw invalidRange('Invalid analytics date range.');
+  }
   const parsed = new Date(`${value}T${end ? '23:59:59.999' : '00:00:00.000'}${IST_OFFSET}`);
-  if (Number.isNaN(parsed.getTime())) throw invalidRange('Enter a valid custom date range.');
+  if (Number.isNaN(parsed.getTime())) throw invalidRange('Invalid analytics date range.');
   return parsed;
 };
 
@@ -22,7 +27,7 @@ export const resolveAnalyticsRange = ({ range = '30d', from, to }, now = new Dat
   if (range === 'custom') {
     start = parseIndiaDate(from);
     end = parseIndiaDate(to, true);
-    if (start > end) throw invalidRange('From date must be on or before To date.');
+    if (start > end) throw invalidRange('Invalid analytics date range.');
   } else {
     const days = Number(range.slice(0, -1));
     const indiaToday = new Intl.DateTimeFormat('en-CA', { timeZone: ANALYTICS_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);

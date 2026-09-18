@@ -32,8 +32,8 @@ async function seedMedia() {
       locationKeys,
       type: 'IMAGE',
       active: true,
-      usage: { itinerary: true, destination: true, tripCard: true, hero: true, gallery: true },
-      source: {
+      usage: assetData.usage || { itinerary: true, destination: true, tripCard: true, hero: true, gallery: true, hotel: false },
+      source: assetData.source || {
         sourceType: 'PROJECT_ASSET',
         attribution: 'WanderLuxe Editorial Archive',
         license: 'Commercial Editorial License'

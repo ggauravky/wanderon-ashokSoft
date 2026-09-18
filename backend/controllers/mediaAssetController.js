@@ -15,6 +15,7 @@ export const listMediaAssets = async (req, res) => {
   try {
     const {
       destination,
+      destinationExact,
       location,
       tag,
       search,
@@ -43,7 +44,8 @@ export const listMediaAssets = async (req, res) => {
     }
 
     if (destination) {
-      filter['geography.destination'] = { $regex: new RegExp(escapeRegex(destination), 'i') };
+      const expression = destinationExact === 'true' ? `^${escapeRegex(destination)}$` : escapeRegex(destination);
+      filter['geography.destination'] = { $regex: new RegExp(expression, 'i') };
     }
 
     if (location) {
@@ -66,6 +68,9 @@ export const listMediaAssets = async (req, res) => {
     if (category) filter.categories = category;
     if (source) filter['source.sourceType'] = source;
 
+    if (usage && !['itinerary', 'destination', 'tripCard', 'hero', 'gallery', 'hotel'].includes(usage)) {
+      return res.status(400).json({ success: false, message: 'Unsupported media usage filter.' });
+    }
     if (usage) {
       filter[`usage.${usage}`] = true;
     }
@@ -119,7 +124,7 @@ export const listMediaAssets = async (req, res) => {
     });
   } catch (error) {
     console.error('List Media Assets Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to list media assets' });
+    res.status(500).json({ success: false, message: 'Unable to load media assets.' });
   }
 };
 
@@ -265,7 +270,54 @@ export const createMediaAsset = async (req, res) => {
     });
   } catch (error) {
     console.error('Create Media Asset Error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to create media asset' });
+    res.status(error?.name === 'ValidationError' ? 422 : 500).json({ success: false, message: error?.name === 'ValidationError' ? 'Media metadata contains an invalid value.' : 'Unable to create the media asset.' });
+  }
+};
+
+// @desc    Register an uploaded image for quotation hotel selection
+// @route   POST /api/media/quotation-hotel
+// @access  Private (Sales, Admin). Does not grant general Media Library administration.
+export const createQuotationHotelMediaAsset = async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media assets cannot be created while the database is disconnected.' });
+    const { title, altText, caption = '', storage, geography = {}, tags = [], categories = ['Hotel'] } = req.body || {};
+    if (!title?.trim() || !altText?.trim() || !storage?.secureUrl || !geography?.destination?.trim()) {
+      return res.status(400).json({ success: false, message: 'Title, alt text, destination, and uploaded image are required.' });
+    }
+    if (!isSafeRemoteUrl(storage.secureUrl)) {
+      return res.status(400).json({ success: false, message: 'The uploaded image URL is invalid.' });
+    }
+    const normalizedCategories = Array.isArray(categories)
+      ? categories.map((value) => String(value).trim()).filter(Boolean).slice(0, 5)
+      : ['Hotel'];
+    const allowedCategories = new Set(['Hotel', 'Resort', 'Room', 'Property', 'Boutique Hotel', 'Luxury Hotel', 'Mountain Resort', 'Beach Resort', 'Homestay', 'Villa']);
+    if (!normalizedCategories.length || normalizedCategories.some((value) => !allowedCategories.has(value))) {
+      return res.status(422).json({ success: false, message: 'Select a valid hotel media category.' });
+    }
+    const normalizedTags = Array.isArray(tags)
+      ? [...new Set([...tags.map((value) => String(value).toLowerCase().trim()).filter(Boolean), 'hotel', 'property'])]
+      : ['hotel', 'property'];
+    const asset = await MediaAsset.create({
+      type: 'IMAGE',
+      title: title.trim(),
+      altText: altText.trim(),
+      caption: String(caption || title).trim(),
+      storage,
+      geography: { ...geography, destination: geography.destination.trim() },
+      locationKeys: generateLocationKeys(geography, title, normalizedTags),
+      tags: normalizedTags,
+      categories: normalizedCategories,
+      orientation: req.body?.orientation || 'LANDSCAPE',
+      usage: { itinerary: false, destination: false, tripCard: false, hero: false, gallery: true, hotel: true },
+      source: { sourceType: 'STAFF_UPLOAD', attribution: 'WanderLuxe Staff Upload', license: 'Staff-provided quotation media' },
+      active: true,
+      featured: false,
+      createdBy: req.user?._id || null
+    });
+    return res.status(201).json({ success: true, message: 'Hotel image added to the media library.', data: asset });
+  } catch (error) {
+    console.error('Create Quotation Hotel Media Error:', error, { publicId: req.body?.storage?.publicId || '' });
+    return res.status(error?.name === 'ValidationError' ? 422 : 500).json({ success: false, message: 'Unable to add the uploaded image to the media library.' });
   }
 };
 
@@ -548,6 +600,7 @@ export default {
   listMediaAssets,
   getMediaAssetById,
   createMediaAsset,
+  createQuotationHotelMediaAsset,
   updateMediaAsset,
   deleteMediaAsset,
   resolveItineraryMediaController,
