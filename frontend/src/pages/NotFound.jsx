@@ -94,7 +94,7 @@ const NotFound = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {trendingTrips.map((trip) => (
-              <TripCard key={trip.id} trip={trip} showWeather={true} />
+              <TripCard key={trip.id} trip={trip} showWeather={false} />
             ))}
           </div>
         </div>

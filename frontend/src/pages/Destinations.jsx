@@ -13,6 +13,7 @@ import FilterSidebar, {
   DESTINATION_OPTIONS, MONTH_OPTIONS, DURATION_OPTIONS, 
   BUDGET_OPTIONS, TRIP_TYPE_OPTIONS, MOOD_OPTIONS, STARTING_CITY_OPTIONS 
 } from '../components/FilterSidebar.jsx';
+import { UPCOMING_TRIPS } from '../constants/mockData.js';
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import { getPresetByPath } from '../config/discoveryTaxonomy.js';
 
@@ -30,7 +31,7 @@ const Destinations = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const travelCtx = useTravelContext() || {};
-  const recommendedTrips = travelCtx.recommendedTrips || [];
+  const recommendedTrips = travelCtx.recommendedTrips || UPCOMING_TRIPS || [];
   const season = travelCtx.season || {};
 
   // Resolve current route's authoritative taxonomy preset
@@ -235,7 +236,7 @@ const Destinations = () => {
   // Main Filtered Trips Computation with Sorting
   const filteredTrips = useMemo(() => {
     try {
-      const catalog = recommendedTrips || [];
+      const catalog = recommendedTrips && recommendedTrips.length > 0 ? recommendedTrips : UPCOMING_TRIPS;
 
       let result = catalog.filter((trip) => matchTripAgainstFilters(trip, filters, searchQuery));
 
@@ -260,13 +261,13 @@ const Destinations = () => {
       return result;
     } catch (err) {
       console.warn('Filter computation error:', err);
-      return [];
+      return UPCOMING_TRIPS;
     }
   }, [recommendedTrips, matchTripAgainstFilters, filters, searchQuery, sortBy]);
 
   // Real Counts Matrix for Sidebar Badges
   const countsByOption = useMemo(() => {
-    const catalog = recommendedTrips || [];
+    const catalog = recommendedTrips && recommendedTrips.length > 0 ? recommendedTrips : UPCOMING_TRIPS;
     const matrix = {};
 
     DESTINATION_OPTIONS.forEach(opt => {
@@ -547,7 +548,7 @@ const Destinations = () => {
             {filteredTrips && filteredTrips.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredTrips.map((trip, idx) => (
-                  <TripCard key={trip.id || trip.slug || trip._id || `trip-${idx}`} trip={trip} showWeather={true} />
+                  <TripCard key={trip.id || trip.slug || trip._id || `trip-${idx}`} trip={trip} showWeather={false} />
                 ))}
               </div>
             ) : (
