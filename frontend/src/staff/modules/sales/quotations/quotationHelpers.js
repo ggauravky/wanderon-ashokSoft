@@ -1,7 +1,12 @@
 export const QUOTATION_STATUSES = Object.freeze([
   'DRAFT',
+  'CONTENT_READY',
+  'AWAITING_PRICING',
+  'READY_TO_SHARE',
   'SENT',
+  'SHARED',
   'VIEWED',
+  'CHANGES_REQUESTED',
   'APPROVED',
   'REJECTED',
   'EXPIRED',
@@ -14,9 +19,13 @@ export const REVISION_QUOTATION_STATUSES = new Set(['SENT', 'VIEWED']);
 
 export const getQuotationId = (quotation) => quotation?._id || quotation?.id;
 
-export const canEditQuotation = (quotation) => EDITABLE_QUOTATION_STATUSES.has(quotation?.status);
-export const canSendQuotation = (quotation) => quotation?.status === 'DRAFT';
-export const canCreateQuotationRevision = (quotation) => REVISION_QUOTATION_STATUSES.has(quotation?.status);
+export const canEditQuotation = (quotation) => quotation?.schemaVersion === 2
+  ? ['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation?.status) && !quotation?.manualPricing?.finalizedAt
+  : EDITABLE_QUOTATION_STATUSES.has(quotation?.status);
+export const canSendQuotation = (quotation) => quotation?.schemaVersion !== 2 && quotation?.status === 'DRAFT';
+export const canCreateQuotationRevision = (quotation) => quotation?.schemaVersion === 2
+  ? Boolean(quotation?.currentRevisionId) && quotation?.status !== 'CONVERTED'
+  : REVISION_QUOTATION_STATUSES.has(quotation?.status);
 
 export const formatQuotationMoney = (value) => {
   const amount = Number(value);

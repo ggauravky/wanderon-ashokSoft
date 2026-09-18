@@ -31,7 +31,7 @@ const CreatorTrip = lazy(() => import('./pages/CreatorTrip'));
 const CreatorStorefront = lazy(() => import('./pages/CreatorStorefront'));
 const SharedItinerary = lazy(() => import('./pages/SharedItinerary'));
 const DynamicPage = lazy(() => import('./pages/DynamicPage'));
-const PublicQuotationView = lazy(() => import('./pages/PublicQuotationView'));
+const PublicQuotationView = lazy(() => import('./pages/PublicQuotationGateway'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const AIPlannerPage = lazy(() => import('./pages/AIPlannerPage'));

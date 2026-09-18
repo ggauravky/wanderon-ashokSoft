@@ -630,6 +630,14 @@ const quotationSchema = new mongoose.Schema(
     currentRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null, index: true },
     latestSharedRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null },
     approvedRevisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null },
+    shareSummary: {
+      shareCount: { type: Number, default: 0, min: 0 },
+      activeShareCount: { type: Number, default: 0, min: 0 },
+      viewCount: { type: Number, default: 0, min: 0 },
+      pdfDownloads: { type: Number, default: 0, min: 0 },
+      attachmentDownloads: { type: Number, default: 0, min: 0 },
+      lastViewedAt: { type: Date, default: null }
+    },
 
     sourceTripId: { type: String, default: null },
     convertedTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },
@@ -653,6 +661,8 @@ const quotationSchema = new mongoose.Schema(
 
 // Compound and fast-lookup indexes for pipeline querying
 quotationSchema.index({ status: 1, createdAt: -1 });
+quotationSchema.index({ schemaVersion: 1, commercialState: 1, updatedAt: -1 });
+quotationSchema.index({ assignedTo: 1, schemaVersion: 1, updatedAt: -1 });
 quotationSchema.index({ bookingCode: 1 });
 quotationSchema.index({ updatedAt: -1 });
 

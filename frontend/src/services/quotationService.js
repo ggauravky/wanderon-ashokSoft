@@ -169,6 +169,44 @@ export async function customerQuotationDecisionApi(token, payload) {
   return data;
 }
 
+async function quotationV2Request(path, { method = 'GET', body, auth = true } = {}) {
+  const response = await request(`${API_BASE_URL}/quotations${path}`, {
+    method,
+    headers: auth ? getHeaders() : { 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) })
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) {
+    const error = new Error(data.message || 'Quotation request failed');
+    error.status = response.status;
+    error.details = data.details;
+    throw error;
+  }
+  return data;
+}
+
+export const createQuotationV2Api = (payload) => quotationV2Request('/v2', { method: 'POST', body: payload });
+export const updateQuotationV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2`, { method: 'PATCH', body: payload });
+export const requestQuotationPricingV2Api = (id, payload = {}) => quotationV2Request(`/${encodeURIComponent(id)}/v2/request-pricing`, { method: 'POST', body: payload });
+export const finalizeQuotationPricingV2Api = (id, manualPricing) => quotationV2Request(`/${encodeURIComponent(id)}/v2/finalize-pricing`, { method: 'POST', body: { manualPricing } });
+export const createQuotationRevisionV2Api = (id, payload = {}) => quotationV2Request(`/${encodeURIComponent(id)}/v2/revisions`, { method: 'POST', body: payload });
+export const getQuotationRevisionsV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/revisions`);
+export const createQuotationShareV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares`, { method: 'POST', body: payload });
+export const getQuotationSharesV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares`);
+export const revokeQuotationShareV2Api = (id, shareId, reason = '') => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares/${encodeURIComponent(shareId)}/revoke`, { method: 'POST', body: { reason } });
+export const getQuotationEventsV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/events`);
+export const duplicateQuotationV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/duplicate`, { method: 'POST', body: {} });
+export const addQuotationAttachmentV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/attachments`, { method: 'POST', body: payload });
+export const deleteQuotationAttachmentV2Api = (id, attachmentId) => quotationV2Request(`/${encodeURIComponent(id)}/v2/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' });
+export const adminApproveQuotationV2Api = (id, reason) => quotationV2Request(`/${encodeURIComponent(id)}/v2/admin-approve`, { method: 'POST', body: { reason } });
+export const createBookingFromQuotationV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/create-booking`, { method: 'POST', body: {} });
+
+export const getPublicQuotationV2Api = (token) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}`, { auth: true });
+export const requestQuotationVerificationV2Api = (token, email) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}/request-verification`, { method: 'POST', body: { email }, auth: false });
+export const verifyQuotationRecipientV2Api = (token, payload) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}/verify`, { method: 'POST', body: payload, auth: false });
+export const decidePublicQuotationV2Api = (token, payload) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}/decision`, { method: 'POST', body: payload, auth: true });
+export const trackPublicQuotationEventV2Api = (token, payload) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}/events`, { method: 'POST', body: payload, auth: false });
+
 export async function uploadQuotationDocumentApi(file) {
   const formData = new FormData();
   formData.append('document', file);
@@ -594,6 +632,7 @@ export function getInitialQuotationState() {
  */
 export function getBlankQuotationState() {
   return {
+    schemaVersion: 2,
     quotationNumber: '',
     version: 1,
     leadId: null,
@@ -612,15 +651,31 @@ export function getBlankQuotationState() {
       maxSalesDiscount: 10,
       maxSalesMarkup: 30
     },
-    itinerary: [getEmptyItineraryDay(1)],
-    hotelOptions: [{ ...getEmptyHotelOption(1), selected: true }],
-    transportOptions: [getEmptyTransportOption(1)],
+    itinerary: [],
+    hotelOptions: [],
+    transportOptions: [],
     activities: [],
     addOns: [],
     inclusions: [],
     exclusions: [],
     termsAndConditions: [],
     cancellationPolicy: [],
+    policies: {
+      paymentTerms: '', cancellationPolicy: '', refundNotes: '', importantInformation: '',
+      travelRequirements: '', termsAndConditions: ''
+    },
+    personalNote: '',
+    attachments: [],
+    presentationSettings: {
+      template: 'journey', showComponentPrices: false, showPaymentSchedule: true,
+      showAttachments: true, showAdvisor: true, showTerms: true, showItineraryGallery: true
+    },
+    commercialState: 'DRAFT',
+    manualPricing: {
+      currency: 'INR', componentReference: 0, finalCustomerPrice: 0, depositAmount: 0,
+      balanceAmount: 0, adjustments: [], paymentSchedule: [], priceNotes: '',
+      finalizedBy: null, finalizedByName: '', finalizedAt: null
+    },
     paymentTerms: { depositPercent: 10, balanceDueDays: 6, paymentMode: 'PARTIAL', currency: 'INR' },
     pricing: {
       internalBaseCost: 0, internalHotelCost: 0, internalTransportCost: 0,
@@ -648,7 +703,7 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
     segmentName: segmentName || 'Primary Stay',
     segmentOrder: 1,
     tier: 'Deluxe',
-    label: `Option ${String.fromCharCode(64 + index)}: Deluxe Stay`,
+    label: '',
     hotelName: '',
     city: '',
     location: '',
@@ -666,7 +721,7 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
     totalCost: 0,
     totalPrice: 0,
     imageUrl: '',
-    amenities: ['Wi-Fi', 'Hot Water', 'Breakfast Included'],
+    amenities: [],
     notes: '',
     selected: false
   };
@@ -675,8 +730,8 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
 export function getEmptyTransportOption(index = 1) {
   return {
     optionId: `trans_opt_${Date.now()}_${index}`,
-    mode: 'SUV',
-    type: 'SUV (Innova/Crysta)',
+    mode: 'OTHER',
+    type: '',
     title: '',
     vehicle: '',
     provider: '',
@@ -702,11 +757,11 @@ export function getEmptyTransportOption(index = 1) {
       pnr: '',
       bookingReference: ''
     },
-    cabinClass: 'Economy',
+    cabinClass: '',
     seatDetails: '',
     baggage: {
-      cabin: '7 Kg',
-      checkIn: '15 Kg'
+      cabin: '',
+      checkIn: ''
     },
     driverDetails: {
       name: '',
@@ -715,7 +770,7 @@ export function getEmptyTransportOption(index = 1) {
     },
     startDate: '',
     endDate: '',
-    capacity: 6,
+    capacity: 1,
     quantity: 1,
     pricingType: 'PER_VEHICLE',
     unitCost: 0,
@@ -723,7 +778,7 @@ export function getEmptyTransportOption(index = 1) {
     taxRate: 0,
     totalCost: 0,
     totalPrice: 0,
-    inclusions: ['Fuel', 'Tolls', 'Driver Allowance', 'State Permits'],
+    inclusions: [],
     notes: '',
     selected: index === 1,
     vehicleMedia: [],

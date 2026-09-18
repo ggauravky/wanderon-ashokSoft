@@ -14,7 +14,7 @@ const QuotationActions = ({ quotation, busy = false, compact = false, onPreview,
     <div className="flex flex-wrap gap-2">
       <Link to={`/staff/sales/quotations/${id}`} className={actionClass}><Eye size={14} aria-hidden="true" /> {!compact && 'View'}</Link>
       {canEditQuotation(quotation) && <Link to={`/staff/sales/quotations/${id}/edit`} className={actionClass}><Edit3 size={14} aria-hidden="true" /> {!compact && 'Edit'}</Link>}
-      {onPreview && <button type="button" onClick={() => onPreview(quotation)} className={actionClass}><Eye size={14} aria-hidden="true" /> {!compact && 'Preview'}</button>}
+      {quotation?.schemaVersion !== 2 && onPreview && <button type="button" onClick={() => onPreview(quotation)} className={actionClass}><Eye size={14} aria-hidden="true" /> {!compact && 'Preview'}</button>}
       {canSendQuotation(quotation) && onSend && <button type="button" onClick={() => onSend(quotation)} disabled={busy} className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"><Send size={14} aria-hidden="true" /> {!compact && 'Send'}</button>}
       {quotation?.publicShare?.token && onShare && <button type="button" onClick={() => onShare(quotation)} className={actionClass}><Share2 size={14} aria-hidden="true" /> {!compact && 'Share'}</button>}
       {publicPath && <a href={publicPath} target="_blank" rel="noreferrer" className={actionClass} title="Open public quotation"><ExternalLink size={14} aria-hidden="true" /></a>}

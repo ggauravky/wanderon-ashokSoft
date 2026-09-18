@@ -7,6 +7,7 @@ import { createBookingFromQuotationApi, createQuotationRevisionApi, getQuotation
 import CreateBookingModal from '../bookings/components/CreateBookingModal.jsx';
 import QuotationStatusBadge from './components/QuotationStatusBadge.jsx';
 import { canCreateQuotationRevision, canEditQuotation, canSendQuotation, formatQuotationDate, formatQuotationMoney, getPublicQuotationPath, getQuotationId } from './quotationHelpers.js';
+import QuotationV2Detail from './QuotationV2Detail.jsx';
 
 const Section = ({ title, children }) => <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"><h2 className="text-sm font-semibold text-slate-950">{title}</h2><div className="mt-4">{children}</div></section>;
 const Row = ({ label, value }) => <div className="grid grid-cols-[minmax(8rem,0.8fr)_minmax(0,1.2fr)] gap-3 border-b border-slate-100 py-2.5 last:border-0"><dt className="text-xs font-medium text-slate-500">{label}</dt><dd className="break-words text-sm text-slate-800">{value || '—'}</dd></div>;
@@ -89,6 +90,7 @@ const QuotationDetailPage = () => {
 
   if (loading) return <section className="flex min-h-72 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm text-slate-500"><Loader2 size={18} className="mr-2 animate-spin" aria-hidden="true" /> Loading quotation…</section>;
   if (error || !quotation) return <section className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center"><AlertCircle size={24} className="mx-auto text-rose-600" aria-hidden="true" /><h2 className="mt-3 font-semibold text-rose-900">Unable to load quotation</h2><p className="mt-1 text-sm text-rose-700">{error}</p><button type="button" onClick={loadQuotation} className="mt-4 min-h-10 rounded-lg bg-rose-700 px-4 text-sm font-semibold text-white">Retry</button></section>;
+  if (quotation.schemaVersion === 2) return <QuotationV2Detail quotation={quotation} reload={loadQuotation} />;
 
   const publicPath = getPublicQuotationPath(quotation);
   const lead = quotation.leadId;

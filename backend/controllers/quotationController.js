@@ -418,7 +418,7 @@ export const getQuotations = async (req, res) => {
     if (sortBy === 'newest') {
       sortObj = { createdAt: -1 };
     } else if (sortBy === 'value') {
-      sortObj = { 'pricing.finalTotal': -1 };
+      sortObj = { 'manualPricing.finalCustomerPrice': -1, 'pricing.finalTotal': -1 };
     } else if (sortBy === 'updated') {
       sortObj = { updatedAt: -1 };
     }

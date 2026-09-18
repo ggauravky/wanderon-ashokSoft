@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import QuotationEvent from '../models/QuotationEvent.js';
+import { getJwtSecret } from '../config/environment.js';
 
 export const V2_TEMPLATES = Object.freeze(['minimal', 'journey', 'signature_luxe']);
 export const ATTACHMENT_VISIBILITIES = Object.freeze([
@@ -22,7 +23,7 @@ export const isCommercialAdmin = (user) => ['admin', 'super_admin'].includes(Str
 export const secureToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 export const tokenHash = (token) => crypto.createHash('sha256').update(String(token || '')).digest('hex');
 export const verificationCode = () => String(crypto.randomInt(100000, 1000000));
-export const verificationHash = (code) => crypto.createHmac('sha256', process.env.JWT_SECRET || 'quotation-verification').update(String(code)).digest('hex');
+export const verificationHash = (code) => crypto.createHmac('sha256', getJwtSecret()).update(String(code)).digest('hex');
 
 export const calculateComponentReference = (quotation = {}) => {
   const hotel = (quotation.hotelOptions || [])
@@ -87,6 +88,9 @@ export const validateQuotationV2 = (quotation = {}, { forFinalization = false, f
   if ((forFinalization || forShare) && finalPrice <= 0) errors.push(issue('pricing', 'FINAL_PRICE_REQUIRED', 'Admin must enter the final customer price.'));
   if (deposit > finalPrice && finalPrice > 0) errors.push(issue('pricing', 'DEPOSIT_EXCEEDS_TOTAL', 'Deposit cannot exceed the final customer price.'));
   const scheduleTotal = (pricing.paymentSchedule || []).reduce((sum, item) => sum + number(item.amount), 0);
+  if ((pricing.adjustments || []).some((item) => number(item.amount) <= 0 || !String(item.label || '').trim())) {
+    errors.push(issue('pricing', 'PRICING_ADJUSTMENT_INVALID', 'Every commercial adjustment needs a label and positive amount.'));
+  }
   if ((pricing.paymentSchedule || []).some((item) => number(item.amount) <= 0 || !String(item.label || '').trim())) {
     errors.push(issue('pricing', 'PAYMENT_SCHEDULE_INVALID', 'Every payment schedule item needs a label and positive amount.'));
   }
@@ -136,7 +140,8 @@ export const buildRevisionSnapshot = (quotation) => {
   };
 };
 
-const attachmentAllowed = (attachment, { approved, booked }) => {
+const attachmentAllowed = (attachment, { approved, booked, allowAttachments = true }) => {
+  if (!allowAttachments) return false;
   const visibility = attachment?.visibility || 'INTERNAL_ONLY';
   if (visibility === 'CUSTOMER_VISIBLE') return true;
   if (visibility === 'CUSTOMER_VISIBLE_AFTER_APPROVAL') return approved;
@@ -158,24 +163,119 @@ const publicAttachment = (attachment) => ({
   passengerName: attachment.passengerName || ''
 });
 
-const sanitizeNestedAttachments = (items, context, field = 'attachments') => (items || []).map((item) => {
-  const safe = { ...deepClone(item) };
-  delete safe.unitCost;
-  delete safe.totalCost;
-  delete safe.costPerNight;
-  delete safe.provider;
-  delete safe.driverDetails;
-  if (Array.isArray(safe[field])) safe[field] = safe[field].filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment);
-  if (Array.isArray(safe.documents)) safe.documents = safe.documents.filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment);
-  return safe;
+const publicItineraryDay = (item = {}) => ({
+  day: item.day,
+  title: item.title,
+  destination: item.destination || item.locationName,
+  description: item.description,
+  morning: item.morning,
+  afternoon: item.afternoon,
+  evening: item.evening,
+  stay: item.stay,
+  mealsIncluded: item.mealsIncluded || [],
+  transferDetails: item.transferDetails,
+  activityHighlights: item.activityHighlights || [],
+  coverMedia: item.coverMedia ? {
+    url: item.coverMedia.url,
+    altText: item.coverMedia.altText,
+    caption: item.coverMedia.caption,
+    width: item.coverMedia.width,
+    height: item.coverMedia.height
+  } : null,
+  galleryMedia: item.galleryMedia || []
+});
+
+const publicHotel = (item = {}, context) => ({
+  optionId: item.optionId,
+  segmentId: item.segmentId,
+  segmentName: item.segmentName,
+  tier: item.tier,
+  label: item.label,
+  hotelName: item.hotelName,
+  city: item.city,
+  location: item.location,
+  category: item.category,
+  roomType: item.roomType,
+  rooms: item.rooms,
+  occupancy: item.occupancy,
+  mealPlan: item.mealPlan,
+  checkIn: item.checkIn,
+  checkOut: item.checkOut,
+  nights: item.nights,
+  ...(context.showComponentPrices ? { pricePerNight: item.pricePerNight, totalPrice: item.totalPrice } : {}),
+  imageUrl: item.imageUrl,
+  amenities: item.amenities || [],
+  gallery: item.gallery || [],
+  recommendationType: item.recommendationType,
+  selected: item.selected,
+  documents: (item.documents || []).filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment)
+});
+
+const publicTransport = (item = {}, context) => ({
+  optionId: item.optionId,
+  mode: item.mode,
+  type: item.type,
+  title: item.title,
+  vehicle: item.vehicle,
+  pickup: item.pickup,
+  drop: item.drop,
+  route: item.route,
+  schedule: item.schedule,
+  reference: item.reference,
+  cabinClass: item.cabinClass,
+  seatDetails: item.seatDetails,
+  baggage: item.baggage,
+  startDate: item.startDate,
+  endDate: item.endDate,
+  capacity: item.capacity,
+  quantity: item.quantity,
+  pricingType: item.pricingType,
+  ...(context.showComponentPrices ? { unitPrice: item.unitPrice, totalPrice: item.totalPrice } : {}),
+  inclusions: item.inclusions || [],
+  selected: item.selected,
+  vehicleMedia: item.vehicleMedia || [],
+  documents: (item.documents || []).filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment)
+});
+
+const publicActivity = (item = {}, context) => ({
+  activityId: item.activityId,
+  dayNumber: item.dayNumber,
+  date: item.date,
+  name: item.name,
+  description: item.description,
+  location: item.location,
+  pricingType: item.pricingType,
+  quantity: item.quantity,
+  ...(context.showComponentPrices ? { unitPrice: item.unitPrice, totalPrice: item.totalPrice } : {}),
+  isIncluded: item.isIncluded,
+  isOptional: item.isOptional,
+  selected: item.selected,
+  attachments: (item.attachments || []).filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment)
+});
+
+const publicAddOn = (item = {}, context) => ({
+  addonId: item.addonId,
+  category: item.category,
+  name: item.name,
+  description: item.description,
+  pricingType: item.pricingType,
+  quantity: item.quantity,
+  ...(context.showComponentPrices ? { unitPrice: item.unitPrice, totalPrice: item.totalPrice } : {}),
+  selected: item.selected,
+  attachments: (item.attachments || []).filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment)
 });
 
 export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
   const snapshot = deepClone(revision.snapshot);
   const approved = revision.status === 'APPROVED' || Boolean(revision.approval?.approvedAt);
   const booked = Boolean(quotation.bookingId);
-  const context = { approved, booked };
   const showAttachments = share.allowAttachments && snapshot.presentationSettings?.showAttachments !== false;
+  const context = {
+    approved,
+    booked,
+    allowAttachments: showAttachments,
+    showComponentPrices: snapshot.presentationSettings?.showComponentPrices === true
+  };
   const manual = snapshot.manualPricing || {};
   const dto = {
     schemaVersion: 2,
@@ -183,15 +283,20 @@ export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
     version: revision.version,
     status: revision.status,
     templateKey: share.templateKey,
-    customerSnapshot: snapshot.customerSnapshot,
+    customerSnapshot: {
+      name: snapshot.customerSnapshot?.name,
+      city: snapshot.customerSnapshot?.city
+    },
     tripRequirements: snapshot.tripRequirements,
     personalNote: snapshot.personalNote,
-    itinerary: snapshot.itinerary,
-    hotelOptions: sanitizeNestedAttachments(snapshot.hotelOptions, context, 'documents'),
-    transportOptions: sanitizeNestedAttachments(snapshot.transportOptions, context, 'documents'),
-    activities: sanitizeNestedAttachments(snapshot.activities, context),
-    addOns: sanitizeNestedAttachments(snapshot.addOns, context),
-    attachments: showAttachments ? (snapshot.attachments || []).filter((attachment) => attachmentAllowed(attachment, context)).map(publicAttachment) : [],
+    itinerary: (snapshot.itinerary || []).map(publicItineraryDay),
+    hotelOptions: (snapshot.hotelOptions || []).map((item) => publicHotel(item, context)),
+    transportOptions: (snapshot.transportOptions || []).map((item) => publicTransport(item, context)),
+    activities: (snapshot.activities || []).map((item) => publicActivity(item, context)),
+    addOns: (snapshot.addOns || []).map((item) => publicAddOn(item, context)),
+    attachments: showAttachments ? [...new Map([...(snapshot.attachments || []), ...(quotation.attachments || [])]
+      .filter((attachment) => attachmentAllowed(attachment, context))
+      .map((attachment) => [attachment.id, publicAttachment(attachment)])).values()] : [],
     inclusions: snapshot.inclusions,
     exclusions: snapshot.exclusions,
     policies: snapshot.policies,
@@ -223,6 +328,7 @@ export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
       allowAttachments: share.allowAttachments,
       requireEmailVerification: share.requireEmailVerification,
       approvalEnabled: share.approvalEnabled,
+      recipientEmailHint: maskEmail(share.recipientEmail),
       isActive: share.isActive,
       isExpired: new Date(share.expiresAt) <= new Date(),
       isRevoked: Boolean(share.revokedAt)

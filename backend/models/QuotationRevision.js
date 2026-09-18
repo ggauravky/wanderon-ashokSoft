@@ -10,7 +10,7 @@ const quotationRevisionSchema = new mongoose.Schema(
       default: 'FINALIZED',
       index: true
     },
-    snapshot: { type: mongoose.Schema.Types.Mixed, required: true },
+    snapshot: { type: mongoose.Schema.Types.Mixed, required: true, immutable: true },
     templateKey: { type: String, enum: ['minimal', 'journey', 'signature_luxe'], default: 'journey' },
     finalCustomerPrice: { type: Number, required: true, min: 0 },
     currency: { type: String, default: 'INR' },

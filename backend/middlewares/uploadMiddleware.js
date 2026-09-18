@@ -70,18 +70,18 @@ export const uploadMultipleImages = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 }).array('images', 10);
 
-// Single document/ticket upload (PDF or Image, max 20 MB)
+// Single document/ticket upload (PDF or Image, max 15 MB)
 export const uploadSingleDocument = multer({
   storage,
   fileFilter: documentFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: 15 * 1024 * 1024 }
 }).single('document');
 
-// Multiple documents/tickets upload (max 10 files, 20 MB each)
+// Multiple documents/tickets upload (max 10 files, 15 MB each)
 export const uploadMultipleDocuments = multer({
   storage,
   fileFilter: documentFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }
+  limits: { fileSize: 15 * 1024 * 1024 }
 }).array('documents', 10);
 
 // Single video upload (max 100 MB)
@@ -102,7 +102,7 @@ export const uploadSingleMedia = multer({
 export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'File too large. Images max 10MB, Documents max 20MB, Videos max 100MB.' });
+      return res.status(400).json({ message: 'File too large. Images max 10MB, Documents max 15MB, Videos max 100MB.' });
     }
     return res.status(400).json({ message: `Upload error: ${err.message}` });
   }

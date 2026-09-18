@@ -146,6 +146,12 @@ const bookingSchema = new mongoose.Schema(
       unique: true,
       sparse: true
     },
+    sourceQuotationRevisionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'QuotationRevision',
+      default: null,
+      index: true
+    },
     leadId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Lead',
@@ -158,11 +164,19 @@ const bookingSchema = new mongoose.Schema(
     },
     quotationSnapshot: {
       quotationNumber: { type: String, default: '' },
+      version: { type: Number, default: 1 },
+      revisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuotationRevision', default: null },
       statusAtConversion: { type: String, default: '' },
+      customerSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
+      tripRequirements: { type: mongoose.Schema.Types.Mixed, default: null },
       selectedHotel: { type: mongoose.Schema.Types.Mixed, default: null },
+      hotelOptions: { type: [mongoose.Schema.Types.Mixed], default: [] },
       selectedTransport: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      transportOptions: { type: [mongoose.Schema.Types.Mixed], default: [] },
       activities: { type: [mongoose.Schema.Types.Mixed], default: [] },
       addOns: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      itinerary: { type: [mongoose.Schema.Types.Mixed], default: [] },
+      manualPricing: { type: mongoose.Schema.Types.Mixed, default: null },
       paymentTerms: { type: mongoose.Schema.Types.Mixed, default: null },
       depositRequired: { type: Number, default: 0 },
       convertedAt: { type: Date }
