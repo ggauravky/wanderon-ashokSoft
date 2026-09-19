@@ -7,9 +7,13 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCa
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'gaurav@999';
 const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
 const INFLUENCER_PASSWORD = process.env.INFLUENCER_PASSWORD || 'influencer123';
+const SALES_1_EMAIL = (process.env.SALES_1_EMAIL || 'ashoksoftsales1@gmail.com').toLowerCase();
+const SALES_1_PASSWORD = process.env.SALES_1_PASSWORD || 'AshokSoftSales1@123';
+const SALES_2_EMAIL = (process.env.SALES_2_EMAIL || 'ashoksoftsales2@gmail.com').toLowerCase();
+const SALES_2_PASSWORD = process.env.SALES_2_PASSWORD || 'AshokSoftSales2@123';
 
 // In-Memory User Store Fallback when MongoDB is offline
-const memoryUsers = [
+export const memoryUsers = [
   {
     _id: 'usr_admin',
     name: 'Gaurav Kumar Yadav (Admin)',
@@ -32,6 +36,30 @@ const memoryUsers = [
     avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=250',
     role: 'influencer',
     influencerStatus: 'approved',
+    bookedTrips: []
+  },
+  {
+    _id: 'usr_sales_1',
+    name: 'AshokSoft Sales 1',
+    email: SALES_1_EMAIL,
+    password: bcrypt.hashSync(SALES_1_PASSWORD, 10),
+    phone: '+91 9876543211',
+    address: 'WanderLuxe Sales Desk, India',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=250',
+    role: 'sales',
+    isActive: true,
+    bookedTrips: []
+  },
+  {
+    _id: 'usr_sales_2',
+    name: 'AshokSoft Sales 2',
+    email: SALES_2_EMAIL,
+    password: bcrypt.hashSync(SALES_2_PASSWORD, 10),
+    phone: '+91 9876543212',
+    address: 'WanderLuxe Sales Desk, India',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250',
+    role: 'sales',
+    isActive: true,
     bookedTrips: []
   }
 ];
@@ -273,6 +301,10 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
+    if (user.isActive === false) {
+      return res.status(403).json({ message: 'Account is deactivated. Please contact an administrator.' });
+    }
+
     res.json({
       _id: user._id,
       name: user.name,
@@ -284,7 +316,7 @@ export const loginUser = async (req, res) => {
       influencerStatus: user.influencerStatus,
       influencerApplication: user.influencerApplication,
       bookedTrips: user.bookedTrips || [],
-      token: generateToken(user._id)
+      token: generateToken(user._id, user.role, user.email)
     });
   } catch (error) {
     console.error('Login Error:', error);

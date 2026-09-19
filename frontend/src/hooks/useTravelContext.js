@@ -117,7 +117,9 @@ export const useTravelContext = (customTrips) => {
     recentlyViewed,
     wishlistIds,
     savedAIPlans,
-    getWeatherFor
+    getWeatherFor,
+    tripsPool,
+    allTrips: tripsPool
   };
 };
 

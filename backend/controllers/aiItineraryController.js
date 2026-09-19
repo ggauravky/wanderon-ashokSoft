@@ -10,12 +10,35 @@ import {
   buildAITravelContext,
   normalizeDestinationSlug
 } from '../services/travelKnowledgeService.js';
+import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/mediaResolverService.js';
+import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
+import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
+
+/**
+ * Safely enrich an itinerary with 3-image nature gallery if cover or gallery is missing
+ */
+async function enrichItineraryMediaIfNeeded(doc) {
+  if (!doc || !Array.isArray(doc.days) || doc.days.length === 0) return doc;
+  const needsResolution = doc.days.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+  if (needsResolution) {
+    const enrichedDays = await batchResolveItineraryMedia(doc.days, doc.destination, doc.title);
+    doc.days = enrichedDays;
+    if (typeof doc.save === 'function') {
+      try {
+        await doc.save();
+      } catch (err) {
+        console.warn('Silently saving enriched itinerary media error:', err.message);
+      }
+    }
+  }
+  return doc;
+}
 
 /**
  * Normalizes raw output into safe, complete structured JSON using Central Knowledge
  */
 function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
-  const destination = destinationMeta.name || reqData.destination || 'Meghalaya';
+  const destination = destinationMeta.name || reqData.destination || 'Unknown Destination';
   const duration = Math.max(3, Math.min(Number(reqData.days) || 5, 10));
   const travelers = Number(reqData.travelers) || 2;
   const mood = reqData.mood || 'Adventure';
@@ -45,22 +68,84 @@ function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
       tips: Array.isArray(d.tips) ? d.tips : (d.tips ? [d.tips] : ['Keep essentials handy.'])
     }));
   } else {
-    // Generate structured days from canonical attractions
-    const attractions = destinationMeta.attractions || [];
+    // Generate structured days from canonical attractions calibrated to interests & pace
+    const userInterests = Array.isArray(reqData.interests) ? reqData.interests : [];
+    let attractions = [...(destinationMeta.attractions || [])];
+
+    if (userInterests.length > 0 && attractions.length > 0) {
+      const isCulture = userInterests.some(i => typeof i === 'string' && /culture|heritage|food|history/i.test(i));
+      const isNature = userInterests.some(i => typeof i === 'string' && /nature|photography|wildlife|view/i.test(i));
+      const isAdventure = userInterests.some(i => typeof i === 'string' && /adventure|trek/i.test(i));
+
+      attractions.sort((a, b) => {
+        const aText = `${a.name} ${a.location || ''}`.toLowerCase();
+        const bText = `${b.name} ${b.location || ''}`.toLowerCase();
+        let aScore = 0;
+        let bScore = 0;
+
+        if (isCulture) {
+          if (/monastery|temple|palace|fort|heritage|museum|bazar|market|village|craft/i.test(aText)) aScore += 4;
+          if (/monastery|temple|palace|fort|heritage|museum|bazar|market|village|craft/i.test(bText)) bScore += 4;
+        }
+        if (isNature) {
+          if (/waterfall|falls|lake|river|valley|view|peak|point|sanctuary|canyon|root bridge/i.test(aText)) aScore += 4;
+          if (/waterfall|falls|lake|river|valley|view|peak|point|sanctuary|canyon|root bridge/i.test(bText)) bScore += 4;
+        }
+        if (isAdventure) {
+          if (/trek|hike|cave|rafting|bridge|pass/i.test(aText)) aScore += 4;
+          if (/trek|hike|cave|rafting|bridge|pass/i.test(bText)) bScore += 4;
+        }
+        return bScore - aScore;
+      });
+    }
+
     for (let i = 0; i < duration; i++) {
       const att1 = attractions[(i * 2) % attractions.length] || { name: `${destination} Scenic Trail`, location: destination };
       const att2 = attractions[(i * 2 + 1) % attractions.length] || { name: `${destination} Cultural Center`, location: destination };
+      const att3 = attractions[(i * 2 + 2) % attractions.length] || { name: `${destination} Nature Overlook`, location: destination };
 
-      days.push({
-        day: i + 1,
-        title: `Day ${i + 1}: ${att1.name} & ${att2.name}`,
-        morning: [{ time: '09:00 AM', activity: `${att1.name} Guided Tour`, location: att1.location || destination, description: `Explore ${att1.name} during morning hours.`, estimatedCost: '₹300 - ₹600', travelTime: '1.5 hrs' }],
-        afternoon: [{ time: '01:30 PM', activity: `${att2.name} Excursion`, location: att2.location || destination, description: `Scenic sightseeing and regional lunch around ${att2.location || destination}.`, estimatedCost: '₹400 - ₹700', travelTime: '1 hr' }],
-        evening: [{ time: '06:00 PM', activity: `Sunset Walk & Local Cafe`, location: destination, description: 'Relaxed evening cafe visit and cultural photography.', estimatedCost: '₹400 - ₹800', travelTime: 'Walking' }],
-        stay: `${destination} Boutique Hotel or Homestay`,
-        dailyCost: destinationMeta.defaultDailyCost?.[budgetLevel.toLowerCase()] || '₹4,000 - ₹5,500',
-        tips: destinationMeta.aiContext?.planningHints || ['Enjoy a relaxed travel pace and explore local markets.']
-      });
+      if (pace === 'Relaxed') {
+        days.push({
+          day: i + 1,
+          title: `Day ${i + 1}: Leisurely Discovery of ${att1.name}`,
+          morning: [{ time: '09:45 AM', activity: `${att1.name} Scenic Walk & Leisure Tour`, location: att1.location || destination, description: `Gentle morning sightseeing at ${att1.name} with ample time to absorb the views.`, estimatedCost: '₹300 - ₹500', travelTime: '45 mins' }],
+          afternoon: [{ time: '02:00 PM', activity: `${destination} Panoramic Cafe Downtime`, location: att1.location || destination, description: `Relaxed cafe terrace lunch and peaceful scenic downtime.`, estimatedCost: '₹400 - ₹700', travelTime: '15 mins' }],
+          evening: [{ time: '06:00 PM', activity: `Quiet Sunset Stroll & Regional Dinner`, location: destination, description: 'Leisurely evening stroll and authentic local cuisine.', estimatedCost: '₹400 - ₹800', travelTime: 'Walking' }],
+          stay: `${destination} Boutique Hotel or Homestay`,
+          dailyCost: destinationMeta.defaultDailyCost?.[budgetLevel.toLowerCase()] || '₹4,000 - ₹5,500',
+          tips: ['Take it slow and soak in the serene atmosphere without rushing.']
+        });
+      } else if (pace === 'Action-Packed') {
+        days.push({
+          day: i + 1,
+          title: `Day ${i + 1}: ${att1.name}, ${att2.name} & Adventure Circuit`,
+          morning: [
+            { time: '07:30 AM', activity: `${att1.name} Sunrise Discovery & Trail`, location: att1.location || destination, description: `Early morning active exploration of ${att1.name}.`, estimatedCost: '₹400 - ₹700', travelTime: '1 hr' }
+          ],
+          afternoon: [
+            { time: '12:00 PM', activity: `${att2.name} Exploration`, location: att2.location || destination, description: `Guided discovery and photo expedition around ${att2.location || destination}.`, estimatedCost: '₹400 - ₹600', travelTime: '45 mins' },
+            { time: '03:30 PM', activity: `${att3.name} Adventure & Activity Excursion`, location: att3.location || destination, description: `High energy exploration of ${att3.name}.`, estimatedCost: '₹500 - ₹800', travelTime: '30 mins' }
+          ],
+          evening: [
+            { time: '07:00 PM', activity: `Night Market Walk & Cultural Street Dining`, location: destination, description: 'Vibrant local bazaar walk, craft shopping, and street food.', estimatedCost: '₹500 - ₹900', travelTime: 'Walking' }
+          ],
+          stay: `${destination} Adventure Lodge or Central Hotel`,
+          dailyCost: destinationMeta.defaultDailyCost?.[budgetLevel.toLowerCase()] || '₹4,000 - ₹5,500',
+          tips: ['Start early to maximize daylight across all scheduled stops.']
+        });
+      } else {
+        // Balanced
+        days.push({
+          day: i + 1,
+          title: `Day ${i + 1}: ${att1.name} & ${att2.name}`,
+          morning: [{ time: '09:00 AM', activity: `${att1.name} Guided Tour`, location: att1.location || destination, description: `Explore ${att1.name} during morning hours.`, estimatedCost: '₹300 - ₹600', travelTime: '1.5 hrs' }],
+          afternoon: [{ time: '01:30 PM', activity: `${att2.name} Excursion`, location: att2.location || destination, description: `Scenic sightseeing and regional lunch around ${att2.location || destination}.`, estimatedCost: '₹400 - ₹700', travelTime: '1 hr' }],
+          evening: [{ time: '06:00 PM', activity: `Sunset Walk & Local Cafe`, location: destination, description: 'Relaxed evening cafe visit and cultural photography.', estimatedCost: '₹400 - ₹800', travelTime: 'Walking' }],
+          stay: `${destination} Boutique Hotel or Homestay`,
+          dailyCost: destinationMeta.defaultDailyCost?.[budgetLevel.toLowerCase()] || '₹4,000 - ₹5,500',
+          tips: destinationMeta.aiContext?.planningHints || ['Enjoy a relaxed travel pace and explore local markets.']
+        });
+      }
     }
   }
 
@@ -85,11 +170,25 @@ function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
     ? raw.localTips
     : (destinationMeta.aiContext?.travelNotes || ['Always carry small cash currency as remote mountain areas may lack network.', 'Respect local community traditions.']);
 
-  const budgetBreakdown = raw?.budgetBreakdown || {
-    stay: `₹${Math.round(totalEstimatedCost * 0.45).toLocaleString()}`,
-    food: `₹${Math.round(totalEstimatedCost * 0.25).toLocaleString()}`,
-    transport: `₹${Math.round(totalEstimatedCost * 0.20).toLocaleString()}`,
-    activities: `₹${Math.round(totalEstimatedCost * 0.10).toLocaleString()}`,
+  let stayCost = Math.round(totalEstimatedCost * 0.45);
+  let transportCost = Math.round(totalEstimatedCost * 0.22);
+  let foodCost = Math.round(totalEstimatedCost * 0.18);
+  let activityCost = Math.round(totalEstimatedCost * 0.10);
+
+  if (raw?.budgetBreakdown) {
+    if (raw.budgetBreakdown.stay) stayCost = parseInt(String(raw.budgetBreakdown.stay).replace(/[^\d]/g, ''), 10) || stayCost;
+    if (raw.budgetBreakdown.transport) transportCost = parseInt(String(raw.budgetBreakdown.transport).replace(/[^\d]/g, ''), 10) || transportCost;
+    if (raw.budgetBreakdown.food) foodCost = parseInt(String(raw.budgetBreakdown.food).replace(/[^\d]/g, ''), 10) || foodCost;
+    if (raw.budgetBreakdown.activities) activityCost = parseInt(String(raw.budgetBreakdown.activities).replace(/[^\d]/g, ''), 10) || activityCost;
+  }
+  const bufferCost = Math.max(0, totalEstimatedCost - (stayCost + transportCost + foodCost + activityCost));
+
+  const budgetBreakdown = {
+    stay: `₹${stayCost.toLocaleString()}`,
+    transport: `₹${transportCost.toLocaleString()}`,
+    food: `₹${foodCost.toLocaleString()}`,
+    activities: `₹${activityCost.toLocaleString()}`,
+    buffer: `₹${bufferCost.toLocaleString()}`,
     estimatedTotal: `₹${totalEstimatedCost.toLocaleString()}`
   };
 
@@ -122,15 +221,70 @@ function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
  */
 export const generateItineraryController = async (req, res) => {
   try {
-    const {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ success: false, message: 'Invalid request body.' });
+    }
+
+    let {
       destination = 'Meghalaya',
-      days = 5,
+      days,
+      duration = 5,
       travelers = 2,
       mood = 'Adventure',
+      travelStyle = 'Adventure',
       budgetLevel = 'Moderate',
+      budgetAmount = null,
       pace = 'Balanced',
-      customPreferences = ''
+      origin = '',
+      customPreferences = '',
+      interests = [],
+      travelersBreakdown = null,
+      mobilityConstraints = [],
+      dietary = [],
+      mustInclude = [],
+      avoid = []
     } = req.body;
+
+    // Strict Input Validation & Threat Defense
+    if (!destination || typeof destination !== 'string' || destination.trim().length < 2) {
+      return res.status(400).json({ success: false, message: 'Destination must be a valid location name (at least 2 characters).' });
+    }
+    if (destination.length > 100) {
+      return res.status(400).json({ success: false, message: 'Destination name exceeds maximum length of 100 characters.' });
+    }
+    destination = destination.trim().replace(/<[^>]*>?/gm, '');
+
+    const requestedDays = days !== undefined ? days : duration;
+    const daysNum = Math.round(Number(requestedDays));
+    if (isNaN(daysNum) || daysNum < 3 || daysNum > 10) {
+      return res.status(400).json({ success: false, message: 'Trip duration must be between 3 and 10 days.' });
+    }
+
+    const travelersNum = Math.round(Number(travelers));
+    if (isNaN(travelersNum) || travelersNum < 1 || travelersNum > 30) {
+      return res.status(400).json({ success: false, message: 'Traveler count must be between 1 and 30.' });
+    }
+
+    const validPaces = ['Relaxed', 'Balanced', 'Action-Packed'];
+    pace = validPaces.includes(pace) ? pace : 'Balanced';
+
+    const validBudgets = ['Budget', 'Moderate', 'Luxury'];
+    budgetLevel = validBudgets.includes(budgetLevel) ? budgetLevel : 'Moderate';
+
+    if (typeof customPreferences !== 'string') {
+      customPreferences = '';
+    } else {
+      if (customPreferences.length > 1000) {
+        customPreferences = customPreferences.slice(0, 1000);
+      }
+      customPreferences = customPreferences.replace(/<[^>]*>?/gm, '');
+    }
+
+    if (typeof origin === 'string') {
+      origin = origin.slice(0, 100).replace(/<[^>]*>?/gm, '');
+    } else {
+      origin = '';
+    }
 
     const destinationMeta = getDestinationBySlug(destination);
     const season = getSeasonContext();
@@ -163,11 +317,12 @@ export const generateItineraryController = async (req, res) => {
     // 2. Build compact, structured AI travel context (< 3KB)
     const structuredContext = buildAITravelContext({
       destination,
-      duration: days,
-      travelers,
+      duration: daysNum,
+      travelers: travelersNum,
       style: mood,
       pace,
       budget: budgetLevel,
+      interests: Array.isArray(interests) ? interests : [],
       customPreferences,
       matchedTrip: matchedCatalogTrip
     });
@@ -195,10 +350,11 @@ ${JSON.stringify(structuredContext, null, 2)}
 
 CRITICAL RULES:
 1. Pacing must follow ${pace}. Group geographically close attractions together.
-2. Structure every single day with morning, afternoon, and evening slots.
-3. Every slot must have: { time, activity, location, description, estimatedCost, travelTime }.
-4. Calculate estimated budget in INR.
-5. Return ONLY valid, complete JSON strictly adhering to schema.
+2. Tailor daily attractions, sights, and activities specifically to traveler interests: ${JSON.stringify(interests || [])}.
+3. Structure every single day with morning, afternoon, and evening slots.
+4. Every slot must have: { time, activity, location, description, estimatedCost, travelTime }.
+5. Calculate estimated budget in INR.
+6. Return ONLY valid, complete JSON strictly adhering to schema.
 
 JSON SCHEMA:
 {
@@ -249,12 +405,57 @@ JSON SCHEMA:
     // Normalize generated result with complete defaults
     const normalized = normalizeGeneratedItinerary(generatedRaw, {
       destination,
-      days,
-      travelers,
+      days: daysNum,
+      travelers: travelersNum,
       mood,
       budgetLevel,
-      pace
+      pace,
+      interests
     }, destinationMeta);
+
+    // Enrich days with real database-driven location media
+    const usedAssetIds = [];
+    if (Array.isArray(normalized.days)) {
+      for (const day of normalized.days) {
+        const locationCandidate = day.morning?.[0]?.location || day.locationName || destination;
+        const activityNames = [
+          ...(day.morning || []).map(a => a.activity || a.name || ''),
+          ...(day.afternoon || []).map(a => a.activity || a.name || ''),
+          ...(day.evening || []).map(a => a.activity || a.name || '')
+        ].filter(Boolean);
+
+        try {
+          const mediaResult = await resolveItineraryMedia({
+            locationName: locationCandidate,
+            destination,
+            dayTitle: day.title,
+            dayActivities: activityNames,
+            dayNumber: day.day,
+            excludeAssetIds: usedAssetIds,
+            tripType: mood
+          });
+
+          day.locationName = locationCandidate;
+          day.coverMedia = mediaResult.coverMedia;
+          day.coverMediaAssetId = mediaResult.mediaAssetId;
+          day.galleryMedia = mediaResult.galleryMedia || [];
+          day.galleryMediaAssetIds = mediaResult.galleryMediaAssetIds || [];
+          day.gallery = mediaResult.gallery || (mediaResult.coverMedia ? [mediaResult.coverMedia] : []);
+          day.mediaSelectionMode = 'AUTO';
+          if (mediaResult.mediaAssetId) {
+            usedAssetIds.push(String(mediaResult.mediaAssetId));
+          }
+          if (Array.isArray(mediaResult.galleryMediaAssetIds)) {
+            mediaResult.galleryMediaAssetIds.forEach(id => usedAssetIds.push(String(id)));
+          }
+        } catch (mediaErr) {
+          console.warn(`Media resolution error for day ${day.day}:`, mediaErr.message);
+        }
+      }
+    }
+
+    // Run deterministic feasibility and physical travel audit
+    const { sanitizedItinerary, healthReport } = auditAndSanitizeItinerary(normalized, req.body);
 
     const responsePayload = {
       id: 'ai-plan-' + Date.now(),
@@ -262,7 +463,8 @@ JSON SCHEMA:
       source,
       weather,
       seasonContext: season.name,
-      ...normalized,
+      ...sanitizedItinerary,
+      healthReport,
       matchedCatalogTrip
     };
 
@@ -276,6 +478,31 @@ JSON SCHEMA:
       success: false,
       message: 'Failed to generate itinerary. Please try again.'
     });
+  }
+};
+
+
+
+/**
+ * @desc Process AI Copilot plan refinement requests and return structured diffs
+ * @route POST /api/ai/edit-plan
+ * @access Public / Authenticated
+ */
+export const editPlanController = async (req, res) => {
+  try {
+    const { itinerary, refinement } = req.body;
+    if (!itinerary) {
+      return res.status(400).json({ success: false, message: 'Itinerary payload is required.' });
+    }
+    let proposal = generateCopilotProposal(itinerary, refinement);
+    if (proposal && proposal.days) {
+      const { sanitizedItinerary, healthReport } = auditAndSanitizeItinerary(proposal, req.body);
+      proposal = { ...proposal, ...sanitizedItinerary, healthReport };
+    }
+    return res.json({ success: true, data: proposal });
+  } catch (error) {
+    console.error('Edit Plan Controller Error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process copilot refinement.' });
   }
 };
 
@@ -298,6 +525,12 @@ export const saveItineraryController = async (req, res) => {
 
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
 
+    let finalDays = itineraryData.days || itineraryData.itineraryDays || [];
+    const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+    if (needsResolution) {
+      finalDays = await batchResolveItineraryMedia(finalDays, itineraryData.destination, itineraryData.title);
+    }
+
     // 1. If document already has an _id, update existing document instead of creating a duplicate
     if (targetId) {
       let existingDoc = await Itinerary.findById(targetId);
@@ -319,12 +552,15 @@ export const saveItineraryController = async (req, res) => {
         existingDoc.totalEstimatedCost = itineraryData.totalEstimatedCost || existingDoc.totalEstimatedCost;
         existingDoc.weather = itineraryData.weather || existingDoc.weather;
         existingDoc.bestTimeToVisit = itineraryData.bestTimeToVisit || existingDoc.bestTimeToVisit;
-        existingDoc.days = itineraryData.days || itineraryData.itineraryDays || existingDoc.days;
+        existingDoc.days = finalDays;
         existingDoc.staySuggestions = itineraryData.staySuggestions || existingDoc.staySuggestions;
         existingDoc.foodSuggestions = itineraryData.foodSuggestions || existingDoc.foodSuggestions;
         existingDoc.packingList = itineraryData.packingList || itineraryData.packingSuggestions || existingDoc.packingList;
         existingDoc.localTips = itineraryData.localTips || existingDoc.localTips;
         existingDoc.budgetBreakdown = itineraryData.budgetBreakdown || existingDoc.budgetBreakdown;
+        if (itineraryData.matchedCatalogTrip || itineraryData.matchedTrip) {
+          existingDoc.matchedTrip = itineraryData.matchedCatalogTrip || itineraryData.matchedTrip;
+        }
         existingDoc.source = 'customized';
 
         await existingDoc.save();
@@ -353,7 +589,7 @@ export const saveItineraryController = async (req, res) => {
       totalEstimatedCost: itineraryData.totalEstimatedCost || 0,
       weather: itineraryData.weather || {},
       bestTimeToVisit: itineraryData.bestTimeToVisit || '',
-      days: itineraryData.days || itineraryData.itineraryDays || [],
+      days: finalDays,
       staySuggestions: itineraryData.staySuggestions || [],
       foodSuggestions: itineraryData.foodSuggestions || [],
       packingList: itineraryData.packingList || itineraryData.packingSuggestions || [],
@@ -373,7 +609,7 @@ export const saveItineraryController = async (req, res) => {
     });
   } catch (error) {
     console.error('Save Itinerary Error:', error);
-    res.status(500).json({ success: false, message: 'Could not save itinerary to database.' });
+    res.status(500).json({ success: false, message: 'Could not save itinerary to database: ' + error.message });
   }
 };
 
@@ -401,7 +637,14 @@ export const updateItineraryController = async (req, res) => {
 
     if (updateData.title) doc.title = updateData.title;
     if (updateData.tagline) doc.tagline = updateData.tagline;
-    if (updateData.days) doc.days = updateData.days;
+    if (updateData.days) {
+      let finalDays = updateData.days;
+      const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
+      if (needsResolution) {
+        finalDays = await batchResolveItineraryMedia(finalDays, doc.destination, doc.title);
+      }
+      doc.days = finalDays;
+    }
     if (updateData.travelers) doc.travelers = updateData.travelers;
     if (updateData.travelStyle) doc.travelStyle = updateData.travelStyle;
     if (updateData.pace) doc.pace = updateData.pace;
@@ -440,16 +683,19 @@ export const getItineraryByIdController = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Itinerary not found.' });
     }
 
-    // If public, allow read
-    if (doc.isPublic) {
-      return res.json({ success: true, data: doc });
-    }
+    // Auto-enrich media if legacy or missing gallery
+    await enrichItineraryMediaIfNeeded(doc);
 
     // Ownership check
-    const userEmail = req.user?.email || '';
-    const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized to view this private itinerary.' });
+    if (!doc.isPublic) {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Authentication required to view private itinerary.' });
+      }
+      const userEmail = req.user?.email || '';
+      const userId = req.user?._id?.toString();
+      if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Not authorized to view this private itinerary.' });
+      }
     }
 
     res.json({
@@ -473,13 +719,20 @@ export const getMyItinerariesController = async (req, res) => {
     const userId = req.user?._id;
 
     let filter = {};
-    if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
+    if (req.user?.role === 'admin') {
+      filter = {}; // Admin has master visibility into all saved AI itineraries
+    } else if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
       filter = { $or: [{ user: userId }, { userEmail }] };
     } else if (userEmail) {
       filter = { userEmail };
     }
 
     const docs = await Itinerary.find(filter).sort({ createdAt: -1 });
+
+    // Auto-enrich any legacy itineraries with complete 3-image galleries
+    for (const doc of docs) {
+      await enrichItineraryMediaIfNeeded(doc);
+    }
 
     res.json({
       success: true,
@@ -591,6 +844,8 @@ export const getPublicSharedItineraryController = async (req, res) => {
       });
     }
 
+    await enrichItineraryMediaIfNeeded(doc);
+
     res.json({
       success: true,
       data: doc
@@ -616,9 +871,48 @@ export const regenerateDayController = async (req, res) => {
     const att1 = attractions[offset] || { name: `${destMeta.name} Scenic Point`, location: destMeta.name };
     const att2 = attractions[(offset + 1) % attractions.length] || { name: `${destMeta.name} Cultural Exploration`, location: destMeta.name };
 
+    const locationCandidate = att1.location || att1.name || destMeta.name;
+    let coverMedia = null;
+    let coverMediaAssetId = null;
+    let galleryMedia = [];
+    let galleryMediaAssetIds = [];
+    let gallery = [];
+
+    try {
+      const mediaResult = await resolveItineraryMedia({
+        locationName: locationCandidate,
+        destination: destMeta.name,
+        dayTitle: `Day ${dayNumber}: ${att1.name} & ${att2.name}`,
+        dayActivities: [att1.name, att2.name],
+        dayNumber: Number(dayNumber),
+        tripType: mood
+      });
+      coverMedia = mediaResult.coverMedia;
+      coverMediaAssetId = mediaResult.mediaAssetId;
+      galleryMedia = mediaResult.galleryMedia || [];
+      galleryMediaAssetIds = mediaResult.galleryMediaAssetIds || [];
+      gallery = mediaResult.gallery || (coverMedia ? [coverMedia] : []);
+    } catch (mediaErr) {
+      console.warn('Regenerate day media resolution error:', mediaErr.message);
+    }
+
     const regeneratedDay = {
       day: Number(dayNumber),
       title: `Day ${dayNumber}: ${att1.name} & ${att2.name}`,
+      locationName: locationCandidate,
+      coverMedia: coverMedia || {
+        url: '',
+        altText: `${locationCandidate}, ${destMeta.name}`,
+        caption: `Day ${dayNumber} Experience`,
+        width: 1200,
+        height: 800,
+        resolutionSource: 'fallback'
+      },
+      coverMediaAssetId,
+      galleryMedia,
+      galleryMediaAssetIds,
+      gallery: gallery.length > 0 ? gallery : (coverMedia ? [coverMedia] : []),
+      mediaSelectionMode: 'AUTO',
       morning: [{ time: '09:00 AM', activity: `${att1.name} Excursion`, location: att1.location || destMeta.name, description: `Enjoy morning discovery at ${att1.name}.`, estimatedCost: '₹300 - ₹500', travelTime: '1 hr' }],
       afternoon: [{ time: '01:30 PM', activity: `${att2.name} Exploration`, location: att2.location || destMeta.name, description: `Explore ${att2.name} followed by regional lunch.`, estimatedCost: '₹400 - ₹600', travelTime: '1 hr' }],
       evening: [{ time: '06:00 PM', activity: 'Sunset View & Local Cafe', location: destMeta.name, description: 'Evening leisure, photography, and local dining.', estimatedCost: '₹400 - ₹700', travelTime: 'Walking' }],

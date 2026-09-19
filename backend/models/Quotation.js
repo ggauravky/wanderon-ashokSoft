@@ -234,6 +234,9 @@ const itineraryDaySchema = new mongoose.Schema(
   {
     day: { type: Number, required: true },
     title: { type: String, required: true },
+    locationName: { type: String, default: '' },
+    locationId: { type: String, default: '' },
+    destination: { type: String, default: '' },
     description: { type: String, default: '' },
     morning: { type: String, default: '' },
     afternoon: { type: String, default: '' },
@@ -241,7 +244,36 @@ const itineraryDaySchema = new mongoose.Schema(
     stay: { type: String, default: '' },
     mealsIncluded: { type: [String], default: ['Breakfast'] },
     transferDetails: { type: String, default: '' },
-    activityHighlights: { type: [String], default: [] }
+    activityHighlights: { type: [String], default: [] },
+    coverMedia: {
+      id: { type: String, default: '' },
+      url: { type: String, default: '' },
+      altText: { type: String, default: '' },
+      caption: { type: String, default: '' },
+      width: { type: Number, default: 1600 },
+      height: { type: Number, default: 900 }
+    },
+    coverMediaAssetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MediaAsset',
+      default: null
+    },
+    galleryMedia: {
+      type: [
+        {
+          id: { type: String, default: '' },
+          url: { type: String, default: '' },
+          altText: { type: String, default: '' },
+          caption: { type: String, default: '' }
+        }
+      ],
+      default: []
+    },
+    mediaSelectionMode: {
+      type: String,
+      enum: ['AUTO', 'MANUAL'],
+      default: 'AUTO'
+    }
   },
   { _id: false }
 );

@@ -423,14 +423,13 @@ const Navbar = () => {
               </Link>
 
               {/* Custom Plan with AI Button */}
-              <button
-                type="button"
-                onClick={() => setIsPlannerOpen(true)}
+              <Link
+                to="/plan"
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-xs"
               >
                 <Sparkles size={13} />
                 <span>AI Planner</span>
-              </button>
+              </Link>
 
               {/* User / Authentication Dropdown */}
               {isAuthenticated ? (
@@ -648,16 +647,13 @@ const Navbar = () => {
 
                 {/* AI Planner and Contact Buttons */}
                 <div className="pt-2 space-y-2 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setIsPlannerOpen(true);
-                    }}
+                  <Link
+                    to="/plan"
+                    onClick={() => setMobileMenuOpen(false)}
                     className="w-full py-3 bg-emerald-500/20 text-emerald-400 rounded-2xl text-xs font-black uppercase tracking-wider border border-emerald-500/40 flex items-center justify-center gap-2"
                   >
                     <Sparkles size={15} /> Build Custom Route with AI
-                  </button>
+                  </Link>
 
                   <Link
                     to="/contact"

@@ -3,6 +3,7 @@ import {
   MapPin, Calendar, Clock, Users, Hotel, Car, Compass,
   CheckCircle2, XCircle, ShieldCheck, Tag, Sparkles, Check, Phone, Mail, MessageSquare
 } from 'lucide-react';
+import ItineraryDayGallery from './ItineraryDayGallery';
 
 /**
  * High-Definition, Isolated A4 Travel Quotation Proposal Document
@@ -181,6 +182,13 @@ const QuotationDocument = React.forwardRef(({ quotation, isCustomerView = true }
                   </span>
                 )}
               </div>
+
+              {/* Day Location Media Gallery (Compact Print Mode) */}
+              <ItineraryDayGallery
+                day={day}
+                destination={quotation.destination}
+                compact={true}
+              />
 
               {day.description && (
                 <p className="text-[11px] text-slate-600 leading-relaxed">{day.description}</p>

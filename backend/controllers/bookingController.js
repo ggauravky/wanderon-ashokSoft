@@ -9,6 +9,7 @@ import Coupon from '../models/Coupon.js';
 import Commission from '../models/Commission.js';
 import WalletLedger from '../models/WalletLedger.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
+import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 // In-Memory Bookings Store Fallback
 const memoryBookings = [];
@@ -439,9 +440,20 @@ export const createBookingOrder = async (req, res) => {
       rzpOrder = { id: orderId, amount: amountToCharge * 100, currency: 'INR' };
     }
 
+    let safeUserId = (userId && isValidMongoObjectId(userId)) ? toObjectIdOrNull(userId) : null;
+    if (!safeUserId && req.user?.email && isDbConnected()) {
+      try {
+        const foundUser = await User.findOne({ email: req.user.email.toLowerCase().trim() });
+        if (foundUser) safeUserId = foundUser._id;
+      } catch (e) {}
+    }
+    if (!safeUserId) {
+      safeUserId = new mongoose.Types.ObjectId('64f000000000000000000001');
+    }
+
     const bookingData = {
       bookingId,
-      userId,
+      userId: safeUserId,
       tripId: String(tripId),
       tripSnapshot: {
         title: trip.title,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
 import Home from './pages/Home';
@@ -18,6 +18,8 @@ import About from './pages/About';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminRoute from './components/AdminRoute';
+import RoleProtectedRoute from './components/RoleProtectedRoute';
+import SalesPortal from './pages/SalesPortal';
 import InfluencerDashboard from './pages/InfluencerDashboard';
 import InfluencerLanding from './pages/InfluencerLanding';
 import InfluencerSignup from './pages/InfluencerSignup';
@@ -31,6 +33,7 @@ import PublicQuotationView from './pages/PublicQuotationView';
 import QuotationDetail from './pages/QuotationDetail';
 import NotFound from './pages/NotFound';
 import PlaceholderPage from './pages/PlaceholderPage';
+import AIPlannerPage from './pages/AIPlannerPage';
 import ScrollToTop from './components/ScrollToTop';
 
 function App() {
@@ -41,6 +44,8 @@ function App() {
         <Routes>
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
+            <Route path="plan" element={<AIPlannerPage />} />
+            <Route path="plan/:planId" element={<AIPlannerPage />} />
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
             <Route path="trip/:id" element={<TripDetails />} />
@@ -56,8 +61,20 @@ function App() {
             <Route path="quotations/:token" element={<PublicQuotationView />} />
             <Route path="profile" element={<Profile />} />
             
-            {/* Admin Routes */}
+            {/* Staff & Admin Routes */}
             <Route path="admin/login" element={<AdminLogin />} />
+            
+            {/* Dedicated Sales Portal (Canonical: /staff/sales) */}
+            <Route path="staff/sales" element={
+              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
+                <SalesPortal />
+              </RoleProtectedRoute>
+            } />
+
+            {/* Backwards Compatibility Redirect: /admin/sales -> /staff/sales */}
+            <Route path="admin/sales" element={<Navigate to="/staff/sales" replace />} />
+
+            {/* Master Admin Dashboard (Admin & Super Admin ONLY - Sales Strictly Denied) */}
             <Route path="admin" element={
               <AdminRoute>
                 <AdminDashboard />
@@ -69,9 +86,9 @@ function App() {
               </AdminRoute>
             } />
             <Route path="admin/quotations/:id" element={
-              <AdminRoute>
+              <RoleProtectedRoute allowedRoles={['admin', 'super_admin', 'sales']}>
                 <QuotationDetail />
-              </AdminRoute>
+              </RoleProtectedRoute>
             } />
             <Route path="admin/quotations/:quoteId/edit" element={
               <AdminRoute>

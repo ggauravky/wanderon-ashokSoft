@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Share2, Copy, Check, Lock, Globe, 
   Sparkles, Download, MessageCircle, ExternalLink, ShieldCheck,

@@ -4,6 +4,8 @@ import User from '../models/User.js';
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'gaurav999@gmail.com').toLowerCase();
 const INFLUENCER_EMAIL = (process.env.INFLUENCER_EMAIL || 'influencer@wanderluxe.in').toLowerCase();
+const SALES_1_EMAIL = (process.env.SALES_1_EMAIL || 'ashoksoftsales1@gmail.com').toLowerCase();
+const SALES_2_EMAIL = (process.env.SALES_2_EMAIL || 'ashoksoftsales2@gmail.com').toLowerCase();
 
 export const protect = async (req, res, next) => {
   let token;
@@ -21,15 +23,20 @@ export const protect = async (req, res, next) => {
       );
 
       // Attempt to load user from MongoDB database
-      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
         try {
-          req.user = await User.findById(decoded.id).select('-password');
+          if (decoded.id && mongoose.Types.ObjectId.isValid(decoded.id) && !String(decoded.id).startsWith('usr_')) {
+            req.user = await User.findById(decoded.id).select('-password');
+          }
+          if (!req.user && decoded.email) {
+            req.user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
+          }
         } catch (dbErr) {
           console.warn('User lookup in DB failed, using token payload fallback:', dbErr.message);
         }
       }
 
-      // Memory Fallback / Admin / Influencer mock tokens
+      // Memory Fallback / Admin / Influencer / Sales mock tokens
       if (!req.user) {
         if (decoded.email === ADMIN_EMAIL || decoded.id === 'usr_admin') {
           req.user = {
@@ -47,6 +54,22 @@ export const protect = async (req, res, next) => {
             role: 'influencer',
             influencerStatus: 'approved'
           };
+        } else if (decoded.email === SALES_1_EMAIL || decoded.id === 'usr_sales_1') {
+          req.user = {
+            _id: 'usr_sales_1',
+            name: 'AshokSoft Sales 1',
+            email: SALES_1_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
+        } else if (decoded.email === SALES_2_EMAIL || decoded.id === 'usr_sales_2') {
+          req.user = {
+            _id: 'usr_sales_2',
+            name: 'AshokSoft Sales 2',
+            email: SALES_2_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
         } else if (decoded.id) {
           req.user = {
             _id: decoded.id,
@@ -58,8 +81,28 @@ export const protect = async (req, res, next) => {
         }
       }
 
+      if (req.user) {
+        if (req.user instanceof mongoose.Model || req.user?.constructor?.modelName === 'User') {
+          req.authContext = {
+            source: 'database',
+            mongoUserId: req.user._id,
+            role: req.user.role
+          };
+        } else {
+          req.authContext = {
+            source: 'legacy_synthetic',
+            mongoUserId: null,
+            role: req.user.role
+          };
+        }
+      }
+
       if (!req.user) {
         return res.status(401).json({ message: 'User not found or session expired. Please log in again.' });
+      }
+
+      if (req.user.isActive === false) {
+        return res.status(403).json({ message: 'Access denied: Account is deactivated. Please contact an administrator.' });
       }
 
       next();
@@ -238,9 +281,14 @@ export const optionalAuth = async (req, res, next) => {
         process.env.JWT_SECRET || 'wanderluxe_secure_jwt_secret_key_2026'
       );
 
-      if (mongoose.connection && mongoose.connection.readyState === 1 && decoded.id && decoded.id !== 'usr_admin' && decoded.id !== 'usr_influencer') {
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
         try {
-          req.user = await User.findById(decoded.id).select('-password');
+          if (decoded.id && mongoose.Types.ObjectId.isValid(decoded.id) && !String(decoded.id).startsWith('usr_')) {
+            req.user = await User.findById(decoded.id).select('-password');
+          }
+          if (!req.user && decoded.email) {
+            req.user = await User.findOne({ email: decoded.email.toLowerCase().trim() }).select('-password');
+          }
         } catch (dbErr) {
           console.warn('Optional user DB lookup fallback:', dbErr.message);
         }
@@ -254,6 +302,30 @@ export const optionalAuth = async (req, res, next) => {
             email: ADMIN_EMAIL,
             role: 'admin'
           };
+        } else if (decoded.email === SALES_1_EMAIL || decoded.id === 'usr_sales_1') {
+          req.user = {
+            _id: 'usr_sales_1',
+            name: 'AshokSoft Sales 1',
+            email: SALES_1_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
+        } else if (decoded.email === SALES_2_EMAIL || decoded.id === 'usr_sales_2') {
+          req.user = {
+            _id: 'usr_sales_2',
+            name: 'AshokSoft Sales 2',
+            email: SALES_2_EMAIL,
+            role: 'sales',
+            isActive: true
+          };
+        } else if (decoded.email === INFLUENCER_EMAIL || decoded.id === 'usr_influencer') {
+          req.user = {
+            _id: 'usr_influencer',
+            name: 'Gaurav Kumar Yadav (Influencer)',
+            email: INFLUENCER_EMAIL,
+            role: 'influencer',
+            influencerStatus: 'approved'
+          };
         } else if (decoded.id) {
           req.user = {
             _id: decoded.id,
@@ -263,9 +335,26 @@ export const optionalAuth = async (req, res, next) => {
           };
         }
       }
+
+      if (req.user) {
+        if (req.user instanceof mongoose.Model || req.user?.constructor?.modelName === 'User') {
+          req.authContext = {
+            source: 'database',
+            mongoUserId: req.user._id,
+            role: req.user.role
+          };
+        } else {
+          req.authContext = {
+            source: 'legacy_synthetic',
+            mongoUserId: null,
+            role: req.user.role
+          };
+        }
+      }
     } catch (err) {
       // Graceful fallback for invalid/expired token on optional endpoints
       req.user = null;
+      req.authContext = null;
     }
   }
   next();

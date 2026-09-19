@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import FollowUp from '../models/FollowUp.js';
 import Lead from '../models/Lead.js';
+import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -79,7 +80,7 @@ export const getFollowUps = async (req, res) => {
       }
     }
 
-    if (followUps.length === 0) {
+    if (!isDbConnected() && process.env.NODE_ENV !== 'production' && process.env.ALLOW_IN_MEMORY_FALLBACK === 'true') {
       followUps = memoryFollowUps.filter(f => {
         if (userRole === 'sales' && userId && String(f.salesUserId) !== String(userId) && String(f.salesUserId) !== 'usr_sales_1') return false;
         if (status && status !== 'All' && f.status !== status) return false;
@@ -153,12 +154,27 @@ export const createFollowUp = async (req, res) => {
       });
     }
 
-    const assignedSalesId = salesUserId || req.user?._id || new mongoose.Types.ObjectId('64f000000000000000000001');
+    const candidateSalesId = salesUserId || req.user?._id;
+    const assignedSalesId = (candidateSalesId && isValidMongoObjectId(candidateSalesId))
+      ? toObjectIdOrNull(candidateSalesId)
+      : null;
     const assignedSalesName = salesUserName || req.user?.name || 'Sales Concierge';
 
+    const safeCustomerId = (customerId && isValidMongoObjectId(customerId))
+      ? toObjectIdOrNull(customerId)
+      : null;
+
+    const safeCreatorId = (req.user?._id && isValidMongoObjectId(req.user._id))
+      ? toObjectIdOrNull(req.user._id)
+      : null;
+
+    const safeLeadId = (leadId && isValidMongoObjectId(leadId))
+      ? toObjectIdOrNull(leadId)
+      : null;
+
     const followUpData = {
-      leadId: mongoose.Types.ObjectId.isValid(leadId) ? leadId : new mongoose.Types.ObjectId('64f000000000000000000002'),
-      customerId: customerId || null,
+      leadId: safeLeadId || new mongoose.Types.ObjectId('64f000000000000000000002'),
+      customerId: safeCustomerId,
       salesUserId: assignedSalesId,
       salesUserName: assignedSalesName,
       title: title.trim(),
@@ -168,13 +184,22 @@ export const createFollowUp = async (req, res) => {
       channel: channel || 'call',
       priority: priority || 'medium',
       status: 'pending',
-      createdBy: req.user?._id
+      createdBy: safeCreatorId
     };
 
     let newFollowUp = null;
     if (isDbConnected()) {
       try {
         newFollowUp = await FollowUp.create(followUpData);
+        // Sync Lead document
+        if (mongoose.Types.ObjectId.isValid(leadId)) {
+          const lead = await Lead.findById(leadId);
+          if (lead) {
+            lead.nextFollowUpAt = newFollowUp.scheduledAt;
+            if (lead.status === 'NEW') lead.status = 'IN_PROGRESS';
+            await lead.save();
+          }
+        }
       } catch (dbErr) {
         console.warn('FollowUp DB save warning:', dbErr.message);
       }
@@ -278,7 +303,7 @@ export const completeFollowUp = async (req, res) => {
     followUp.status = 'completed';
     followUp.outcomeNotes = outcomeNotes || 'Follow-up completed successfully.';
     followUp.completedAt = new Date();
-    followUp.completedBy = req.user?._id;
+    followUp.completedBy = (req.user?._id && isValidMongoObjectId(req.user._id)) ? toObjectIdOrNull(req.user._id) : null;
 
     if (isDbConnected() && typeof followUp.save === 'function') {
       await followUp.save();

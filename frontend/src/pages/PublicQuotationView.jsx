@@ -15,6 +15,7 @@ import {
 import QuotationDocument from '../components/QuotationDocument';
 import ShareQuotationModal from '../components/ShareQuotationModal';
 import DocumentPreviewModal from '../components/DocumentPreviewModal';
+import ItineraryDayGallery from '../components/ItineraryDayGallery';
 import { exportElementToPdf, printElementDirectly } from '../utils/pdfGenerator';
 
 export default function PublicQuotationView() {
@@ -401,15 +402,29 @@ export default function PublicQuotationView() {
                   <Calendar size={16} className="text-indigo-600" /> Day-by-Day Experience Breakdown
                 </h3>
 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {(quotation.itinerary || []).map((day, idx) => (
-                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2">
-                      <div className="font-black text-slate-900 text-sm flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[10px] flex items-center justify-center">
-                          D{day.day}
-                        </span>
-                        <span>{day.title}</span>
+                    <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-black text-slate-900 text-sm flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-lg bg-slate-900 text-white text-[10px] flex items-center justify-center shrink-0">
+                            D{day.day}
+                          </span>
+                          <span>{day.title}</span>
+                        </div>
+                        {day.locationName && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                            📍 {day.locationName}
+                          </span>
+                        )}
                       </div>
+
+                      {/* Curated 3-Image Nature Gallery Block */}
+                      <ItineraryDayGallery
+                        day={day}
+                        destination={quotation.destination}
+                        className="my-2"
+                      />
 
                       {day.description && <p className="text-slate-600 leading-relaxed text-[11px]">{day.description}</p>}
 

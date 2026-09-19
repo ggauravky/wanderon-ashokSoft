@@ -7,6 +7,7 @@ import Booking from '../models/Booking.js';
 import User from '../models/User.js';
 import { calculateQuotationPrice } from '../services/quotationPricingService.js';
 import { sendWhatsAppTicketAndReceipt } from '../utils/whatsappService.js';
+import { isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -115,6 +116,23 @@ export const sanitizeForCustomer = (quotation) => {
     doc.addOns = doc.addOns.map(a => {
       const { unitCost, totalCost, ...safeAddon } = a;
       return safeAddon;
+    });
+  }
+
+  // 4b. Sanitize itinerary day media for customer view (project safe fields only)
+  if (Array.isArray(doc.itinerary)) {
+    doc.itinerary = doc.itinerary.map(day => {
+      const safeDay = { ...day };
+      if (safeDay.coverMedia) {
+        safeDay.coverMedia = {
+          url: safeDay.coverMedia.url || '',
+          altText: safeDay.coverMedia.altText || '',
+          caption: safeDay.coverMedia.caption || '',
+          width: safeDay.coverMedia.width || 1200,
+          height: safeDay.coverMedia.height || 800
+        };
+      }
+      return safeDay;
     });
   }
 
@@ -930,7 +948,8 @@ export const createQuotationRevision = async (req, res) => {
       revisedBy: userId,
       revisedByName: userName,
       reason: reason,
-      priceSnapshot: quotation.priceSnapshot || quotation.pricing
+      priceSnapshot: quotation.priceSnapshot || quotation.pricing,
+      itinerarySnapshot: quotation.itinerary
     });
 
     // 2. Increment version and reset status to DRAFT for editing
@@ -1032,7 +1051,8 @@ export const approveQuotation = async (req, res) => {
       pricing: quotation.pricing,
       paymentTerms: quotation.paymentTerms,
       inclusions: quotation.inclusions,
-      exclusions: quotation.exclusions
+      exclusions: quotation.exclusions,
+      itinerary: quotation.itinerary
     };
 
     quotation.statusHistory.push({
@@ -1198,8 +1218,8 @@ export const convertToTrip = async (req, res) => {
       originalPrice: Math.round(perPaxPrice * 1.15),
       discount: 15,
       currency: 'INR',
-      image: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
-      heroImage: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+      image: selectedHotel?.imageUrl || quotation.itinerary?.find(d => d.coverMedia?.url)?.coverMedia?.url || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+      heroImage: selectedHotel?.imageUrl || quotation.itinerary?.find(d => d.coverMedia?.url)?.coverMedia?.url || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
       gallery: quotation.hotelOptions?.map(h => h.imageUrl).filter(Boolean) || [],
       category: quotation.tripRequirements.travelStyle || 'Backpacking',
       mood: quotation.tripRequirements.travelStyle || 'Adventure',
@@ -1326,15 +1346,20 @@ export const createBookingFromQuotation = async (req, res) => {
 
     const selectedHotel = quotation.hotelOptions?.find(h => h.selected) || quotation.hotelOptions?.[0];
 
+    const candidateBookingUserId = quotation.customerId || userId;
+    const safeBookingUserId = (candidateBookingUserId && isValidMongoObjectId(candidateBookingUserId))
+      ? toObjectIdOrNull(candidateBookingUserId)
+      : new mongoose.Types.ObjectId('64f000000000000000000001');
+
     const bookingData = {
       bookingId,
-      userId: quotation.customerId || userId || new mongoose.Types.ObjectId('64f000000000000000000001'),
+      userId: safeBookingUserId,
       tripId: quotation.sourceTripId || ('custom-quotation-' + quotation.quotationNumber),
       tripSnapshot: {
         title: quotation.tripRequirements.title,
         location: quotation.tripRequirements.destination,
         destination: quotation.tripRequirements.destination,
-        image: selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
+        image: quotation.itinerary?.find(d => d.coverMedia?.url)?.coverMedia?.url || selectedHotel?.imageUrl || 'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800',
         duration: quotation.tripRequirements.duration || `${quotation.tripRequirements.days}D/${quotation.tripRequirements.nights}N`,
         batchDate: quotation.tripRequirements.startDate 
           ? new Date(quotation.tripRequirements.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -1408,6 +1433,8 @@ export const createBookingFromQuotation = async (req, res) => {
         if (quotation.leadId) {
           await Lead.findByIdAndUpdate(quotation.leadId, { 
             status: 'CONVERTED',
+            convertedBookingId: createdBooking._id,
+            convertedBookingCode: bookingId,
             notes: `Lead successfully converted to Booking ${bookingId} from Quote ${quotation.quotationNumber}`
           });
         }

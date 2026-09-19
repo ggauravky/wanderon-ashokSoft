@@ -131,11 +131,17 @@ export const AuthProvider = ({ children }) => {
         try {
           const userData = await getMeApi();
           const clean = userData.email?.toLowerCase();
-          const isAdmin = clean === ENV_ADMIN_EMAIL || userData.role === 'admin';
-          const isInfluencer = userData.role === 'influencer' && userData.influencerStatus === 'approved';
+          const normalizedRole = (userData.role || 'user').toLowerCase();
+          const isSuperAdmin = normalizedRole === 'super_admin';
+          const isSales = normalizedRole === 'sales';
+          const isAdmin = normalizedRole === 'admin' || clean === ENV_ADMIN_EMAIL;
+          const isInfluencer = normalizedRole === 'influencer' && userData.influencerStatus === 'approved';
+          
+          const effectiveRole = isSuperAdmin ? 'super_admin' : isSales ? 'sales' : isAdmin ? 'admin' : isInfluencer ? 'influencer' : normalizedRole;
+
           setUser({
             ...userData,
-            role: isAdmin ? 'admin' : isInfluencer ? 'influencer' : (userData.role || 'user'),
+            role: effectiveRole,
             influencerStatus: userData.influencerStatus || 'none',
             wanderCoins: userData.wanderCoins || 500
           });
@@ -169,11 +175,14 @@ export const AuthProvider = ({ children }) => {
     if (data.token) {
       localStorage.setItem('wanderluxe_token', data.token);
     }
-    const isAdmin = cleanEmail === ENV_ADMIN_EMAIL || data.role === 'admin';
-    const isInfluencer = data.role === 'influencer' && data.influencerStatus === 'approved';
+    const cleanRole = (data.role || 'user').toLowerCase();
+    const isSuperAdmin = cleanRole === 'super_admin';
+    const isSales = cleanRole === 'sales';
+    const isAdmin = cleanRole === 'admin' || cleanEmail === ENV_ADMIN_EMAIL;
+    const isInfluencer = cleanRole === 'influencer' && data.influencerStatus === 'approved';
     const fullUser = {
       ...data,
-      role: isAdmin ? 'admin' : isInfluencer ? 'influencer' : (data.role || 'user'),
+      role: isSuperAdmin ? 'super_admin' : isSales ? 'sales' : isAdmin ? 'admin' : isInfluencer ? 'influencer' : cleanRole,
       influencerStatus: data.influencerStatus || 'none',
       wanderCoins: data.wanderCoins || 500
     };
@@ -181,25 +190,41 @@ export const AuthProvider = ({ children }) => {
     return { success: true, user: fullUser };
   };
 
-  // Dedicated Admin Login (Strict credentials & Database Auth)
-  const adminLogin = async (email, password) => {
+  // Dedicated Staff Portal Login (Admin & Sales Authentication)
+  const staffLogin = async (email, password) => {
     const cleanEmail = email.toLowerCase().trim();
-
-    if (cleanEmail !== ENV_ADMIN_EMAIL) {
-      throw new Error(`Access Denied: Only authorized admin email (${ENV_ADMIN_EMAIL}) can access the Admin Portal.`);
-    }
-
-    if (password !== ENV_ADMIN_PASSWORD && password !== 'gaurav@99') {
-      throw new Error('Invalid Admin Security Password.');
-    }
-
     const data = await loginApi({ email: cleanEmail, password });
+
+    const returnedRole = (data.role || '').toLowerCase();
+    const allowedStaffRoles = ['admin', 'super_admin', 'sales'];
+
+    if (!allowedStaffRoles.includes(returnedRole)) {
+      throw new Error('This account does not have staff portal access.');
+    }
+
     if (data.token) {
       localStorage.setItem('wanderluxe_token', data.token);
     }
-    const adminUser = { ...data, role: 'admin', influencerStatus: 'approved' };
-    setUser(adminUser);
-    return { success: true, user: adminUser };
+
+    const staffUser = {
+      ...data,
+      role: returnedRole,
+      influencerStatus: data.influencerStatus || 'none',
+      wanderCoins: data.wanderCoins || 500
+    };
+
+    setUser(staffUser);
+    return {
+      success: true,
+      user: staffUser,
+      role: staffUser.role,
+      destination: staffUser.role === 'sales' ? '/staff/sales' : '/admin'
+    };
+  };
+
+  // Backwards-compatible Admin Login delegate
+  const adminLogin = async (email, password) => {
+    return await staffLogin(email, password);
   };
 
   // Dedicated Influencer Login (Strict database approval check)
@@ -511,6 +536,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user,
         loading,
         login,
+        staffLogin,
         adminLogin,
         influencerLogin,
         signup,

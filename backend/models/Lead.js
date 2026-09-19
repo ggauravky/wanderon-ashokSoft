@@ -1,7 +1,14 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const leadSchema = new mongoose.Schema(
   {
+    referenceId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true
+    },
     name: {
       type: String,
       required: [true, 'Please provide lead name'],
@@ -20,8 +27,14 @@ const leadSchema = new mongoose.Schema(
     },
     leadType: {
       type: String,
-      enum: ['general', 'trip_enquiry', 'callback_request'],
+      enum: ['general', 'trip_enquiry', 'callback_request', 'ai_planner_booking'],
       default: 'trip_enquiry',
+      index: true
+    },
+    priority: {
+      type: String,
+      enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'],
+      default: 'MEDIUM',
       index: true
     },
     tripId: {
@@ -29,13 +42,89 @@ const leadSchema = new mongoose.Schema(
       default: '',
       index: true
     },
+    tripRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Trip',
+      default: null,
+      index: true
+    },
+    tripSlug: {
+      type: String,
+      default: ''
+    },
     tripTitle: {
+      type: String,
+      default: ''
+    },
+    tripTitleSnapshot: {
+      type: String,
+      default: ''
+    },
+    tripPriceSnapshot: {
+      type: Number,
+      default: 0
+    },
+    selectedBatch: {
       type: String,
       default: ''
     },
     destination: {
       type: String,
       default: 'Meghalaya'
+    },
+    origin: {
+      type: String,
+      default: ''
+    },
+    duration: {
+      type: String,
+      default: ''
+    },
+    travelParty: {
+      type: String,
+      default: ''
+    },
+    stayPreference: {
+      type: String,
+      default: ''
+    },
+    roomStyle: {
+      type: String,
+      default: ''
+    },
+    dietaryPreference: {
+      type: String,
+      default: ''
+    },
+    transitPreference: {
+      type: String,
+      default: ''
+    },
+    pacePreference: {
+      type: String,
+      default: ''
+    },
+    acclimatizationPreference: {
+      type: String,
+      default: ''
+    },
+    interests: [
+      {
+        type: String,
+        trim: true
+      }
+    ],
+    budgetTier: {
+      type: String,
+      default: ''
+    },
+    itinerarySnapshot: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+    bookingDetails: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     },
     travelersCount: {
       type: Number,
@@ -62,6 +151,12 @@ const leadSchema = new mongoose.Schema(
       enum: ['Morning', 'Afternoon', 'Evening', 'Anytime', ''],
       default: 'Anytime'
     },
+    topics: [
+      {
+        type: String,
+        trim: true
+      }
+    ],
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -78,9 +173,97 @@ const leadSchema = new mongoose.Schema(
       default: 'NEW',
       index: true
     },
+    // Assignment fields
     assignedTo: {
       type: String,
       default: 'Sales Concierge Team'
+    },
+    assignedToUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true
+    },
+    assignedToUserName: {
+      type: String,
+      default: ''
+    },
+    assignedAt: {
+      type: Date,
+      default: null
+    },
+    assignedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    assignedByName: {
+      type: String,
+      default: ''
+    },
+    // Contact & Activity Tracking
+    firstContactAt: {
+      type: Date,
+      default: null
+    },
+    lastContactAt: {
+      type: Date,
+      default: null
+    },
+    nextFollowUpAt: {
+      type: Date,
+      default: null
+    },
+    contactCount: {
+      type: Number,
+      default: 0
+    },
+    callOutcomes: [
+      {
+        outcome: {
+          type: String,
+          enum: ['CONNECTED', 'BUSY', 'CALL_LATER', 'WRONG_NUMBER', 'WHATSAPP_SENT', 'EMAIL_SENT', 'NO_ANSWER'],
+          required: true
+        },
+        channel: {
+          type: String,
+          enum: ['call', 'whatsapp', 'email', 'other'],
+          default: 'call'
+        },
+        notes: {
+          type: String,
+          default: ''
+        },
+        loggedAt: {
+          type: Date,
+          default: Date.now
+        },
+        loggedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
+        },
+        loggedByName: {
+          type: String,
+          default: ''
+        }
+      }
+    ],
+    lostReason: {
+      type: String,
+      default: ''
+    },
+    lostReasonDetail: {
+      type: String,
+      default: ''
+    },
+    convertedBookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null
+    },
+    convertedBookingCode: {
+      type: String,
+      default: ''
     },
     notes: {
       type: String,
@@ -88,12 +271,29 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry'],
+      enum: [
+        'trip_page',
+        'contact_page',
+        'booking_page',
+        'custom_inquiry',
+        'Website Lead Form',
+        'website_lead_form',
+        'expert_inquiry',
+        'callback_request',
+        'expert_callback_modal',
+        'ai_planner_booking',
+        'ai_planner',
+        'ai_expedition_planner'
+      ],
       default: 'trip_page'
     },
     whatsappNotification: {
       sent: { type: Boolean, default: false },
-      status: { type: String, default: 'PENDING' },
+      status: {
+        type: String,
+        enum: ['NOT_CONFIGURED', 'PENDING', 'SENT', 'FAILED'],
+        default: 'NOT_CONFIGURED'
+      },
       sentAt: { type: Date }
     },
     quotations: [
@@ -106,5 +306,31 @@ const leadSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model('Lead', leadSchema);
+// Helper function to generate canonical reference ID (collision-resistant)
+export function generateLeadReferenceId() {
+  const year = new Date().getFullYear();
+  let rand;
+  try {
+    rand = crypto.randomInt(100000, 999999);
+  } catch (e) {
+    rand = Math.floor(100000 + Math.random() * 900000);
+  }
+  return `WLX-EXP-${year}-${rand}`;
+}
 
+// Pre-save hook: assign referenceId if not set
+leadSchema.pre('save', function (next) {
+  if (!this.referenceId) {
+    this.referenceId = generateLeadReferenceId();
+  }
+  next();
+});
+
+leadSchema.index({ status: 1, createdAt: -1 });
+leadSchema.index({ assignedToUser: 1, status: 1 });
+leadSchema.index({ leadType: 1, createdAt: -1 });
+leadSchema.index({ destination: 1, status: 1 });
+leadSchema.index({ priority: 1, createdAt: -1 });
+leadSchema.index({ preferredCallDate: 1 });
+
+export default mongoose.model('Lead', leadSchema);

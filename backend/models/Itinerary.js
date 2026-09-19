@@ -12,12 +12,42 @@ const activitySchema = new mongoose.Schema({
 const daySchema = new mongoose.Schema({
   day: { type: Number, required: true },
   title: { type: String, required: true },
+  locationName: { type: String, default: '' },
   morning: { type: [activitySchema], default: [] },
   afternoon: { type: [activitySchema], default: [] },
   evening: { type: [activitySchema], default: [] },
   stay: { type: String, default: '' },
   dailyCost: { type: String, default: '' },
-  tips: { type: [String], default: [] }
+  tips: { type: [String], default: [] },
+  coverMedia: {
+    id: { type: String, default: '' },
+    url: { type: String, default: '' },
+    altText: { type: String, default: '' },
+    caption: { type: String, default: '' },
+    width: { type: Number, default: 1600 },
+    height: { type: Number, default: 900 }
+  },
+  coverMediaAssetId: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  galleryMedia: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  galleryMediaAssetIds: {
+    type: [{ type: String }],
+    default: []
+  },
+  gallery: {
+    type: mongoose.Schema.Types.Mixed,
+    default: []
+  },
+  mediaSelectionMode: {
+    type: String,
+    enum: ['AUTO', 'MANUAL', 'auto', 'manual'],
+    default: 'AUTO'
+  }
 }, { _id: false });
 
 const itinerarySchema = new mongoose.Schema({
@@ -115,7 +145,7 @@ const itinerarySchema = new mongoose.Schema({
     estimatedTotal: { type: String, default: '' }
   },
   matchedTrip: {
-    id: { type: Number },
+    id: { type: mongoose.Schema.Types.Mixed },
     title: { type: String },
     price: { type: Number },
     image: { type: String },

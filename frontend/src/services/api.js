@@ -519,8 +519,15 @@ export async function createLeadApi(leadData) {
   return data;
 }
 
-export async function getAdminLeadsApi() {
-  const response = await fetch(`${API_BASE_URL}/leads`, {
+export async function getAdminLeadsApi(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '' && val !== 'all') {
+      query.append(key, val);
+    }
+  });
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/leads${queryString}`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -529,7 +536,63 @@ export async function getAdminLeadsApi() {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to fetch leads');
   }
-  return Array.isArray(data) ? data : (data.data || []);
+  if (params.envelope) {
+    return data;
+  }
+  return Array.isArray(data) ? data : (data.items || data.leads || data.data || []);
+}
+
+export async function getLeadByIdApi(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch lead details');
+  }
+  return data.lead || data;
+}
+
+export async function claimLeadApi(leadId) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/claim`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to claim lead');
+  }
+  return data;
+}
+
+export async function logLeadContactApi(leadId, contactPayload) {
+  const response = await fetch(`${API_BASE_URL}/leads/${leadId}/log-contact`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(contactPayload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to log contact outcome');
+  }
+  return data;
+}
+
+export async function getSalesUsersApi() {
+  const response = await fetch(`${API_BASE_URL}/leads/sales-users`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch sales users');
+  }
+  return data.users || [];
 }
 
 export async function updateLeadStatusApi(leadId, statusPayload) {
@@ -548,7 +611,9 @@ export async function updateLeadStatusApi(leadId, statusPayload) {
 }
 
 export async function assignLeadApi(leadId, assignPayload) {
-  const body = typeof assignPayload === 'string' ? { assignedTo: assignPayload } : assignPayload;
+  const body = typeof assignPayload === 'string'
+    ? { assignedToName: assignPayload }
+    : assignPayload;
   const response = await fetch(`${API_BASE_URL}/leads/${leadId}/assign`, {
     method: 'PUT',
     headers: getHeaders(),
@@ -558,6 +623,82 @@ export async function assignLeadApi(leadId, assignPayload) {
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.message || 'Failed to assign lead');
+  }
+  return data;
+}
+
+// CRM FOLLOW-UP APIS
+export async function getFollowUpsApi(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined && val !== null && val !== '' && val !== 'All') {
+      query.append(key, val);
+    }
+  });
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const response = await fetch(`${API_BASE_URL}/follow-ups${queryString}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch follow-ups');
+  }
+  return data.followUps || [];
+}
+
+export async function createFollowUpApi(followUpData) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(followUpData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to create follow-up');
+  }
+  return data;
+}
+
+export async function updateFollowUpApi(id, followUpData) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(followUpData)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to update follow-up');
+  }
+  return data;
+}
+
+export async function completeFollowUpApi(id, payload = {}) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}/complete`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to complete follow-up');
+  }
+  return data;
+}
+
+export async function deleteFollowUpApi(id) {
+  const response = await fetch(`${API_BASE_URL}/follow-ups/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to delete follow-up');
   }
   return data;
 }
@@ -1018,6 +1159,110 @@ export async function customerQuotationDecisionApi(token, payload) {
   return data;
 }
 
+// ================================================================
+// LOCATION MEDIA ASSETS API HELPERS
+// ================================================================
+
+export async function listMediaAssetsApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_BASE_URL}/media${query ? `?${query}` : ''}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to list media assets');
+  return data;
+}
+
+export async function getMediaAssetByIdApi(id) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media asset');
+  return data.data;
+}
+
+export async function resolveItineraryMediaApi(payload) {
+  const response = await fetch(`${API_BASE_URL}/media/resolve-itinerary`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to resolve itinerary media');
+  return data.data;
+}
+
+export async function getMediaCoverageReportApi(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  const url = `${API_BASE_URL}/media/coverage-report${query ? `?${query}` : ''}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media coverage report');
+  return data.data;
+}
+
+export async function createMediaAssetApi(assetData) {
+  const response = await fetch(`${API_BASE_URL}/media`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(assetData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create media asset');
+  return data.data;
+}
+
+export async function updateMediaAssetApi(id, assetData) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(assetData)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to update media asset');
+  return data.data;
+}
+
+export async function deleteMediaAssetApi(id) {
+  const response = await fetch(`${API_BASE_URL}/media/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to delete media asset');
+  return data;
+}
+
+export async function getMediaHealthApi() {
+  const response = await fetch(`${API_BASE_URL}/media/health`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch media health status');
+  return data.data;
+}
+
+// Dedicated Sales Dashboard API
+export async function getSalesDashboardApi() {
+  const response = await fetch(`${API_BASE_URL}/sales/dashboard`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || 'Failed to fetch sales dashboard metrics');
+  }
+  return data;
+}
+
 export default {
   getHeaders,
   registerApi,
@@ -1059,8 +1304,17 @@ export default {
   getTripByIdOrSlugApi,
   createLeadApi,
   getAdminLeadsApi,
+  getLeadByIdApi,
+  claimLeadApi,
+  logLeadContactApi,
+  getSalesUsersApi,
   updateLeadStatusApi,
   assignLeadApi,
+  getFollowUpsApi,
+  createFollowUpApi,
+  updateFollowUpApi,
+  completeFollowUpApi,
+  deleteFollowUpApi,
   getTripReviewsApi,
   createReviewApi,
   generateAIItineraryApi,
@@ -1096,5 +1350,14 @@ export default {
   createBookingFromQuotationApi,
   getPublicQuotationByTokenApi,
   updatePublicSelectedOptionsApi,
-  customerQuotationDecisionApi
+  customerQuotationDecisionApi,
+  listMediaAssetsApi,
+  getMediaAssetByIdApi,
+  resolveItineraryMediaApi,
+  getMediaCoverageReportApi,
+  createMediaAssetApi,
+  updateMediaAssetApi,
+  deleteMediaAssetApi,
+  getMediaHealthApi,
+  getSalesDashboardApi
 };

@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'admin', 'super_admin', 'operations', 'sales', 'marketing', 'influencer'],
       default: 'user'
     },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
     influencerStatus: {
       type: String,
       enum: ['none', 'pending', 'approved', 'rejected'],
