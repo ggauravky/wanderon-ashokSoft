@@ -1,42 +1,54 @@
 import React, { forwardRef } from 'react';
 import { 
   Compass, ShieldCheck, MapPin, Calendar, Clock, Users, 
-  Phone, Mail, CheckCircle2, QrCode, AlertCircle, Sparkles, 
-  ArrowRight, Luggage, Navigation, Plane, Award, KeyRound
+  CheckCircle2, QrCode, AlertCircle, Sparkles, Navigation
 } from 'lucide-react';
+
+const money = (value) =>
+  value === null || value === undefined || !Number.isFinite(Number(value))
+    ? '—'
+    : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(value));
 
 export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
   if (!pass) return null;
 
   const {
-    bookingId = 'WLX-2026-CONFIRMED',
+    bookingId = '',
     bookingStatus = 'CONFIRMED',
-    confirmedAt = new Date().toISOString(),
+    confirmedAt = null,
     trip = {},
     leadTraveler = {},
     coTravelers = [],
-    numberOfTravelers = 1,
-    occupancy = 'Double Sharing',
+    numberOfTravelers = null,
+    occupancy = '',
     pricing = {},
     payment = {},
     qrCode = {},
     supportContact = {}
   } = pass;
 
-  const formattedDate = new Date(confirmedAt).toLocaleDateString('en-US', {
+  const formattedDate = confirmedAt ? new Date(confirmedAt).toLocaleDateString('en-IN', {
     month: 'short',
     day: 'numeric',
     year: 'numeric'
-  });
+  }) : '—';
 
-  const formattedTime = new Date(confirmedAt).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  const totalAmount = pricing.totalAmount != null && Number.isFinite(Number(pricing.totalAmount))
+    ? Number(pricing.totalAmount)
+    : pricing.finalAmount != null && Number.isFinite(Number(pricing.finalAmount))
+      ? Number(pricing.finalAmount)
+      : null;
 
-  const finalAmount = Number(pricing.finalAmount || pricing.subtotal || 0);
-  const destinationName = trip.destination || trip.location || 'Himalayas, India';
-  const pickupPointName = trip.pickupPoint || 'Main Meeting Point / Airport Arrival Terminal';
+  const amountPaid = pricing.amountPaid != null && Number.isFinite(Number(pricing.amountPaid))
+    ? Number(pricing.amountPaid)
+    : totalAmount;
+
+  const amountOutstanding = pricing.amountOutstanding != null && Number.isFinite(Number(pricing.amountOutstanding))
+    ? Number(pricing.amountOutstanding)
+    : 0;
+
+  const destinationName = trip.destination || trip.location || '—';
+  const pickupPointName = trip.pickupPoint || 'To be confirmed';
 
   return (
     <div
@@ -58,7 +70,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
         printColorAdjust: 'exact'
       }}
     >
-      {/* Top Airline Style Boarding Header */}
+      {/* Top Luxury Boarding Header */}
       <div 
         style={{
           background: 'linear-gradient(135deg, #091224 0%, #0f2347 100%)',
@@ -99,7 +111,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                   borderRadius: '9999px',
                   border: '1px solid rgba(16, 185, 129, 0.3)'
                 }}>
-                  ELECTRONIC VOUCHER
+                  OFFICIAL TRAVEL PASS
                 </span>
               </div>
               <h1 style={{ fontSize: '20px', fontWeight: '900', margin: '2px 0 0 0', color: '#ffffff', letterSpacing: '-0.5px' }}>
@@ -119,7 +131,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
               Booking Reference / PNR
             </span>
             <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: '16px', fontWeight: '900', color: '#ffffff' }}>
-              {bookingId}
+              {bookingId || '—'}
             </span>
           </div>
         </div>
@@ -136,9 +148,9 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
           gap: '12px'
         }}>
           <div>
-            <span style={{ fontSize: '9px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', display: 'block' }}>Origin Hub</span>
+            <span style={{ fontSize: '9px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', display: 'block' }}>Assembly Point</span>
             <span style={{ fontSize: '14px', fontWeight: '800', color: '#f8fafc' }}>
-              {pickupPointName.split('(')[0].trim() || 'Assembly Point'}
+              {pickupPointName.split('(')[0].trim() || 'To be confirmed'}
             </span>
           </div>
 
@@ -157,10 +169,10 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
         </div>
       </div>
 
-      {/* Main Document Content */}
+      {/* Main Document Body */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         
-        {/* Section 1: Trip & Itinerary Specs */}
+        {/* Expedition Specs */}
         <div style={{
           backgroundColor: '#f8fafc',
           borderRadius: '16px',
@@ -188,7 +200,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
           </div>
 
           <h2 style={{ fontSize: '17px', fontWeight: '900', color: '#0f172a', margin: '0 0 14px 0' }}>
-            {trip.title || 'Curated Travel Expedition'}
+            {trip.title || '—'}
           </h2>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', fontSize: '12px' }}>
@@ -197,7 +209,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                 Duration
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', color: '#0f172a' }}>
-                <Clock size={14} color="#059669" /> {trip.duration || 'Flexible'}
+                <Clock size={14} color="#059669" /> {trip.duration || '—'}
               </div>
             </div>
 
@@ -206,7 +218,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                 Departure Batch
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', color: '#0f172a' }}>
-                <Calendar size={14} color="#059669" /> {trip.batchDate || '15 Sep - 20 Sep 2026'}
+                <Calendar size={14} color="#059669" /> {trip.batchDate || 'To be confirmed'}
               </div>
             </div>
 
@@ -215,12 +227,11 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                 Sharing / Class
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '800', color: '#0f172a' }}>
-                <Users size={14} color="#059669" /> {occupancy}
+                <Users size={14} color="#059669" /> {occupancy || 'Double Sharing'}
               </div>
             </div>
           </div>
 
-          {/* Assembly / Pickup Point Callout */}
           <div style={{
             marginTop: '12px',
             padding: '10px 14px',
@@ -234,16 +245,16 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
           }}>
             <MapPin size={15} color="#047857" style={{ flexShrink: 0, marginTop: '2px' }} />
             <div>
-              <strong style={{ color: '#064e3b', display: 'block', fontSize: '11px' }}>Assembly & Boarding Point:</strong>
+              <strong style={{ color: '#064e3b', display: 'block', fontSize: '11px' }}>Assembly & Pickup Point:</strong>
               <span style={{ color: '#065f46', fontWeight: '500' }}>{pickupPointName}</span>
             </div>
           </div>
         </div>
 
-        {/* Section 2: Traveler Manifest & QR Security Box */}
+        {/* Passenger Manifest & Boarding QR Section */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
           
-          {/* Left Column: Passenger Manifest & Payment */}
+          {/* Left Column: Passenger Manifest & Financials */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{
               backgroundColor: '#f8fafc',
@@ -259,17 +270,17 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', display: 'block' }}>Traveler Name</span>
-                  <strong style={{ fontSize: '13px', color: '#0f172a' }}>{leadTraveler.name || 'Valued Guest'}</strong>
+                  <strong style={{ fontSize: '13px', color: '#0f172a' }}>{leadTraveler.name || '—'}</strong>
                 </div>
                 <div>
                   <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', display: 'block' }}>Phone</span>
                   <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: '700', color: '#0f172a' }}>
-                    {leadTraveler.phone || '+91 85420 36499'}
+                    {leadTraveler.phone || '—'}
                   </span>
                 </div>
                 <div style={{ gridColumn: 'span 2' }}>
                   <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', display: 'block' }}>Email</span>
-                  <span style={{ color: '#334155', fontWeight: '500' }}>{leadTraveler.email || 'traveler@wanderluxe.in'}</span>
+                  <span style={{ color: '#334155', fontWeight: '500' }}>{leadTraveler.email || '—'}</span>
                 </div>
               </div>
 
@@ -290,7 +301,7 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                   fontWeight: '800',
                   color: '#0f172a'
                 }}>
-                  {numberOfTravelers} Guest{numberOfTravelers > 1 ? 's' : ''}
+                  {numberOfTravelers ?? 1} Guest{numberOfTravelers > 1 ? 's' : ''}
                 </span>
               </div>
             </div>
@@ -318,15 +329,15 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <strong style={{ color: '#0f172a' }}>{idx + 1}. {t.name || `Traveler ${idx + 2}`}</strong>
-                      <span style={{ color: '#64748b', fontSize: '10px' }}>{t.gender || 'Adult'}, {t.age || '--'} Yrs</span>
+                      <strong style={{ color: '#0f172a' }}>{idx + 2}. {t.name || 'Traveler'}</strong>
+                      <span style={{ color: '#64748b', fontSize: '10px' }}>{t.gender || '—'}, {t.age ? `${t.age} Yrs` : '—'}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Fare & Payment Box */}
+            {/* Financial Summary Box */}
             <div style={{
               backgroundColor: '#f8fafc',
               borderRadius: '16px',
@@ -344,12 +355,26 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '9px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', display: 'block' }}>Total Paid</span>
                   <strong style={{ fontSize: '16px', color: '#0f172a' }}>
-                    ₹{finalAmount.toLocaleString()} <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 'normal' }}>INR</span>
+                    {money(amountPaid)}
                   </strong>
                 </div>
               </div>
+
               <div style={{
                 marginTop: '8px',
+                paddingTop: '6px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '10px',
+                color: '#64748b'
+              }}>
+                <span>Journey Value: <strong style={{ color: '#0f172a' }}>{money(totalAmount)}</strong></span>
+                <span>Outstanding: <strong style={{ color: '#047857' }}>{money(amountOutstanding)}</strong></span>
+              </div>
+
+              <div style={{
+                marginTop: '6px',
                 paddingTop: '6px',
                 borderTop: '1px solid #e2e8f0',
                 display: 'flex',
@@ -358,18 +383,18 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
                 color: '#64748b',
                 fontFamily: 'ui-monospace, monospace'
               }}>
-                <span>Ref: {payment.razorpayPaymentId || 'rzp_verified_pay'}</span>
+                <span>Ref: {payment.razorpayPaymentId || '—'}</span>
                 <span>Date: {formattedDate}</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: High-Res Scannable QR Voucher */}
+          {/* Right Column: Prominent High-Contrast Scannable Boarding QR */}
           <div style={{
-            backgroundColor: '#f8fafc',
+            backgroundColor: '#ffffff',
             borderRadius: '16px',
             padding: '16px',
-            border: '1px solid #e2e8f0',
+            border: '2px solid #0f172a',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -378,46 +403,46 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
           }}>
             <div>
               <span style={{ fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '0.5px', color: '#0f172a', display: 'block' }}>
-                Identity & Boarding QR
+                Official Boarding QR
               </span>
               <span style={{ fontSize: '9px', color: '#64748b', fontWeight: '500' }}>
-                Scan at pickup point for verified check-in
+                Present to trip captain at assembly point
               </span>
             </div>
 
             <div style={{
-              padding: '10px',
+              padding: '12px',
               backgroundColor: '#ffffff',
               borderRadius: '14px',
-              border: '2px solid #0f172a',
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
               margin: '10px 0'
             }}>
               {qrCode.dataUrl ? (
                 <img
                   src={qrCode.dataUrl}
                   alt="Official Boarding Pass QR"
-                  style={{ width: '160px', height: '160px', objectFit: 'contain', display: 'block' }}
+                  style={{ width: '190px', height: '190px', objectFit: 'contain', display: 'block' }}
                 />
               ) : (
-                <div style={{ width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-                  <QrCode size={44} />
+                <div style={{ width: '190px', height: '190px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                  <QrCode size={56} />
                 </div>
               )}
             </div>
 
             <div>
-              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '9px', fontWeight: '700', color: '#334155', display: 'block' }}>
-                {qrCode.verificationToken ? qrCode.verificationToken.substring(0, 16).toUpperCase() : bookingId}
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '10px', fontWeight: '700', color: '#334155', display: 'block' }}>
+                {bookingId || '—'}
               </span>
               <span style={{ fontSize: '9px', color: '#64748b', display: 'block', marginTop: '2px' }}>
-                Captain: {supportContact.captainName || 'Certified Expedition Lead'}
+                WanderLuxe Verification QR
               </span>
             </div>
           </div>
         </div>
 
-        {/* Section 3: Essential Guidelines Notice */}
+        {/* Mandatory Guidelines */}
         <div style={{
           backgroundColor: '#fffbeb',
           border: '1px solid #fde68a',
@@ -432,14 +457,14 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '6px', fontWeight: '500' }}>
             <div>• Carry original Govt Photo ID (Aadhaar / Passport / Voter ID).</div>
             <div>• Report to pickup hub at least 30 minutes prior to departure.</div>
-            <div>• Non-transferable digital pass cryptographically linked to PNR.</div>
-            <div>• 24/7 Helpline: <strong>+91 85420 36499</strong> (support@wanderluxe.in)</div>
+            <div>• Present this official Boarding QR for captain verification.</div>
+            <div>• Support: <strong>{supportContact.phone || '—'}</strong> ({supportContact.email || '—'})</div>
           </div>
         </div>
 
       </div>
 
-      {/* Perforation Cutout Styling & Footer */}
+      {/* Footer Perforation Line */}
       <div style={{
         marginTop: '16px',
         paddingTop: '12px',
@@ -453,8 +478,8 @@ export const BoardingPassDocument = forwardRef(({ pass }, ref) => {
         color: '#64748b',
         fontFamily: 'ui-monospace, monospace'
       }}>
-        <span>WanderLuxe Travels Pvt Ltd • Official System Generated Voucher</span>
-        <span>SHA-256 Verified Security Hash • All Rights Reserved</span>
+        <span>WanderLuxe Travels • Official System-Generated Boarding Pass</span>
+        <span>Valid only when booking status is CONFIRMED and PAID</span>
       </div>
     </div>
   );

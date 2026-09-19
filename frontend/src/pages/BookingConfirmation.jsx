@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   CheckCircle2, Calendar, MapPin, Users, Ticket, ArrowRight, 
   Printer, ShieldCheck, QrCode, Sparkles, Copy, Check, Clock, 
-  Phone, Mail, Download, Lock, AlertCircle, CreditCard, FileText
+  Phone, Mail, Download, Lock, AlertCircle, CreditCard, FileText, X
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import * as apiService from '../services/api.js';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -13,10 +14,14 @@ import BoardingPassModal from '../components/BoardingPassModal.jsx';
 import ProvisionalBookingModal from '../components/ProvisionalBookingModal.jsx';
 import { loadRazorpayScript } from '../utils/razorpay.js';
 import SEOHead from '../components/SEOHead.jsx';
+import PaymentSuccessModal from '../components/booking/PaymentSuccessModal.jsx';
+import PaymentReceiptModal from '../components/booking/PaymentReceiptModal.jsx';
+import BookingConfirmationModal from '../components/booking/BookingConfirmationModal.jsx';
 
 const BookingConfirmation = () => {
   const { bookingId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
 
   // Redirect unauthenticated users to login
@@ -32,6 +37,10 @@ const BookingConfirmation = () => {
   const [copied, setCopied] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
   const [showProvisionalModal, setShowProvisionalModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [receiptPaymentId, setReceiptPaymentId] = useState('');
+  const [successPayment, setSuccessPayment] = useState(null);
+  const [bookingQr, setBookingQr] = useState('');
 
   // Balance Payment state
   const [isPayingBalance, setIsPayingBalance] = useState(false);
@@ -55,6 +64,24 @@ const BookingConfirmation = () => {
     }
   }, [bookingId]);
 
+  useEffect(() => {
+    const event = location.state?.paymentSuccess;
+    if (!booking || !event?.verified || event.bookingId !== booking.bookingId) return;
+    const match = (booking.payments || []).find((item) => item.paymentId === event.paymentId && item.orderId === event.orderId && item.type === event.paymentType && item.verifiedAt);
+    if (!match) return;
+    const key = `wlx_payment_success_seen_${match.paymentId}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+    setSuccessPayment(match);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [booking, location.state, location.pathname, navigate]);
+
+  useEffect(() => {
+    let active = true;
+    if (booking?.qrCode?.verificationUrl) QRCode.toDataURL(booking.qrCode.verificationUrl, { width: 320, margin: 2 }).then((data) => { if (active) setBookingQr(data); });
+    return () => { active = false; };
+  }, [booking?.qrCode?.verificationUrl]);
+
   const handleCopyId = () => {
     if (booking?.bookingId) {
       navigator.clipboard.writeText(booking.bookingId);
@@ -65,7 +92,7 @@ const BookingConfirmation = () => {
 
   // Pay Remaining Balance Workflow
   const handlePayRemainingBalance = async () => {
-    if (!booking) return;
+    if (!booking || isPayingBalance) return;
     try {
       setIsPayingBalance(true);
       setBalancePaymentError('');
@@ -106,11 +133,17 @@ const BookingConfirmation = () => {
             };
 
             const result = await verifyRemainingBalanceApi(booking.bookingId, verifyPayload);
+            if (result.code === 'PAYMENT_PENDING_CAPTURE' || result.pending) {
+              setBalancePaymentError('Balance payment is authorized and awaiting bank capture. We are verifying it automatically.');
+              return;
+            }
             if (result.success) {
               await fetchBooking();
+              const event = result.paymentEvent || result.booking?.payments?.find((item) => item.paymentId === response.razorpay_payment_id);
+              if (event?.paymentId) setSuccessPayment(event);
             }
           } catch (vErr) {
-            setBalancePaymentError(vErr.message || 'Balance verification failed.');
+            setBalancePaymentError(`Payment verification is incomplete. Do not retry payment immediately. Contact support with ${response.razorpay_payment_id || 'your Razorpay reference'}. ${vErr.message || ''}`);
           } finally {
             setIsPayingBalance(false);
           }
@@ -168,14 +201,17 @@ const BookingConfirmation = () => {
 
   const { tripSnapshot, pricing, payment, paymentStatus, bookingStatus, customer, travelers, numberOfTravelers, qrCode } = booking;
   
-  const isProvisional = bookingStatus === 'PROVISIONALLY_CONFIRMED' || paymentStatus === 'PARTIALLY_PAID';
-  const finalAmount = Number(pricing?.finalAmount) || 18500;
-  const amountPaid = Number(pricing?.amountPaid) || (isProvisional ? Math.round(finalAmount * 0.1) : finalAmount);
-  const amountOutstanding = Number(pricing?.amountOutstanding) || Math.max(0, finalAmount - amountPaid);
+  const isProvisional = bookingStatus === 'PROVISIONALLY_CONFIRMED' && paymentStatus === 'PARTIALLY_PAID';
+  const isFullyConfirmed = bookingStatus === 'CONFIRMED' && paymentStatus === 'PAID';
+  const numeric = (item) => item === null || item === undefined || item === '' || !Number.isFinite(Number(item)) ? null : Number(item);
+  const money = (item) => item === null ? '—' : `₹${item.toLocaleString('en-IN')}`;
+  const finalAmount = numeric(pricing?.finalAmount);
+  const amountPaid = numeric(pricing?.amountPaid);
+  const amountOutstanding = numeric(pricing?.amountOutstanding);
 
   const formattedDueDate = pricing?.balanceDueDate
     ? new Date(pricing.balanceDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : 'Within 6 days';
+    : 'To be confirmed';
 
   return (
     <div className="min-h-screen pt-24 pb-16 bg-slate-100/70 px-4">
@@ -191,7 +227,7 @@ const BookingConfirmation = () => {
         <div className={`rounded-3xl p-8 md:p-10 text-white shadow-2xl relative overflow-hidden ${
           isProvisional
             ? 'bg-gradient-to-r from-amber-600 via-amber-700 to-slate-900 shadow-amber-500/20'
-            : 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-900 shadow-emerald-500/20'
+            : isFullyConfirmed ? 'bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-900 shadow-emerald-500/20' : 'bg-slate-800'
         }`}>
           <div className="absolute top-0 right-0 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
           
@@ -199,15 +235,15 @@ const BookingConfirmation = () => {
             <div>
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/20 backdrop-blur-md border border-white/30 text-xs font-bold text-white mb-4">
                 <ShieldCheck size={16} /> 
-                {isProvisional ? '10% Deposit Verified • Seat Reserved' : '100% Cryptographically Verified & Confirmed'}
+                {isProvisional ? 'Deposit verified · Seat reserved' : isFullyConfirmed ? 'Payment verified · Booking confirmed' : `${bookingStatus} · ${paymentStatus}`}
               </div>
               <h1 className="text-2xl md:text-4xl font-extrabold mb-2 tracking-tight">
-                {isProvisional ? 'Provisional Booking Confirmed! ⏳' : 'Booking Fully Confirmed! 🎉'}
+                {isProvisional ? 'Provisional Booking Confirmed' : isFullyConfirmed ? 'Booking Fully Confirmed' : 'Booking Status'}
               </h1>
               <p className="text-white/90 text-sm md:text-base font-medium max-w-lg">
                 {isProvisional 
-                  ? `Your seat is reserved. Pay the remaining 90% balance (₹${amountOutstanding.toLocaleString()}) by ${formattedDueDate} to unlock your official Boarding Pass.`
-                  : 'Your expedition is confirmed. An official boarding pass and verified captain QR code have been unlocked.'}
+                  ? `Your seat is reserved. Pay the remaining balance (${money(amountOutstanding)}) by ${formattedDueDate} to unlock your official Boarding Pass.`
+                  : isFullyConfirmed ? 'Your expedition is confirmed. Your official Boarding Pass is available.' : 'Review the current booking and payment status below.'}
               </p>
             </div>
 
@@ -228,7 +264,7 @@ const BookingConfirmation = () => {
                 </button>
               </div>
               <span className={`text-[11px] font-bold block mt-1 ${isProvisional ? 'text-amber-200' : 'text-emerald-200'}`}>
-                {isProvisional ? '10% Partial Paid' : 'Paid in Full'}
+                {isProvisional ? 'Partially paid' : isFullyConfirmed ? 'Paid in full' : paymentStatus}
               </span>
             </div>
           </div>
@@ -259,7 +295,7 @@ const BookingConfirmation = () => {
               </div>
               <div>
                 <span className={`text-xs font-extrabold uppercase tracking-wider block ${isProvisional ? 'text-amber-400' : 'text-emerald-400'}`}>
-                  {isProvisional ? 'Provisional Reservation Pass' : 'Official Boarding Pass'}
+                  {isProvisional ? 'Provisional Reservation' : isFullyConfirmed ? 'Official Boarding Pass' : 'Booking Record'}
                 </span>
                 <h2 className="text-xl md:text-2xl font-black">{tripSnapshot?.title}</h2>
               </div>
@@ -271,16 +307,16 @@ const BookingConfirmation = () => {
                   onClick={() => setShowProvisionalModal(true)}
                   className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
                 >
-                  <FileText size={15} /> Download Booking Letter
+                  <FileText size={15} /> Provisional Confirmation
                 </button>
-              ) : (
+              ) : isFullyConfirmed ? (
                 <button
                   onClick={() => setShowPassModal(true)}
                   className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
                 >
                   <QrCode size={15} /> Official Boarding Pass
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -382,7 +418,7 @@ const BookingConfirmation = () => {
                       Boarding QR Locked
                     </h4>
                     <p className="text-[11px] text-amber-800 font-medium mt-1">
-                      Unlock official captain credentials by completing the 90% balance payment.
+                      Unlock the official Boarding Pass by completing the balance payment.
                     </p>
                   </div>
 
@@ -396,21 +432,21 @@ const BookingConfirmation = () => {
                     ) : (
                       <>
                         <CreditCard size={14} />
-                        <span>Pay Remaining ₹{amountOutstanding.toLocaleString()}</span>
+                        <span>Pay Remaining {money(amountOutstanding)}</span>
                       </>
                     )}
                   </button>
                 </div>
-              ) : (
+              ) : isFullyConfirmed ? (
                 <div className="text-center">
                   <span className="text-xs font-black uppercase tracking-wider text-slate-900 block mb-3">
                     Boarding Verification QR
                   </span>
                   
-                  {qrCode?.dataUrl ? (
+                  {bookingQr ? (
                     <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-xs inline-block mx-auto mb-2">
                       <img
-                        src={qrCode.dataUrl}
+                        src={bookingQr}
                         alt="Booking Verification QR Code"
                         className="w-44 h-44 object-contain rounded-xl mx-auto"
                       />
@@ -425,25 +461,25 @@ const BookingConfirmation = () => {
                     Verified captain scanning pass for boarding terminal.
                   </p>
                 </div>
-              )}
+              ) : <div className="text-sm text-slate-500">No Boarding Pass is available for this booking status.</div>}
 
               {/* Payment Summary Breakdown */}
               <div className="pt-4 border-t border-slate-200 space-y-2 text-xs">
                 <div className="flex justify-between text-slate-500 font-medium">
                   <span>Total Expedition Cost</span>
-                  <span>₹{finalAmount.toLocaleString()}</span>
+                  <span>{money(finalAmount)}</span>
                 </div>
 
                 <div className="flex justify-between text-emerald-700 font-bold">
-                  <span>Amount Paid {isProvisional ? '(10% Deposit)' : '(Full)'}</span>
-                  <span>₹{amountPaid.toLocaleString()}</span>
+                  <span>Amount Paid</span>
+                  <span>{money(amountPaid)}</span>
                 </div>
 
                 {isProvisional && (
                   <>
                     <div className="flex justify-between text-amber-700 font-black pt-1 border-t border-slate-200">
                       <span>Remaining Balance</span>
-                      <span>₹{amountOutstanding.toLocaleString()}</span>
+                      <span>{money(amountOutstanding)}</span>
                     </div>
                     <div className="text-[10px] text-amber-800 font-bold text-right">
                       Due by: {formattedDueDate}
@@ -459,6 +495,17 @@ const BookingConfirmation = () => {
             </div>
           </div>
         </div>
+
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
+          <h2 className="font-bold text-slate-900 text-lg">Your documents & payments</h2>
+          <div className="flex flex-wrap gap-3 mt-4">
+            <button onClick={() => setShowConfirmationModal(true)} className="px-4 py-3 rounded-xl bg-slate-900 text-white text-sm font-semibold">{isProvisional ? 'Provisional Booking Confirmation' : 'Booking Confirmation'}</button>
+            {isFullyConfirmed && <button onClick={() => setShowPassModal(true)} className="px-4 py-3 rounded-xl border border-emerald-300 text-emerald-800 text-sm font-semibold">Official Boarding Pass</button>}
+          </div>
+          <div className="mt-5 divide-y divide-slate-100">
+            {(booking.payments || []).filter((event) => event.paymentId && event.verifiedAt).map((event) => <div key={event.paymentId} className="flex items-center justify-between gap-4 py-3 text-sm"><div><span className="font-bold">{event.type}</span><span className="text-slate-500 ml-2">{money(numeric(event.amount))} · {new Date(event.verifiedAt).toLocaleDateString('en-IN')}</span></div><button onClick={() => setReceiptPaymentId(event.paymentId)} className="text-emerald-700 font-semibold">Receipt</button></div>)}
+          </div>
+        </section>
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -495,6 +542,9 @@ const BookingConfirmation = () => {
         initialBookingData={booking}
         onPayBalance={() => handlePayRemainingBalance()}
       />
+      {showConfirmationModal && <BookingConfirmationModal booking={booking} onClose={() => setShowConfirmationModal(false)} />}
+      {receiptPaymentId && <PaymentReceiptModal bookingId={booking.bookingId} paymentId={receiptPaymentId} onClose={() => setReceiptPaymentId('')} />}
+      {successPayment && <PaymentSuccessModal booking={booking} payment={successPayment} onClose={() => setSuccessPayment(null)} onReceipt={() => { setReceiptPaymentId(successPayment.paymentId); setSuccessPayment(null); }} onConfirmation={() => { setShowConfirmationModal(true); setSuccessPayment(null); }} onBoarding={() => { setShowPassModal(true); setSuccessPayment(null); }} onBookings={() => navigate('/profile')} />}
     </div>
   );
 };

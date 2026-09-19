@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { AlertTriangle, ShieldCheck, CheckCircle2, Users, Calendar, Clock, MapPin, ArrowRight } from 'lucide-react';
 import * as apiService from '../services/api.js';
 
 const { verifyBookingTokenApi } = apiService;
@@ -33,7 +34,7 @@ const BookingVerify = () => {
       <div className="min-h-screen pt-28 pb-16 flex items-center justify-center bg-brand-light">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-brand-navy font-bold text-sm">Verifying Boarding Pass Authenticity...</p>
+          <p className="text-brand-navy font-bold text-sm">Verifying booking status...</p>
         </div>
       </div>
     );
@@ -61,19 +62,23 @@ const BookingVerify = () => {
     );
   }
 
+  const cancelled = data.bookingStatus === 'CANCELLED';
+  const fullyPaid = data.bookingStatus === 'CONFIRMED' && data.paymentStatus === 'PAID';
+  const tone = cancelled ? 'rose' : fullyPaid ? 'emerald' : 'amber';
+  const heading = cancelled ? 'Booking Verified — Cancelled' : fullyPaid ? 'Verified & Confirmed' : 'Verified Booking';
   return (
     <div className="min-h-screen pt-28 pb-16 bg-gradient-to-b from-brand-light via-white to-brand-light px-4 flex items-center justify-center">
       <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl border border-gray-200 overflow-hidden">
         {/* Verified Header */}
-        <div className="p-8 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-center relative overflow-hidden">
+        <div className={`p-8 text-white text-center relative overflow-hidden ${cancelled ? 'bg-slate-800' : fullyPaid ? 'bg-gradient-to-r from-emerald-600 to-teal-600' : 'bg-gradient-to-r from-amber-600 to-amber-700'}`}>
           <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center mx-auto mb-4 border border-white/30">
             <ShieldCheck size={36} className="text-white" />
           </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-xs font-black uppercase tracking-wider mb-2">
-            <CheckCircle2 size={14} /> Official Verified Travel Pass
+            <CheckCircle2 size={14} /> {heading}
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold">{data.tripTitle}</h1>
-          <p className="text-emerald-100 text-xs font-mono mt-1">Booking ID: {data.bookingId}</p>
+          <p className="text-white/90 text-xs font-mono mt-1">Booking ID: {data.bookingId}</p>
         </div>
 
         {/* Verification Summary Details */}
@@ -116,16 +121,19 @@ const BookingVerify = () => {
             <MapPin size={18} className="text-brand-emerald shrink-0 mt-0.5" />
             <div>
               <span className="font-extrabold text-brand-navy block">Pickup & Meeting Point</span>
-              <span className="text-gray-600 font-medium">{data.pickupPoint}</span>
+              <span className="text-gray-600 font-medium">{data.pickupPoint || 'To be confirmed'}</span>
             </div>
           </div>
 
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-xs"><span className="font-bold text-slate-500">Destination</span><p className="font-bold text-slate-900 mt-1">{data.destination || 'To be confirmed'}</p></div>
+
           <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between text-xs">
             <span className="text-gray-500 font-medium">Status</span>
-            <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-black uppercase tracking-wider text-[11px]">
+            <span className={`px-3 py-1 rounded-full font-black uppercase tracking-wider text-[11px] ${tone === 'emerald' ? 'bg-emerald-100 text-emerald-800' : tone === 'rose' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-900'}`}>
               {data.bookingStatus}
             </span>
           </div>
+          <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between text-xs"><span className="text-gray-500 font-medium">Payment status</span><strong className={fullyPaid ? 'text-emerald-700' : cancelled ? 'text-rose-700' : 'text-amber-700'}>{data.paymentStatus || '—'}</strong></div>
 
           <Link
             to="/"

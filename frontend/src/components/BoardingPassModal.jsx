@@ -3,9 +3,8 @@ import {
   X, Download, Printer, ShieldCheck, AlertTriangle, 
   Loader2, RefreshCw, CheckCircle2, QrCode, Compass
 } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import QRCode from 'qrcode';
+import { downloadBookingPdf } from '../utils/bookingPdf.js';
 import BoardingPassDocument from './BoardingPassDocument.jsx';
 import * as apiService from '../services/api.js';
 
@@ -32,83 +31,16 @@ export const BoardingPassModal = ({ isOpen, onClose, bookingId, initialBookingDa
         setLoading(true);
         setError('');
 
-        let data = null;
-        if (bookingId) {
-          try {
-            data = await getBoardingPassApi(bookingId);
-          } catch (apiErr) {
-            console.warn('API Boarding pass fetch fallback to initial data:', apiErr.message);
-          }
-        }
-
-        // Fallback to initialBookingData snapshot if available
-        if (!data && initialBookingData) {
-          const b = initialBookingData;
-          data = {
-            bookingId: b.bookingId || b.id || 'WLX-2026-CONFIRMED',
-            bookingStatus: b.bookingStatus || b.status || 'CONFIRMED',
-            confirmedAt: b.payment?.paidAt || b.bookingDate || new Date().toISOString(),
-            trip: {
-              tripId: b.tripId || '1',
-              title: b.tripSnapshot?.title || b.tripTitle || 'Himalayan Odyssey Expedition',
-              destination: b.tripSnapshot?.destination || b.destination || b.tripSnapshot?.location || 'India',
-              duration: b.tripSnapshot?.duration || b.duration || '6N/7D',
-              batchDate: b.tripSnapshot?.batchDate || b.travelDate || b.batchDate || '15 Sep - 20 Sep 2026',
-              pickupPoint: b.tripSnapshot?.pickupPoint || b.pickupPoint || 'Main Arrival Meeting Hub',
-              image: b.tripSnapshot?.image || b.image
-            },
-            leadTraveler: {
-              name: b.customer?.name || b.leadTraveler?.name || 'Valued Traveler',
-              email: b.customer?.email || b.leadTraveler?.email || 'traveler@wanderluxe.in',
-              phone: b.customer?.phone || b.leadTraveler?.phone || '+91 85420 36499',
-              age: b.customer?.age || b.leadTraveler?.age || '',
-              gender: b.customer?.gender || b.leadTraveler?.gender || 'Adult'
-            },
-            coTravelers: b.travelers || b.coTravelers || [],
-            numberOfTravelers: b.numberOfTravelers || b.travelersCount || (b.travelers ? b.travelers.length + 1 : 1),
-            occupancy: b.occupancy || 'Double Sharing',
-            pricing: {
-              basePricePerPerson: b.pricing?.basePricePerPerson || b.amount || 18500,
-              subtotal: b.pricing?.subtotal || b.amount || 18500,
-              discount: b.pricing?.discount || 0,
-              couponCode: b.pricing?.couponCode || '',
-              finalAmount: b.pricing?.finalAmount || b.amount || 18500,
-              currency: b.pricing?.currency || 'INR'
-            },
-            payment: {
-              status: b.payment?.status || 'PAID',
-              razorpayPaymentId: b.payment?.razorpayPaymentId || 'rzp_test_verified_pay',
-              paidAt: b.payment?.paidAt || b.bookingDate || new Date()
-            },
-            qrCode: {
-              dataUrl: b.qrCode?.dataUrl || (typeof b.qrCode === 'string' ? b.qrCode : ''),
-              verificationToken: b.qrCode?.verificationToken || b.bookingId || 'VERIFIED_TOKEN',
-              verificationUrl: b.qrCode?.verificationUrl || `https://wanderluxe.in/booking/verify/${b.bookingId}`
-            },
-            supportContact: {
-              phone: '+91 85420 36499',
-              email: 'support@wanderluxe.in',
-              captainName: 'Gaurav Kumar Yadav (Certified Expedition Lead)'
-            }
-          };
-        }
+        const data = bookingId ? await getBoardingPassApi(bookingId) : null;
 
         if (!data) {
           throw new Error('Unable to find confirmed booking record.');
         }
 
         // Generate High-Res Scannable QR if dataUrl is missing
-        if (!data.qrCode?.dataUrl) {
+        if (data.qrCode?.verificationUrl) {
           try {
-            const qrPayload = JSON.stringify({
-              bookingId: data.bookingId,
-              trip: data.trip.title,
-              travelers: data.numberOfTravelers,
-              lead: data.leadTraveler.name,
-              status: 'CONFIRMED'
-            });
-
-            const qrUrl = await QRCode.toDataURL(qrPayload, {
+            const qrUrl = await QRCode.toDataURL(data.qrCode.verificationUrl, {
               width: 360,
               margin: 2,
               color: { dark: '#0b132b', light: '#ffffff' }
@@ -138,42 +70,10 @@ export const BoardingPassModal = ({ isOpen, onClose, bookingId, initialBookingDa
     if (!documentRef.current || !passData) return;
     try {
       setIsGeneratingPdf(true);
-      const element = documentRef.current;
-
-      const canvas = await html2canvas(element, {
-        scale: 2.2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: 840
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pageWidth = 210; // A4 mm
-      const pageHeight = 297; // A4 mm
-      const margin = 10;
-      const contentWidth = pageWidth - (margin * 2);
-      const contentHeight = (canvas.height * contentWidth) / canvas.width;
-
-      // Vertically center on A4 if height is within single page
-      const yPosition = contentHeight < (pageHeight - (margin * 2)) 
-        ? (pageHeight - contentHeight) / 2 
-        : margin;
-
-      pdf.addImage(imgData, 'JPEG', margin, yPosition, contentWidth, Math.min(contentHeight, pageHeight - (margin * 2)));
-
-      const filename = `Boarding-Pass-${passData.bookingId || 'WanderLuxe'}.pdf`;
-      pdf.save(filename);
+      await downloadBookingPdf(documentRef.current, `WanderLuxe_Boarding_Pass_${passData.bookingId || 'WLX'}.pdf`);
     } catch (err) {
       console.error('PDF Generation Error:', err);
-      alert('Could not download PDF directly. You can use the Print button to Save as PDF.');
+      setError('Unable to generate this document. Please try again.');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -304,7 +204,7 @@ export const BoardingPassModal = ({ isOpen, onClose, bookingId, initialBookingDa
             <div className="py-20 text-center space-y-4">
               <Loader2 size={36} className="text-emerald-400 animate-spin mx-auto" />
               <p className="text-xs font-bold text-slate-300">
-                Retrieving Cryptographically Verified Boarding Pass...
+                Retrieving confirmed Boarding Pass...
               </p>
             </div>
           ) : error || !passData ? (

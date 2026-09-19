@@ -290,6 +290,7 @@ const Checkout = () => {
 
   // 7. Payment Execution (Razorpay Full vs 10% Deposit)
   const handleProceedPayment = async () => {
+    if (isProcessing) return;
     setPaymentError('');
 
     if (!isAuthenticated) {
@@ -386,15 +387,23 @@ const Checkout = () => {
 
             const verificationResult = await verifyBookingPaymentApi(verifyPayload);
 
+            if (verificationResult.code === 'PAYMENT_PENDING_CAPTURE' || verificationResult.pending) {
+              setPaymentError('Payment is authorized by your bank and awaiting settlement. We are verifying it automatically. Check your profile shortly or contact support.');
+              setIsProcessing(false);
+              return;
+            }
+
             if (verificationResult.success) {
+              const event = verificationResult.paymentEvent || verificationResult.booking?.payments?.find((entry) => entry.paymentId === response.razorpay_payment_id);
+              if (!event || event.paymentId !== response.razorpay_payment_id) throw new Error('Payment was verified, but its receipt is not yet available. Refresh your booking shortly.');
               try {
                 localStorage.removeItem('wanderluxe_booking_draft');
               } catch (e) {}
-              navigate(`/booking/confirmation/${orderData.bookingId}`, { replace: true });
+              navigate(`/booking/confirmation/${orderData.bookingId}`, { replace: true, state: { paymentSuccess: { bookingId: orderData.bookingId, paymentId: event.paymentId, orderId: event.orderId, paymentType: event.type, verified: true } } });
             }
           } catch (verifyErr) {
             console.error('Verification Error:', verifyErr);
-            setPaymentError(verifyErr.message || 'Payment signature verification failed.');
+            setPaymentError(`Payment verification is still incomplete. Do not retry payment immediately. Contact support with payment reference ${response.razorpay_payment_id || 'from Razorpay'}. ${verifyErr.message || ''}`);
             setIsProcessing(false);
           }
         },

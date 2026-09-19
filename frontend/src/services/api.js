@@ -575,6 +575,24 @@ export async function getProvisionalLetterApi(bookingId) {
   return data.provisionalLetter || data;
 }
 
+export async function getBookingReceiptApi(bookingId, paymentId) {
+  const response = await request(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/receipt/${encodeURIComponent(paymentId)}`, {
+    method: 'GET', headers: getHeaders()
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to load payment receipt');
+  return data.receipt;
+}
+
+export async function getBookingReceiptsApi(bookingId) {
+  const response = await request(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/receipts`, {
+    method: 'GET', headers: getHeaders()
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to load payment receipts');
+  return data.receipts || [];
+}
+
 export async function payRemainingBalanceApi(bookingId) {
   const response = await request(`${API_BASE_URL}/bookings/${bookingId}/pay-balance`, {
     method: 'POST',
@@ -598,6 +616,19 @@ export async function verifyRemainingBalanceApi(bookingId, verificationPayload) 
   const data = await parseApiResponse(response);
   if (!response.ok) {
     throw new Error(data.message || 'Balance payment verification failed');
+  }
+  return data;
+}
+
+export async function reconcileBookingPaymentApi(bookingId) {
+  const response = await request(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}/reconcile-payment`, {
+    method: 'POST',
+    headers: getHeaders()
+  });
+
+  const data = await parseApiResponse(response);
+  if (!response.ok && response.status !== 202) {
+    throw new Error(data.message || 'Payment reconciliation failed');
   }
   return data;
 }

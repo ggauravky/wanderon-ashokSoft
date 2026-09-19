@@ -4,7 +4,9 @@ import {
   Loader2, CheckCircle2, Calendar, MapPin, Users, 
   Clock, ArrowRight, Lock, CreditCard, Sparkles, BedDouble
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
+import { downloadBookingPdf, printBookingDocument } from '../utils/bookingPdf.js';
+import { customerSupport } from '../config/support.js';
 import * as apiService from '../services/api.js';
 
 const { getProvisionalLetterApi } = apiService;
@@ -23,6 +25,7 @@ export const ProvisionalBookingModal = ({
   const [error, setError] = useState('');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [qr, setQr] = useState('');
 
   useEffect(() => {
     if (!isOpen) {
@@ -36,59 +39,14 @@ export const ProvisionalBookingModal = ({
         setLoading(true);
         setError('');
 
-        let data = null;
-        if (bookingId) {
-          try {
-            data = await getProvisionalLetterApi(bookingId);
-          } catch (apiErr) {
-            console.warn('Provisional letter API fetch fallback to snapshot data:', apiErr.message);
-          }
-        }
-
-        if (!data && initialBookingData) {
-          const b = initialBookingData;
-          const finalAmount = Number(b.pricing?.finalAmount) || 18500;
-          const amountPaid = Number(b.pricing?.amountPaid) || Math.round(finalAmount * 0.1);
-          const amountOutstanding = Number(b.pricing?.amountOutstanding) || (finalAmount - amountPaid);
-
-          data = {
-            bookingId: b.bookingId || b.id || 'WLX-2026-PROVISIONAL',
-            bookingStatus: b.bookingStatus || 'PROVISIONALLY_CONFIRMED',
-            paymentStatus: b.paymentStatus || 'PARTIALLY_PAID',
-            confirmedAt: b.payment?.paidAt || b.createdAt || new Date().toISOString(),
-            trip: {
-              id: b.tripId || '1',
-              title: b.tripSnapshot?.title || b.tripTitle || 'Himalayan Expedition',
-              destination: b.tripSnapshot?.destination || b.destination || b.tripSnapshot?.location || 'India',
-              duration: b.tripSnapshot?.duration || b.duration || '5D/4N',
-              batchDate: b.tripSnapshot?.batchDate || b.batchDate || '15 Sep - 20 Sep 2026',
-              pickupPoint: b.tripSnapshot?.pickupPoint || b.pickupPoint || 'Airport Arrival Terminal',
-              image: b.tripSnapshot?.image || b.image
-            },
-            leadTraveler: {
-              name: b.customer?.name || b.leadTraveler?.name || 'Valued Explorer',
-              email: b.customer?.email || b.leadTraveler?.email || 'traveler@wanderluxe.in',
-              phone: b.customer?.phone || b.leadTraveler?.phone || '+91 9876543210',
-              age: b.customer?.age || b.leadTraveler?.age || 24,
-              gender: b.customer?.gender || b.leadTraveler?.gender || 'Adult'
-            },
-            coTravelers: b.travelers || b.coTravelers || [],
-            numberOfTravelers: b.numberOfTravelers || b.travelersCount || 1,
-            occupancy: b.occupancy || 'Double Sharing',
-            totalCost: finalAmount,
-            amountPaid,
-            amountOutstanding,
-            balanceDueDate: b.pricing?.balanceDueDate || new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(),
-            depositPercent: b.paymentPlan?.depositPercent || 10,
-            payments: b.payments || []
-          };
-        }
+        const data = bookingId ? await getProvisionalLetterApi(bookingId) : null;
 
         if (!data) {
           throw new Error('Could not load provisional booking details.');
         }
 
         setLetterData(data);
+        if (data.verificationUrl) setQr(await QRCode.toDataURL(data.verificationUrl, { width: 320, margin: 2 }));
       } catch (err) {
         setError(err.message || 'Failed to load provisional confirmation.');
       } finally {
@@ -103,29 +61,10 @@ export const ProvisionalBookingModal = ({
     if (!documentRef.current || isGeneratingPdf) return;
     try {
       setIsGeneratingPdf(true);
-      const element = documentRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`WanderLuxe_Provisional_Letter_${letterData?.bookingId || 'WLX'}.pdf`);
+      await downloadBookingPdf(documentRef.current, `WanderLuxe_Provisional_Confirmation_${letterData.bookingId || 'WLX'}.pdf`);
     } catch (pdfErr) {
       console.error('PDF Generation Error:', pdfErr);
-      alert('Could not export PDF. Please use browser print option.');
+      setError('Unable to generate this document. Please try again.');
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -133,17 +72,14 @@ export const ProvisionalBookingModal = ({
 
   const handlePrint = () => {
     setIsPrinting(true);
-    setTimeout(() => {
-      window.print();
-      setIsPrinting(false);
-    }, 300);
+    try { printBookingDocument(documentRef.current); } finally { setIsPrinting(false); }
   };
 
   if (!isOpen) return null;
 
   const formattedDueDate = letterData?.balanceDueDate 
     ? new Date(letterData.balanceDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-    : '6 Days before departure';
+    : 'To be confirmed';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 print:p-0 print:bg-white">
@@ -229,7 +165,7 @@ export const ProvisionalBookingModal = ({
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-xs text-amber-900">
                 <ShieldCheck size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-black block text-amber-950">10% Deposit Verified • Provisional Seat Reserved</span>
+                  <span className="font-black block text-amber-950">Deposit Verified • Provisional Seat Reserved</span>
                   <span className="font-medium text-amber-800">
                     Your seat is temporarily reserved. Your official boarding pass and captain QR code will become available immediately once the outstanding balance is paid.
                   </span>
@@ -284,12 +220,12 @@ export const ProvisionalBookingModal = ({
                 </div>
 
                 <div className="flex justify-between items-center text-xs text-emerald-300 font-bold pt-1.5 border-t border-slate-700">
-                  <span>Amount Paid Today (10% Deposit):</span>
+                  <span>Amount Paid:</span>
                   <span>₹{letterData.amountPaid.toLocaleString()}</span>
                 </div>
 
                 <div className="flex justify-between items-center text-sm font-black text-amber-300 pt-1.5 border-t border-slate-700">
-                  <span>Outstanding Balance (90%):</span>
+                  <span>Outstanding Balance:</span>
                   <span className="text-base font-black">₹{letterData.amountOutstanding.toLocaleString()}</span>
                 </div>
 
@@ -299,10 +235,11 @@ export const ProvisionalBookingModal = ({
                 </div>
               </div>
 
+              {qr && <div className="flex items-center justify-between gap-3 border-t pt-4"><div><strong className="text-xs">BOOKING VERIFICATION QR</strong><p className="text-xs text-slate-500">Scan to check the current booking status. This is not a Boarding QR.</p></div><img src={qr} width="110" height="110" alt="Booking verification QR" /></div>}
               {/* Pay Balance Action Banner (Print Hidden) */}
               <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 print:hidden">
                 <div className="text-[11px] text-slate-500">
-                  Have questions? Contact 24/7 Expedition Desk: <strong className="text-slate-800">+91 85420 36499</strong>
+                  Have questions? Contact WanderLuxe Support: <strong className="text-slate-800">{customerSupport.phone}</strong>
                 </div>
 
                 {letterData.amountOutstanding > 0 && onPayBalance && (

@@ -5,7 +5,7 @@
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-export const formatWhatsAppMessage = (booking, frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in') => {
+export const formatWhatsAppMessage = (booking, frontendUrl = process.env.FRONTEND_URL || 'https://wanderon-ashok-soft.vercel.app') => {
   const customerName = booking.customer?.name || 'Valued Traveler';
   const bookingId = booking.bookingId || 'WLX-CONFIRMED';
   const tripTitle = booking.tripSnapshot?.title || 'WanderLuxe Expedition';
@@ -65,7 +65,7 @@ export const generateWhatsAppWebLink = (phone, textMessage) => {
  */
 export const sendWhatsAppTicketAndReceipt = async (booking) => {
   const phone = booking.customer?.phone || '';
-  const frontendUrl = process.env.FRONTEND_URL || 'https://wanderluxe.in';
+  const frontendUrl = process.env.FRONTEND_URL || 'https://wanderon-ashok-soft.vercel.app';
   const messageBody = formatWhatsAppMessage(booking, frontendUrl);
 
   const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;

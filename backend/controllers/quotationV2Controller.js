@@ -867,7 +867,7 @@ export const createBookingFromQuotationV2 = async (req, res) => {
       },
       createdBy: req.user._id,
       updatedBy: req.user._id,
-      qrCode: { verificationToken, verificationUrl: `${String(process.env.FRONTEND_URL || 'https://wanderluxe.in').replace(/\/$/, '')}/booking/verify/${verificationToken}` }
+      qrCode: { verificationToken, verificationUrl: `${String(process.env.FRONTEND_URL || 'https://wanderon-ashok-soft.vercel.app').replace(/\/+$/, '')}/booking/verify/${verificationToken}` }
     });
     quotation.status = 'CONVERTED';
     quotation.bookingId = booking._id;

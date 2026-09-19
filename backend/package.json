@@ -9,7 +9,10 @@
     "dev": "node --watch server.js",
     "staff:create": "node scripts/createStaffUser.js",
     "quotations:v2:migrate": "node scripts/migrateQuotationV2.js",
-    "test:quotation-v2": "node --test test_quotation_v2.js"
+    "test:quotation-v2": "node --test test_quotation_v2.js",
+    "test:razorpay": "node scripts/testRazorpayIntegration.js",
+    "test:payment-reliability": "node test_payment_reliability.js",
+    "payment:inspect": "node scripts/inspectBookingPayment.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

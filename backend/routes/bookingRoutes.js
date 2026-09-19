@@ -4,12 +4,15 @@ import {
   verifyBookingPayment, 
   payRemainingBalance,
   verifyRemainingBalance,
+  reconcileBookingPayment,
   cancelBooking,
   getMyBookings, 
   getSalesBookings,
   getBookingById, 
   getBoardingPassData,
   getProvisionalLetterData,
+  getBookingReceipt,
+  getBookingReceipts,
   verifyBookingToken,
   calculatePricingEndpoint,
   resendWhatsAppTicket
@@ -27,6 +30,7 @@ router.post('/verify-payment', protect, verifyBookingPayment);
 router.put('/:bookingId/cancel', protect, cancelBooking);
 router.post('/:bookingId/pay-balance', protect, payRemainingBalance);
 router.post('/:bookingId/verify-balance', protect, verifyRemainingBalance);
+router.post('/:bookingId/reconcile-payment', protect, reconcileBookingPayment);
 router.post('/:bookingId/send-whatsapp', protect, resendWhatsAppTicket);
 
 router.get('/my-bookings', protect, getMyBookings);
@@ -34,6 +38,8 @@ router.get('/staff/sales', protect, requireRoles('super_admin', 'admin', 'sales'
 router.get('/:bookingId', protect, getBookingById);
 router.get('/:bookingId/boarding-pass', protect, getBoardingPassData);
 router.get('/:bookingId/provisional-letter', protect, getProvisionalLetterData);
+router.get('/:bookingId/receipts', protect, getBookingReceipts);
+router.get('/:bookingId/receipt/:paymentId', protect, getBookingReceipt);
 
 // Public QR Code Verification Endpoint
 router.get('/verify/:token', verifyBookingToken);

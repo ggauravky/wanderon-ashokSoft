@@ -5,6 +5,7 @@
 
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
 import { getRecentlyViewedTrips, getWishlistIds } from './userHistory.js';
+import { customerSupport } from '../config/support.js';
 
 const getSeasonContext = (date) => (travelKnowledgeService.getSeasonContext || travelKnowledgeService.default?.getSeasonContext)?.(date);
 const getDestinationWeather = (loc) => (travelKnowledgeService.getDestinationWeather || travelKnowledgeService.default?.getDestinationWeather)?.(loc);
@@ -294,7 +295,7 @@ export const getPreTripDashboard = (booking) => {
   const diffTime = departureDate.getTime() - now.getTime();
   const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
-  const tripTitle = booking.tripTitle || booking.tripSnapshot?.title || 'Himalayan Expedition';
+  const tripTitle = booking.tripTitle || booking.tripSnapshot?.title || 'Trip Details';
   const weather = getDestinationWeather(tripTitle);
 
   return {
@@ -302,10 +303,10 @@ export const getPreTripDashboard = (booking) => {
     departureDateFormatted: departureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     tripTitle,
     weather,
-    pickupPoint: booking.pickupPoint || 'Guwahati Airport (10:30 AM) / Majnu Ka Tila (06:00 PM)',
-    captainName: 'Gaurav Kumar Yadav (Certified Expedition Lead)',
-    captainPhone: '+91 85420 36499',
-    bookingId: booking.bookingId || booking.id || 'WLX-2026-CONFIRMED',
+    pickupPoint: booking.pickupPoint || booking.tripSnapshot?.pickupPoint || 'To be confirmed',
+    captainName: booking.captainName || 'Certified Expedition Lead',
+    captainPhone: booking.captainPhone || customerSupport.phone || '+91 8542036499',
+    bookingId: booking.bookingId || booking.id || '—',
     status: booking.bookingStatus || 'CONFIRMED'
   };
 };

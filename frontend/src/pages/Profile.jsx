@@ -11,13 +11,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { exportElementToPdf } from '../utils/pdfGenerator';
 import { useAuth } from '../contexts/AuthContext';
 import { UPCOMING_TRIPS } from '../constants/mockData';
-import * as apiService from '../services/api.js';
-
-const getMyBookingsApi = async (...args) => (apiService.getMyBookingsApi || apiService.default?.getMyBookingsApi)?.(...args);
-const getMySavedItinerariesApi = async (...args) => (apiService.getMySavedItinerariesApi || apiService.default?.getMySavedItinerariesApi)?.(...args);
-const deleteSavedItineraryApi = async (...args) => (apiService.deleteSavedItineraryApi || apiService.default?.deleteSavedItineraryApi)?.(...args);
-const payRemainingBalanceApi = async (...args) => (apiService.payRemainingBalanceApi || apiService.default?.payRemainingBalanceApi)?.(...args);
-const verifyRemainingBalanceApi = async (...args) => (apiService.verifyRemainingBalanceApi || apiService.default?.verifyRemainingBalanceApi)?.(...args);
+import { 
+  getMyBookingsApi, 
+  getMySavedItinerariesApi, 
+  deleteSavedItineraryApi, 
+  payRemainingBalanceApi, 
+  verifyRemainingBalanceApi 
+} from '../services/api.js';
 import { 
   getSavedAIItineraries, deleteSavedAIItinerary, 
   getWishlistIds, toggleWishlistItem, getRecentlyViewedTrips 
@@ -28,6 +28,9 @@ import TripCard from '../components/TripCard.jsx';
 import WeatherBadge from '../components/WeatherBadge.jsx';
 import BoardingPassModal from '../components/BoardingPassModal.jsx';
 import ProvisionalBookingModal from '../components/ProvisionalBookingModal.jsx';
+import PaymentSuccessModal from '../components/booking/PaymentSuccessModal.jsx';
+import PaymentReceiptModal from '../components/booking/PaymentReceiptModal.jsx';
+import BookingConfirmationModal from '../components/booking/BookingConfirmationModal.jsx';
 import AIItineraryDocument from '../components/AIItineraryDocument.jsx';
 import ShareItineraryModal from '../components/ShareItineraryModal.jsx';
 import AIPlannerModal from '../components/AIPlannerModal.jsx';
@@ -41,6 +44,10 @@ const Profile = () => {
   const [bookingFilter, setBookingFilter] = useState('All');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [selectedProvisionalBooking, setSelectedProvisionalBooking] = useState(null);
+  const [confirmationBooking, setConfirmationBooking] = useState(null);
+  const [receiptSelection, setReceiptSelection] = useState(null);
+  const [successSelection, setSuccessSelection] = useState(null);
+  const [paymentError, setPaymentError] = useState('');
   const [liveBookings, setLiveBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [isPayingBalance, setIsPayingBalance] = useState(false);
@@ -152,7 +159,7 @@ const Profile = () => {
         });
       } catch (e) {
         console.error('Profile PDF export error:', e);
-        alert('Failed to generate PDF document.');
+        setPaymentError('Failed to generate PDF document. Please try again.');
       } finally {
         setDownloadingPdf(false);
         setActivePdfPlan(null);
@@ -196,25 +203,30 @@ const Profile = () => {
   }
 
   const handlePayBalance = async (booking) => {
+    if (isPayingBalance) return;
     const bId = booking.bookingId || booking.id;
     if (!bId) return;
 
     try {
       setIsPayingBalance(true);
+      setPaymentError('');
       const isSdkLoaded = await loadRazorpayScript();
       if (!isSdkLoaded) {
-        alert('Could not initialize Razorpay payment SDK.');
-        return;
+        throw new Error('Could not initialize the payment gateway. Please check your connection.');
       }
 
       const orderData = await payRemainingBalanceApi(bId);
+      const razorpayKey = orderData.key || import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!razorpayKey) {
+        throw new Error('Payment gateway is not configured. Please contact support.');
+      }
 
       const options = {
-        key: orderData.key || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_TPjMsWKDyvGh27',
+        key: razorpayKey,
         amount: orderData.amount,
         currency: orderData.currency || 'INR',
         name: 'WanderLuxe Expeditions',
-        description: `Balance Payment for ${orderData.tripTitle || 'Expedition'}`,
+        description: `Balance Payment for ${orderData.tripTitle || booking.tripSnapshot?.title || 'Expedition'}`,
         order_id: orderData.orderId,
         prefill: {
           name: user?.name,
@@ -231,12 +243,21 @@ const Profile = () => {
               razorpay_signature: response.razorpay_signature
             };
             const result = await verifyRemainingBalanceApi(bId, verifyPayload);
+            if (result.code === 'PAYMENT_PENDING_CAPTURE' || result.pending) {
+              setPaymentError('Balance payment is authorized and awaiting bank capture. We are verifying it automatically.');
+              return;
+            }
             if (result.success) {
               const updated = await getMyBookingsApi();
               setLiveBookings(updated);
+              const refreshed = updated.find((item) => item.bookingId === bId);
+              const event = result.paymentEvent || refreshed?.payments?.find((p) => p.paymentId === response.razorpay_payment_id && p.verifiedAt);
+              if (refreshed && event) {
+                setSuccessSelection({ booking: refreshed, payment: event });
+              }
             }
           } catch (e) {
-            alert('Balance verification failed: ' + e.message);
+            setPaymentError(`Payment verification is incomplete. Do not retry payment immediately. Contact support with ${response.razorpay_payment_id || 'your payment reference'}. ${e.message}`);
           } finally {
             setIsPayingBalance(false);
           }
@@ -249,9 +270,13 @@ const Profile = () => {
       };
 
       const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setPaymentError(`Payment failed: ${resp.error?.description || 'Transaction declined.'}`);
+        setIsPayingBalance(false);
+      });
       rzp.open();
     } catch (err) {
-      alert('Error initiating balance payment: ' + err.message);
+      setPaymentError(err.message || 'Unable to initiate balance payment.');
       setIsPayingBalance(false);
     }
   };
@@ -413,94 +438,134 @@ const Profile = () => {
         {/* TAB 1: MY BOOKINGS */}
         {activeTab === 'bookings' && (
           <div className="space-y-4">
+            {paymentError && (
+              <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-semibold flex items-center justify-between shadow-sm">
+                <span>{paymentError}</span>
+                <button onClick={() => setPaymentError('')} className="text-rose-500 hover:text-rose-700 p-1">
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             {(liveBookings.length > 0 ? liveBookings : user.bookings || []).length > 0 ? (
               (liveBookings.length > 0 ? liveBookings : user.bookings || []).map((booking, idx) => {
                 const isPartial = booking.bookingStatus === 'PROVISIONALLY_CONFIRMED' || booking.paymentStatus === 'PARTIALLY_PAID';
-                const finalAmt = Number(booking.pricing?.finalAmount) || 18500;
-                const paidAmt = Number(booking.pricing?.amountPaid) || (isPartial ? Math.round(finalAmt * 0.1) : finalAmt);
-                const outstandingAmt = Number(booking.pricing?.amountOutstanding) || Math.max(0, finalAmt - paidAmt);
+                const finalAmt = Number(booking.pricing?.finalAmount ?? booking.pricing?.totalAmount ?? 0);
+                const paidAmt = Number(booking.pricing?.amountPaid ?? (isPartial ? Math.round(finalAmt * 0.1) : finalAmt));
+                const outstandingAmt = Number(booking.pricing?.amountOutstanding ?? Math.max(0, finalAmt - paidAmt));
                 const dueDate = booking.pricing?.balanceDueDate 
                   ? new Date(booking.pricing.balanceDueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : 'In 6 days';
+                  : null;
+                const verifiedPayments = (booking.payments || []).filter((p) => p.paymentId && p.verifiedAt);
 
                 return (
-                  <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:border-emerald-500/30 transition-all">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
-                          PNR: {booking.bookingId || booking.id || `WLX-2026-${idx}`}
-                        </span>
-                        {isPartial ? (
-                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 flex items-center gap-1">
-                            <Clock size={12} /> PROVISIONAL (10% DEPOSIT)
+                  <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col gap-4 hover:border-emerald-500/30 transition-all">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                            PNR: {booking.bookingId || booking.id || 'N/A'}
                           </span>
-                        ) : (
-                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
-                            <CheckCircle2 size={12} /> CONFIRMED
-                          </span>
-                        )}
+                          {isPartial ? (
+                            <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80 flex items-center gap-1">
+                              <Clock size={12} /> PROVISIONAL (10% DEPOSIT)
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 flex items-center gap-1">
+                              <CheckCircle2 size={12} /> CONFIRMED
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="text-base md:text-lg font-black text-slate-900 leading-tight">
+                          {booking.tripTitle || booking.tripSnapshot?.title || 'Expedition Booking'}
+                        </h3>
+
+                        <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 font-medium">
+                          <span>Batch: <strong className="text-slate-800">{booking.batchDates || booking.batchDate || booking.tripSnapshot?.batchDate || 'Scheduled Departure'}</strong></span>
+                          <span>•</span>
+                          <span>Travelers: <strong className="text-slate-800">{booking.travelersCount || booking.numberOfTravelers || booking.travelers?.length || 1}</strong></span>
+                          <span>•</span>
+                          {isPartial ? (
+                            <>
+                              <span className="text-emerald-700 font-bold">Paid: ₹{paidAmt.toLocaleString('en-IN')}</span>
+                              <span>•</span>
+                              <span className="text-amber-700 font-black">
+                                Balance Due: ₹{outstandingAmt.toLocaleString('en-IN')}
+                                {dueDate ? ` (${dueDate})` : ''}
+                              </span>
+                            </>
+                          ) : (
+                            <span>Total Paid: <strong className="text-emerald-700 font-bold">₹{paidAmt.toLocaleString('en-IN')}</strong></span>
+                          )}
+                        </div>
                       </div>
 
-                      <h3 className="text-base md:text-lg font-black text-slate-900 leading-tight">
-                        {booking.tripTitle || booking.tripSnapshot?.title || 'Himalayan Tour Package'}
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto shrink-0">
+                        <Link
+                          to={`/booking/confirmation/${booking.bookingId || booking.id}`}
+                          className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all text-center"
+                        >
+                          Trip Details
+                        </Link>
 
-                      <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-xs text-slate-500 font-medium">
-                        <span>Batch: <strong className="text-slate-800">{booking.batchDates || booking.batchDate || booking.tripSnapshot?.batchDate || '15 Sep - 20 Sep 2026'}</strong></span>
-                        <span>•</span>
-                        <span>Travelers: <strong className="text-slate-800">{booking.travelersCount || booking.numberOfTravelers || booking.travelers?.length || 1}</strong></span>
-                        <span>•</span>
+                        <button
+                          onClick={() => setConfirmationBooking(booking)}
+                          className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Printer size={13} />
+                          Confirmation
+                        </button>
+
                         {isPartial ? (
                           <>
-                            <span className="text-emerald-700 font-bold">Paid: ₹{paidAmt.toLocaleString()}</span>
-                            <span>•</span>
-                            <span className="text-amber-700 font-black">Balance Due: ₹{outstandingAmt.toLocaleString()} ({dueDate})</span>
+                            <button
+                              onClick={() => setSelectedProvisionalBooking(booking)}
+                              className="flex-1 md:flex-initial px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                            >
+                              <Download size={14} />
+                              Provisional Pass
+                            </button>
+
+                            {outstandingAmt > 0 && (
+                              <button
+                                onClick={() => handlePayBalance(booking)}
+                                disabled={isPayingBalance}
+                                className="flex-1 md:flex-initial px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                              >
+                                <CreditCard size={14} />
+                                Pay Remaining ₹{outstandingAmt.toLocaleString('en-IN')}
+                              </button>
+                            )}
                           </>
                         ) : (
-                          <span>Total Paid: <strong className="text-emerald-700 font-bold">₹{paidAmt.toLocaleString()}</strong></span>
+                          <button
+                            onClick={() => setSelectedTicket(booking)}
+                            className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-950 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                          >
+                            <QrCode size={15} className="text-emerald-400" />
+                            Boarding Pass
+                          </button>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto shrink-0">
-                      <Link
-                        to={`/booking/confirmation/${booking.bookingId || booking.id}`}
-                        className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all text-center"
-                      >
-                        Trip Details
-                      </Link>
-
-                      {isPartial ? (
-                        <>
+                    {/* Verified Payment Receipts Sub-row */}
+                    {verifiedPayments.length > 0 && (
+                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Payment Receipts:</span>
+                        {verifiedPayments.map((p, pIdx) => (
                           <button
-                            onClick={() => setSelectedProvisionalBooking(booking)}
-                            className="flex-1 md:flex-initial px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                            key={p.paymentId || pIdx}
+                            onClick={() => setReceiptSelection({ bookingId: booking.bookingId || booking.id, paymentId: p.paymentId })}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all cursor-pointer"
                           >
-                            <Download size={14} />
-                            Booking Letter
+                            <Ticket size={12} className="text-emerald-600" />
+                            <span>Receipt #{pIdx + 1} (₹{(p.amount || 0).toLocaleString('en-IN')})</span>
                           </button>
-
-                          {outstandingAmt > 0 && (
-                            <button
-                              onClick={() => handlePayBalance(booking)}
-                              disabled={isPayingBalance}
-                              className="flex-1 md:flex-initial px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
-                            >
-                              <CreditCard size={14} />
-                              Pay Remaining ₹{outstandingAmt.toLocaleString()}
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => setSelectedTicket(booking)}
-                          className="flex-1 md:flex-initial px-4 py-2.5 bg-slate-950 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
-                        >
-                          <QrCode size={15} className="text-emerald-400" />
-                          Boarding Pass
-                        </button>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -720,6 +785,48 @@ const Profile = () => {
           </div>
         )}
       </div>
+
+      {/* Booking Confirmation Document Modal */}
+      {confirmationBooking && (
+        <BookingConfirmationModal
+          isOpen={!!confirmationBooking}
+          booking={confirmationBooking}
+          bookingId={confirmationBooking.bookingId || confirmationBooking.id}
+          onClose={() => setConfirmationBooking(null)}
+        />
+      )}
+
+      {/* Payment Receipt Modal */}
+      {receiptSelection && (
+        <PaymentReceiptModal
+          isOpen={!!receiptSelection}
+          bookingId={receiptSelection.bookingId}
+          paymentId={receiptSelection.paymentId}
+          onClose={() => setReceiptSelection(null)}
+        />
+      )}
+
+      {/* Payment Success Modal after balance payment */}
+      {successSelection && (
+        <PaymentSuccessModal
+          isOpen={!!successSelection}
+          booking={successSelection.booking}
+          paymentEvent={successSelection.payment}
+          onClose={() => setSuccessSelection(null)}
+          onViewReceipt={(b, p) => {
+            setSuccessSelection(null);
+            setReceiptSelection({ bookingId: b.bookingId || b.id, paymentId: p.paymentId });
+          }}
+          onViewBookingConfirmation={(b) => {
+            setSuccessSelection(null);
+            setConfirmationBooking(b);
+          }}
+          onViewBoardingPass={(b) => {
+            setSuccessSelection(null);
+            setSelectedTicket(b);
+          }}
+        />
+      )}
     </div>
   );
 };
