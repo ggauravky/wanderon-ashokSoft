@@ -20,6 +20,9 @@ import { UPCOMING_TRIPS, DESTINATIONS, TESTIMONIALS, getDestinationPackageCount 
 import { useTravelContext } from '../hooks/useTravelContext.js';
 import { getCurrentSeason } from '../utils/weatherSeasonEngine.js';
 import * as travelKnowledgeService from '../services/travelKnowledgeService.js';
+import useMarketingBanners from '../hooks/useMarketingBanners.js';
+import { HomePromotionHighlight, HomePromotionStrip, PromotionCta, PromotionImage } from '../components/marketing/HomePromotionBanner.jsx';
+import HomePromotionPopup from '../components/marketing/HomePromotionPopup.jsx';
 
 const getTravelStyles = () => (travelKnowledgeService.getTravelStyles || travelKnowledgeService.default?.getTravelStyles)?.() || [];
 const getLucideIcon = (name, fallback) => (travelKnowledgeService.getLucideIcon || travelKnowledgeService.default?.getLucideIcon)?.(name, fallback) || fallback;
@@ -70,6 +73,8 @@ const TRENDING_SEARCH_CHIPS = [
 
 const Home = () => {
   const navigate = useNavigate();
+  const { bannersByPlacement } = useMarketingBanners();
+  const heroBanner = bannersByPlacement.home_hero[0];
   const { 
     timeContext = { greeting: 'Welcome Explorer', period: 'Day', heroTitle: 'Explore India & The World In Community.', heroSubtitle: 'Curated social group trips, high-altitude backpacking circuits & boutique mountain stays with certified captains.' }, 
     season = getCurrentSeason(), 
@@ -229,6 +234,8 @@ const Home = () => {
         onClose={() => setIsPlannerOpen(false)}
         initialDestination={plannerDestination}
       />
+      <HomePromotionPopup banner={bannersByPlacement.popup[0]} />
+      <HomePromotionStrip banner={bannersByPlacement.top_bar[0]} topBar />
 
       {/* ========================================================================= */}
       {/* 1. CINEMATIC TRAVEL HERO & DISCOVERY SEARCH */}
@@ -236,11 +243,7 @@ const Home = () => {
       <section className="relative min-h-[90vh] flex items-center justify-center pt-28 pb-20 overflow-hidden bg-slate-950">
         {/* Cinematic Backdrop Image */}
         <div className="absolute inset-0 z-0">
-          <img 
-            src="/hero-bg.jpg" 
-            alt="WanderLuxe sunset mountain expedition landscape" 
-            className="w-full h-full object-cover opacity-70 scale-105 transition-transform duration-1000"
-          />
+          <PromotionImage key={heroBanner?._id || 'default-hero'} banner={heroBanner} fallback="/hero-bg.jpg" eager className="w-full h-full object-cover opacity-70 scale-105 transition-transform duration-1000" />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-950/40 to-slate-950" />
         </div>
 
@@ -254,12 +257,11 @@ const Home = () => {
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="text-emerald-400 font-bold">
-              {season?.heroTag && /\d{4}/.test(season.heroTag)
+              {heroBanner?.tag || (season?.heroTag && /\d{4}/.test(season.heroTag)
                 ? season.heroTag.replace(/\d{4}/, new Date().getFullYear())
-                : `${season?.name ? season.name.split('/')[0].trim() : 'Autumn'} Adventure Season ${new Date().getFullYear()}`}
+                : `${season?.name ? season.name.split('/')[0].trim() : 'Autumn'} Adventure Season ${new Date().getFullYear()}`)}
             </span>
-            <span className="text-white/30">•</span>
-            <span className="text-slate-300 font-medium">Curated Community Departures</span>
+            {!heroBanner && <><span className="text-white/30">•</span><span className="text-slate-300 font-medium">Curated Community Departures</span></>}
           </motion.div>
 
           {/* Main Hero Headline */}
@@ -269,10 +271,7 @@ const Home = () => {
             transition={{ duration: 0.5 }}
             className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-white tracking-tight mb-4 max-w-5xl mx-auto leading-[1.08]"
           >
-            Explore India & The World <br />
-            <span className="text-emerald-400">
-              In Community.
-            </span>
+            {heroBanner ? heroBanner.title : <>Explore India & The World <br /><span className="text-emerald-400">In Community.</span></>}
           </motion.h1>
 
           <motion.p 
@@ -281,8 +280,9 @@ const Home = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-sm sm:text-base md:text-lg text-slate-300 max-w-2xl mx-auto mb-10 font-medium leading-relaxed"
           >
-            Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.
+            {heroBanner ? heroBanner.subtitle : 'Curated 18–35 social group departures, high-altitude mountain circuits & boutique stays with certified trip captains.'}
           </motion.p>
+          {heroBanner && <div className="mb-8"><PromotionCta banner={heroBanner} className="bg-emerald-400 text-slate-950 hover:bg-emerald-300" /></div>}
 
           {/* Sleek Unified Search Capsule */}
           <motion.div 
@@ -414,6 +414,7 @@ const Home = () => {
           </div>
         }
       />
+      <HomePromotionStrip banner={bannersByPlacement.offer_strip[0]} />
 
       {/* ========================================================================= */}
       {/* 4. POPULAR DESTINATIONS / WHERE NEXT? */}
@@ -495,6 +496,8 @@ const Home = () => {
           </div>
         </div>
       </section>
+
+      <HomePromotionHighlight banner={bannersByPlacement.destination_highlight[0]} />
 
       {/* ========================================================================= */}
       {/* 6. EXPLORE INDIA CIRCUITS */}

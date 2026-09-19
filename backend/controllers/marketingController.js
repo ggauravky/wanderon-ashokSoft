@@ -5,6 +5,7 @@ import MediaAsset from '../models/MediaAsset.js';
 import { sendErrorResponse } from '../utils/httpResponse.js';
 import { recordStaffActivity } from '../services/staffActivityService.js';
 import { normalizeUtmValue } from '../services/marketingAttributionService.js';
+import { bannerStatusQuery, getBannerEffectiveState, normalizeBannerStatus } from '../services/bannerEligibilityService.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -32,18 +33,12 @@ const normalizeCampaignStatus = (status, startDate, endDate, now = new Date()) =
   return status === 'scheduled' ? 'active' : status;
 };
 const campaignDisplayStatus = (campaign, now = new Date()) => normalizeCampaignStatus(campaign.status, campaign.startDate, campaign.endDate, now);
-const bannerDisplayStatus = (banner, now = new Date()) => {
-  if (banner.endDate && banner.endDate < now) return 'expired';
-  if (banner.status === 'inactive') return 'inactive';
-  if (banner.startDate && banner.startDate > now) return 'scheduled';
-  return banner.status === 'scheduled' ? 'active' : banner.status;
-};
 const currentScheduleFilter = (now = new Date()) => ({ $and: [
   { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
   { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] }
 ] });
 const serializeCampaign = (document) => { const value = document?.toObject ? document.toObject() : document; return { ...value, displayStatus: campaignDisplayStatus(value) }; };
-const serializeBanner = (document) => { const value = document?.toObject ? document.toObject() : document; return { ...value, displayStatus: bannerDisplayStatus(value) }; };
+const serializeBanner = (document) => { const value = document?.toObject ? document.toObject() : document; const state = getBannerEffectiveState(value); return { ...value, displayStatus: state.effectiveStatus, eligibilityReason: state.reason, publiclyEligible: state.eligible }; };
 const populateCampaign = (query) => query.populate('createdBy', 'name email').populate('updatedBy', 'name email');
 const populateBanner = (query) => query.populate('createdBy', 'name email').populate('updatedBy', 'name email').populate('mediaAssetId', 'title altText storage.secureUrl');
 
@@ -52,13 +47,6 @@ const campaignStatusQuery = (status, now = new Date()) => {
   if (status === 'active') return { status: { $in: ['active', 'scheduled'] }, ...current };
   if (status === 'scheduled') return { status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } };
   if (status === 'completed') return { $or: [{ status: 'completed' }, { status: { $in: ['active', 'scheduled'] }, endDate: { $lt: now } }] };
-  return { status };
-};
-const bannerStatusQuery = (status, now = new Date()) => {
-  const current = currentScheduleFilter(now);
-  if (status === 'active') return { status: { $in: ['active', 'scheduled'] }, ...current };
-  if (status === 'scheduled') return { status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } };
-  if (status === 'expired') return { endDate: { $lt: now } };
   return { status };
 };
 
@@ -72,9 +60,9 @@ export const getMarketingDashboard = async (req, res) => {
       Campaign.countDocuments({ status: { $in: ['active', 'scheduled'] }, ...current }),
       Campaign.countDocuments({ status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } }),
       Banner.countDocuments(),
-      Banner.countDocuments({ status: { $in: ['active', 'scheduled'] }, ...current }),
-      Banner.countDocuments({ status: { $in: ['active', 'scheduled'] }, startDate: { $gt: now } }),
-      Banner.countDocuments({ endDate: { $lt: now } }),
+      Banner.countDocuments(bannerStatusQuery('active', now)),
+      Banner.countDocuments(bannerStatusQuery('scheduled', now)),
+      Banner.countDocuments(bannerStatusQuery('expired', now)),
       populateCampaign(Campaign.find().sort({ updatedAt: -1 }).limit(5)),
       populateBanner(Banner.find().sort({ updatedAt: -1 }).limit(5))
     ]);
@@ -184,7 +172,7 @@ export const getBanners = async (req, res) => {
 export const getActiveBanners = async (req, res) => {
   try {
     if (!requireDatabase(res, true)) return;
-    const placement = String(req.query.placement || '').trim(); const filter = { status: { $in: ['active', 'scheduled'] }, ...currentScheduleFilter() };
+    const placement = String(req.query.placement || '').trim(); const filter = bannerStatusQuery('active');
     if (placement) {
       if (!Banner.schema.path('placement').enumValues.includes(placement)) return res.status(400).json({ success: false, message: 'Unsupported banner placement.' });
       filter.placement = placement;
@@ -219,9 +207,14 @@ const bannerInput = async (body, existing = {}) => {
   }
   if (!imageUrl) throw Object.assign(new Error('Select a banner image.'), { status: 400 });
   const priorityOrder = Number(body.priorityOrder ?? existing.priorityOrder ?? 1); if (!Number.isInteger(priorityOrder) || priorityOrder < 0) throw Object.assign(new Error('Priority must be a non-negative whole number.'), { status: 400 });
-  let status = requestedStatus; const now = new Date(); if (status === 'active' && startDate && startDate > now) status = 'scheduled'; if (status === 'scheduled' && (!startDate || startDate <= now)) status = 'active'; if (endDate && endDate < now) status = 'inactive';
+  const status = normalizeBannerStatus(requestedStatus, startDate, endDate);
   const ctaLink = String(body.ctaLink ?? existing.ctaLink ?? '/trips').trim();
-  if (ctaLink && !ctaLink.startsWith('/') && !/^https?:\/\//i.test(ctaLink)) throw Object.assign(new Error('CTA link must be a site path or an HTTP(S) URL.'), { status: 400 });
+  if (ctaLink) {
+    const internal = ctaLink.startsWith('/') && !ctaLink.startsWith('//') && !/^\/\\/.test(ctaLink) && !/[\\\u0000-\u001f]/.test(ctaLink);
+    let external = false;
+    try { const url = new URL(ctaLink); external = ['http:', 'https:'].includes(url.protocol) && Boolean(url.hostname) && !url.username && !url.password; } catch { /* Internal paths do not need URL parsing. */ }
+    if (!internal && !external) throw Object.assign(new Error('CTA link must be a site path or a valid HTTP(S) URL.'), { status: 400 });
+  }
   return { title, subtitle: String(body.subtitle ?? existing.subtitle ?? '').trim(), tag: String(body.tag ?? existing.tag ?? '').trim(), imageUrl, mediaAssetId, mobileImageUrl: String(body.mobileImageUrl ?? existing.mobileImageUrl ?? '').trim(), ctaText: String(body.ctaText ?? existing.ctaText ?? '').trim(), ctaLink, placement, status, priorityOrder, startDate, endDate, targetAudience: String(body.targetAudience ?? existing.targetAudience ?? 'All').trim() };
 };
 
