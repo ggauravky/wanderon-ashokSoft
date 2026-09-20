@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, MapPin, Calendar, Users, ShieldCheck, HeartHandshake, 
   Compass, CreditCard, Star, Sparkles, CloudSun, ArrowRight,
   TrendingUp, Clock, Mountain, Palmtree, Shuffle, ChevronRight, ChevronLeft,
-  Plane, Heart, Backpack, CheckCircle2, PhoneCall, Image as ImageIcon
+  Plane, Heart, Backpack, CheckCircle2, PhoneCall, Image as ImageIcon,
+  Wand2
 } from 'lucide-react';
 
 import TripCard from '../components/TripCard.jsx';
@@ -85,6 +86,7 @@ const Home = () => {
   } = useTravelContext() || {};
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [budgetFilter, setBudgetFilter] = useState('all');
   const [durationFilter, setDurationFilter] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState("SEP '26");
@@ -202,19 +204,45 @@ const Home = () => {
     return sorted.slice(0, HOME_SECTION_LIMITS.weekend);
   }, [allWeekendTrips]);
 
+  const handlePlanWithAI = (promptText = searchQuery) => {
+    const query = (promptText || '').trim();
+    if (query) {
+      navigate(`/plan?prompt=${encodeURIComponent(query)}`);
+    } else {
+      navigate('/plan');
+    }
+  };
+
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
+    const cleanQuery = (searchQuery || '').trim();
+    if (!cleanQuery) {
+      navigate('/trips');
+      return;
+    }
+
+    const promptKeywords = [
+      'day', 'days', 'night', 'nights', 'road trip', 'solo', 'couple', 'friends', 
+      'weekend', 'surprise', 'with', 'stay', 'vibe', 'budget', 'luxury', 'plan', 
+      'trip to', 'tour to', 'circuit', 'itinerary', 'for 2', 'for 4', 'family'
+    ];
+    const looksLikePrompt = promptKeywords.some(kw => cleanQuery.toLowerCase().includes(kw));
+
+    if (looksLikePrompt) {
+      handlePlanWithAI(cleanQuery);
+      return;
+    }
+
     const params = new URLSearchParams();
-    if (searchQuery.trim()) params.set('q', searchQuery.trim());
+    params.set('q', cleanQuery);
     if (budgetFilter && budgetFilter !== 'all') params.set('budget', budgetFilter);
     if (durationFilter && durationFilter !== 'all') params.set('dur', durationFilter);
     const queryString = params.toString();
-    navigate(`/trips${queryString ? `?${queryString}` : ''}`);
+    navigate(`/trips?${queryString}`);
   };
 
   const openAIPlannerFor = (dest = 'Meghalaya') => {
-    setPlannerDestination(dest);
-    setIsPlannerOpen(true);
+    handlePlanWithAI(dest);
   };
 
   const organizationSchemas = [getOrganizationSchema(), getTravelAgencySchema()];
@@ -284,50 +312,163 @@ const Home = () => {
           </motion.p>
           {heroBanner && <div className="mb-8"><PromotionCta banner={heroBanner} className="bg-emerald-400 text-slate-950 hover:bg-emerald-300" /></div>}
 
-          {/* Sleek Unified Search Capsule */}
+          {/* Sleek Unified Search Capsule & Dual-Mode AI Planner Prompt Bar */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="bg-slate-950/70 backdrop-blur-2xl p-2 pl-5 sm:pl-6 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.6)] max-w-3xl mx-auto border border-white/20 text-left"
+            className="relative max-w-3xl mx-auto z-30 text-left"
           >
-            <form onSubmit={handleSearchSubmit} className="flex items-center justify-between gap-3">
-              
-              {/* Search Icon & Input */}
-              <div className="flex items-center gap-3 flex-grow min-w-0">
-                <Search className="text-emerald-400 shrink-0" size={19} />
-                <input 
-                  type="text" 
-                  placeholder="Where to, or ask AI planner (e.g. 7-day Spiti road trip)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-transparent text-slate-100 placeholder-slate-400 text-xs sm:text-sm font-medium outline-none border-none focus:outline-none focus:ring-0 focus:border-none focus:shadow-none py-2"
-                  style={{ outline: 'none', boxShadow: 'none' }}
-                />
-              </div>
+            <div className="bg-slate-950/80 backdrop-blur-2xl p-2 pl-5 sm:pl-6 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.6)] border border-white/20 hover:border-emerald-500/50 transition-all duration-300">
+              <form onSubmit={handleSearchSubmit} className="flex items-center justify-between gap-3">
+                
+                {/* Search Icon & Input */}
+                <div className="flex items-center gap-3 flex-grow min-w-0">
+                  <Sparkles className="text-emerald-400 shrink-0 animate-pulse" size={19} />
+                  <input 
+                    type="text" 
+                    placeholder="Where to, or ask AI planner (e.g. 7-day Spiti road trip with friends)..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 250)}
+                    className="w-full bg-transparent text-slate-100 placeholder-slate-400 text-xs sm:text-sm font-medium outline-none border-none focus:outline-none focus:ring-0 focus:border-none focus:shadow-none py-2"
+                    style={{ outline: 'none', boxShadow: 'none' }}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
 
-              {/* Right Actions: Equalized Hero Search Action Pill Buttons with Hover Green Highlight */}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleSearchSubmit}
-                  className="group inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-white bg-slate-900/90 hover:bg-emerald-400 hover:text-slate-950 border border-white/25 hover:border-emerald-400 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-sm hover:shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                {/* Right Actions: Equalized Hero Search Action Pill Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleSearchSubmit}
+                    className="group inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-white bg-slate-900/90 hover:bg-slate-800 border border-white/20 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-sm"
+                  >
+                    <Search size={14} className="shrink-0 text-slate-300 group-hover:text-white transition-colors" />
+                    <span className="hidden sm:inline">Classic Search</span>
+                    <span className="sm:hidden">Search</span>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => handlePlanWithAI(searchQuery || '7-day Spiti road trip with friends')}
+                    className="group inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-slate-950 bg-emerald-400 hover:bg-emerald-300 border border-emerald-400 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-[0_0_20px_rgba(52,211,153,0.4)]"
+                  >
+                    <Sparkles size={14} className="shrink-0 text-slate-950 group-hover:rotate-12 transition-transform" />
+                    <span>Plan with AI</span>
+                  </button>
+                </div>
+
+              </form>
+            </div>
+
+            {/* Smart Dual-Mode Dropdown Suggestions */}
+            <AnimatePresence>
+              {isSearchFocused && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute left-0 right-0 top-full mt-2.5 bg-slate-950/95 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/20 p-4 shadow-[0_25px_60px_rgba(0,0,0,0.8)] z-50 overflow-hidden"
                 >
-                  <Search size={14} className="shrink-0 text-slate-300 group-hover:text-slate-950 transition-colors" />
-                  <span>Classic Search</span>
-                </button>
+                  <div className="space-y-3">
+                    {/* Primary AI Planner Action Row */}
+                    <div 
+                      onMouseDown={() => handlePlanWithAI(searchQuery || '7-day Spiti road trip with friends')}
+                      className="p-3.5 rounded-xl sm:rounded-2xl bg-gradient-to-r from-emerald-950/60 via-teal-950/40 to-slate-900/60 border border-emerald-500/30 hover:border-emerald-400/70 hover:bg-emerald-950/80 transition-all cursor-pointer flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30 group-hover:scale-105 transition-transform">
+                          <Sparkles size={20} className="animate-pulse" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">
+                              {searchQuery.trim() ? `Plan "${searchQuery.trim()}" with AI` : 'Launch AI Travel Planner'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              AI Architect
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 group-hover:text-slate-300 mt-0.5">
+                            {searchQuery.trim() 
+                              ? 'Automatically synthesize days, routes, curated stays & custom pace'
+                              : 'Describe your dream trip in natural language and get an interactive day-by-day plan'}
+                          </p>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-emerald-400 group-hover:translate-x-1 transition-transform shrink-0" />
+                    </div>
 
-                <button 
-                  type="button"
-                  onClick={() => openAIPlannerFor(searchQuery || 'Meghalaya')}
-                  className="group inline-flex items-center gap-2 px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-xs sm:text-sm font-black text-white bg-slate-900/90 hover:bg-emerald-400 hover:text-slate-950 border border-white/25 hover:border-emerald-400 transition-all duration-200 cursor-pointer active:scale-95 whitespace-nowrap shadow-sm hover:shadow-[0_0_20px_rgba(52,211,153,0.4)]"
-                >
-                  <Sparkles size={14} className="shrink-0 text-slate-300 group-hover:text-slate-950 transition-colors" />
-                  <span>Plan with AI</span>
-                </button>
-              </div>
+                    {/* Classic Search Action Row */}
+                    {searchQuery.trim() && (
+                      <div 
+                        onMouseDown={() => {
+                          navigate(`/trips?q=${encodeURIComponent(searchQuery.trim())}`);
+                        }}
+                        className="p-3 rounded-xl sm:rounded-2xl bg-slate-900/50 hover:bg-slate-900 border border-white/10 hover:border-white/20 transition-all cursor-pointer flex items-center justify-between group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0 border border-white/10">
+                            <Search size={16} />
+                          </div>
+                          <div>
+                            <span className="text-xs sm:text-sm font-bold text-slate-200 group-hover:text-white">
+                              Search catalog departures for "{searchQuery.trim()}"
+                            </span>
+                            <p className="text-[11px] text-slate-400">View upcoming fixed departures & fixed group trips</p>
+                          </div>
+                        </div>
+                        <ArrowRight size={14} className="text-slate-400 group-hover:text-white group-hover:translate-x-1 transition-transform shrink-0" />
+                      </div>
+                    )}
 
-            </form>
+                    {/* Quick AI Prompts Section */}
+                    <div className="pt-2 border-t border-white/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Wand2 size={12} className="text-emerald-400" />
+                          <span>Try these AI Travel Prompts</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">Click to generate instant plan</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        {[
+                          { icon: '⛰️', text: '7-day Spiti road trip with friends', dest: 'Spiti Valley' },
+                          { icon: '🌴', text: '5-day Bali tropical escape for couple', dest: 'Bali' },
+                          { icon: '🌲', text: '6-day Meghalaya waterfalls & living roots', dest: 'Meghalaya' },
+                          { icon: '🪄', text: 'Surprise me with a 6-day offbeat adventure', dest: 'Spiti Valley' }
+                        ].map((promptItem) => (
+                          <div
+                            key={promptItem.text}
+                            onMouseDown={() => {
+                              setSearchQuery(promptItem.text);
+                              handlePlanWithAI(promptItem.text);
+                            }}
+                            className="p-2 px-3 rounded-xl bg-slate-900/40 hover:bg-slate-800/80 border border-white/10 hover:border-emerald-500/40 transition-all cursor-pointer flex items-center gap-2 group text-left"
+                          >
+                            <span className="text-sm shrink-0">{promptItem.icon}</span>
+                            <span className="text-xs text-slate-300 group-hover:text-emerald-300 transition-colors font-medium truncate">
+                              {promptItem.text}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
 
           {/* Trending Search Chips with Bullet Dots */}

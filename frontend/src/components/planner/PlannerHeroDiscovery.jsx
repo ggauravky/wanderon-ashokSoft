@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, ArrowRight, Search, Compass, MapPin, 
   ChevronRight, ChevronLeft, Star, BookOpen, Mountain, Heart,
@@ -82,105 +82,20 @@ const FEATURED_WIDE = {
   prompt: '7-day Australian coastal self-drive road trip from Melbourne along Great Ocean Road.'
 };
 
-/**
- * Natural language prompt parser that extracts travel parameters
- */
-export const extractTripInfoFromPrompt = (promptText = '') => {
-  const raw = (promptText || '').trim();
-  const text = raw.toLowerCase();
-  const result = {
-    destination: '',
-    duration: 7,
-    travelers: { adults: 2, children: 0, infants: 0, seniors: 0 },
-    tripType: 'Couple',
-    startDate: '',
-    flexibleMonth: 'July 2026',
-    budgetTier: 'Comfort',
-    budgetAmount: 45000,
-    budgetLevel: 'Moderate',
-    pace: 'Balanced',
-    paceRhythm: 'Chill Starts (9:00 AM)',
-    interests: [],
-    stayPreference: 'Homestay 🏡',
-    missingFields: []
-  };
+import { extractTripInfoFromPrompt } from '../../utils/aiPlannerEngine';
 
-  const destMap = [
-    { key: 'spiti', name: 'Spiti Valley' },
-    { key: 'bali', name: 'Bali' },
-    { key: 'thailand', name: 'Thailand' },
-    { key: 'japan', name: 'Japan' },
-    { key: 'maldives', name: 'Maldives' },
-    { key: 'australia', name: 'Australia' },
-    { key: 'chennai', name: 'Chennai' },
-    { key: 'kerala', name: 'Kerala' },
-    { key: 'ladakh', name: 'Ladakh' },
-    { key: 'kashmir', name: 'Kashmir' },
-    { key: 'himachal', name: 'Himachal' },
-    { key: 'uttarakhand', name: 'Uttarakhand' },
-    { key: 'meghalaya', name: 'Meghalaya' },
-    { key: 'goa', name: 'Goa' },
-    { key: 'rajasthan', name: 'Rajasthan' },
-    { key: 'vietnam', name: 'Vietnam' },
-    { key: 'dubai', name: 'Dubai' },
-    { key: 'varanasi', name: 'Varanasi' }
-  ];
+export { extractTripInfoFromPrompt };
 
-  let detectedDest = null;
-  for (const item of destMap) {
-    if (text.includes(item.key)) {
-      detectedDest = item.name;
-      break;
-    }
-  }
-
-  // Fallback candidate extraction
-  if (!detectedDest) {
-    const rawClean = raw.replace(/[^a-zA-Z\s]/g, ' ').trim();
-    const words = rawClean.split(/\s+/).filter(w => {
-      const lower = w.toLowerCase();
-      return !['trip', 'tour', 'day', 'days', 'road', 'weekend', 'the', 'a', 'an', 'to', 'for', 'in', 'with'].includes(lower) && w.length > 1;
-    });
-    if (words.length > 0 && words.length <= 3) {
-      detectedDest = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-    }
-  }
-
-  result.destination = detectedDest || 'Spiti Valley';
-
-  // Duration
-  const daysMatch = text.match(/(\d+)\s*(?:days?|d|nights?|n)/i);
-  if (daysMatch && daysMatch[1]) {
-    const num = parseInt(daysMatch[1], 10);
-    if (num >= 2 && num <= 21) result.duration = num;
-  } else if (text.includes('weekend')) {
-    result.duration = 3;
-  } else if (text.includes('week')) {
-    result.duration = 7;
-  }
-
-  // Travelers
-  if (text.includes('solo') || text.includes('myself') || text.includes('alone')) {
-    result.tripType = 'Solo';
-    result.travelers = { adults: 1, children: 0, infants: 0, seniors: 0 };
-  } else if (text.includes('couple') || text.includes('partner') || text.includes('wife') || text.includes('husband') || text.includes('romantic')) {
-    result.tripType = 'Couple';
-    result.travelers = { adults: 2, children: 0, infants: 0, seniors: 0 };
-  } else if (text.includes('friends') || text.includes('friend') || text.includes('buddies') || text.includes('gang') || text.includes('squad') || text.includes('group')) {
-    result.tripType = 'Friends';
-    result.travelers = { adults: 4, children: 0, infants: 0, seniors: 0 };
-  } else if (text.includes('family') || text.includes('kids')) {
-    result.tripType = 'Family';
-    result.travelers = { adults: 2, children: 1, infants: 0, seniors: 0 };
-  }
-
-  return result;
-};
-
-const PlannerHeroDiscovery = ({ onSelectDestination, onStartWizard, onPromptSubmit }) => {
-  const [promptInput, setPromptInput] = useState('');
+const PlannerHeroDiscovery = ({ onSelectDestination, onStartWizard, onPromptSubmit, initialPrompt = '' }) => {
+  const [promptInput, setPromptInput] = useState(initialPrompt || '');
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('All');
+
+  useEffect(() => {
+    if (initialPrompt && !promptInput) {
+      setPromptInput(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   const filterOptions = ['All', 'Mountains', 'Coastal', 'Heritage'];
 

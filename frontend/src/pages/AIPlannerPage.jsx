@@ -20,62 +20,118 @@ import PlannerLiveSummary from '../components/planner/PlannerLiveSummary';
 import PlannerGeneratingScreen from '../components/planner/PlannerGeneratingScreen';
 import AIItineraryWorkspace from '../components/workspace/AIItineraryWorkspace';
 
-import { generateAIItinerary } from '../utils/aiPlannerEngine';
-import * as apiService from '../services/api.js';
-
-const getAIItineraryByIdApi = async (...args) => (apiService.getAIItineraryByIdApi || apiService.default?.getAIItineraryByIdApi)?.(...args);
+import { generateAIItinerary, extractTripInfoFromPrompt } from '../utils/aiPlannerEngine';
+import { getAIItineraryByIdApi } from '../services/api.js';
 
 const AIPlannerPage = () => {
   const { planId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const urlPrompt = searchParams.get('prompt') || searchParams.get('q') || '';
+  const urlDest = searchParams.get('destination') || '';
+
   // Primary Views: 'DISCOVERY' | 'WIZARD' | 'GENERATING' | 'WORKSPACE' | 'SUCCESS_DISPATCH'
-  const [viewState, setViewState] = useState(searchParams.get('destination') ? 'WORKSPACE' : 'DISCOVERY');
+  const [viewState, setViewState] = useState((urlPrompt || urlDest) ? 'WORKSPACE' : 'DISCOVERY');
   // Wizard Steps: 2 (Profile/Interests) | 3 (Transit/Pace) | 4 (Stays/Dining) | 5 (Comfort/Budget) | 6 (Book/Transmit)
   const [currentStep, setCurrentStep] = useState(2);
   const [activeHeaderTab, setActiveHeaderTab] = useState('Overview');
   const [workspaceTab, setWorkspaceTab] = useState('overview');
   const [missingFields, setMissingFields] = useState([]);
+  const [initialPromptText, setInitialPromptText] = useState(urlPrompt);
 
   // Form State
-  const [formData, setFormData] = useState({
-    destination: searchParams.get('destination') || 'Spiti Valley',
-    origin: 'Delhi NCR',
-    startDate: '',
-    endDate: '',
-    datesFlexible: true,
-    flexibleMonth: 'July 2026',
-    duration: 7,
-    travelers: { adults: 2, children: 0, infants: 0, seniors: 0 },
-    tripType: 'Couple',
-    pace: 'Balanced',
-    paceRhythm: 'Chill Starts (9:00 AM)',
-    acclimatization: 'Keep it Gentle',
-    interests: ['monasteries', 'stargazing', 'photography'],
-    stayPreference: 'Homestay 🏡',
-    roomStyle: 'Double Bed',
-    dietaryPreference: 'Vegetarian',
-    hotelRating: 4,
-    budgetTier: 'Comfort',
-    budgetAmount: 45000,
-    budgetLevel: 'Moderate',
-    customPreferences: '',
-    fullName: 'Tenzin Sharma',
-    whatsappNumber: '98160 12345'
+  const [formData, setFormData] = useState(() => {
+    if (urlPrompt) {
+      const parsed = extractTripInfoFromPrompt(urlPrompt);
+      return {
+        destination: parsed.destination || 'Spiti Valley',
+        origin: 'Delhi NCR',
+        startDate: '',
+        endDate: '',
+        datesFlexible: true,
+        flexibleMonth: parsed.flexibleMonth || 'July 2026',
+        duration: parsed.duration || 7,
+        travelers: parsed.travelers || { adults: 2, children: 0, infants: 0, seniors: 0 },
+        tripType: parsed.tripType || 'Couple',
+        pace: parsed.pace || 'Balanced',
+        paceRhythm: parsed.paceRhythm || 'Chill Starts (9:00 AM)',
+        acclimatization: 'Keep it Gentle',
+        interests: parsed.interests?.length ? parsed.interests : ['monasteries', 'stargazing', 'photography'],
+        stayPreference: parsed.stayPreference || 'Homestay 🏡',
+        roomStyle: 'Double Bed',
+        dietaryPreference: 'Vegetarian',
+        hotelRating: 4,
+        budgetTier: parsed.budgetTier || 'Comfort',
+        budgetAmount: parsed.budgetAmount || 45000,
+        budgetLevel: parsed.budgetLevel || 'Moderate',
+        customPreferences: urlPrompt,
+        fullName: 'Tenzin Sharma',
+        whatsappNumber: '98160 12345'
+      };
+    }
+    return {
+      destination: urlDest || 'Spiti Valley',
+      origin: 'Delhi NCR',
+      startDate: '',
+      endDate: '',
+      datesFlexible: true,
+      flexibleMonth: 'July 2026',
+      duration: 7,
+      travelers: { adults: 2, children: 0, infants: 0, seniors: 0 },
+      tripType: 'Couple',
+      pace: 'Balanced',
+      paceRhythm: 'Chill Starts (9:00 AM)',
+      acclimatization: 'Keep it Gentle',
+      interests: ['monasteries', 'stargazing', 'photography'],
+      stayPreference: 'Homestay 🏡',
+      roomStyle: 'Double Bed',
+      dietaryPreference: 'Vegetarian',
+      hotelRating: 4,
+      budgetTier: 'Comfort',
+      budgetAmount: 45000,
+      budgetLevel: 'Moderate',
+      customPreferences: '',
+      fullName: 'Tenzin Sharma',
+      whatsappNumber: '98160 12345'
+    };
   });
 
   const [itinerary, setItinerary] = useState(null);
   const [generationError, setGenerationError] = useState(null);
   const [isGeneratingOverview, setIsGeneratingOverview] = useState(false);
 
-  // Auto-generate if destination param is present on mount
+  // Auto-generate if prompt or destination param is present on mount
   useEffect(() => {
+    const promptParam = searchParams.get('prompt') || searchParams.get('q');
     const destParam = searchParams.get('destination');
-    if (!planId && destParam) {
-      const initData = { ...formData, destination: destParam };
-      setFormData(initData);
-      handleQuickGenerateOverview('overview', initData);
+    if (!planId) {
+      if (promptParam) {
+        setInitialPromptText(promptParam);
+        const parsed = extractTripInfoFromPrompt(promptParam);
+        const initData = {
+          ...formData,
+          destination: parsed.destination || formData.destination,
+          duration: parsed.duration || formData.duration,
+          travelers: parsed.travelers || formData.travelers,
+          tripType: parsed.tripType || formData.tripType,
+          flexibleMonth: parsed.flexibleMonth || formData.flexibleMonth,
+          budgetTier: parsed.budgetTier || formData.budgetTier,
+          budgetAmount: parsed.budgetAmount || formData.budgetAmount,
+          budgetLevel: parsed.budgetLevel || formData.budgetLevel,
+          stayPreference: parsed.stayPreference || formData.stayPreference,
+          interests: parsed.interests?.length ? parsed.interests : formData.interests,
+          pace: parsed.pace || formData.pace,
+          customPreferences: promptParam
+        };
+        setFormData(initData);
+        setMissingFields(parsed.missingFields || []);
+        handleQuickGenerateOverview('overview', initData);
+      } else if (destParam) {
+        const initData = { ...formData, destination: destParam };
+        setFormData(initData);
+        handleQuickGenerateOverview('overview', initData);
+      }
     }
   }, [searchParams, planId]);
 
@@ -263,6 +319,7 @@ const AIPlannerPage = () => {
         {/* ================================================================= */}
         {viewState === 'DISCOVERY' && (
           <PlannerHeroDiscovery
+            initialPrompt={initialPromptText}
             onSelectDestination={(dest) => updateFormData({ destination: dest })}
             onPromptSubmit={handlePromptSubmit}
             onStartWizard={handlePromptSubmit}

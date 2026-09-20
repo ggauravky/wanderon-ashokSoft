@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { Send, ShieldCheck, Phone, User, Mail, Calendar, MessageSquare, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 import { getExpeditionProfile } from '../../utils/expeditionPlannerData';
-import * as apiService from '../../services/api.js';
-
-const createLeadApi = async (...args) => (apiService.createLeadApi || apiService.default?.createLeadApi)?.(...args);
+import { createLeadApi } from '../../services/api.js';
 
 const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, destination = 'Spiti Valley' }) => {
   const [fullName, setFullName] = useState(formData.fullName || '');
