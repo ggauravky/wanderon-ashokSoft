@@ -5,97 +5,37 @@ import { jsPDF } from 'jspdf';
  * Wait for all images within an element to be loaded / decoded.
  * Fails gracefully so a single broken image never blocks PDF generation.
  */
-const waitForImages = async (container, timeoutMs = 3500) => {
+const waitForImages = async (container, timeoutMs = 4000) => {
   if (!container) return;
   const images = Array.from(container.querySelectorAll('img'));
   if (images.length === 0) return;
 
-  const settle = (promise) => Promise.race([
-    promise.catch(() => {}),
-    new Promise((resolve) => setTimeout(resolve, timeoutMs))
-  ]);
-  const promises = images.map(async (img) => {
-    if (!img.complete) {
-      await settle(new Promise((resolve) => {
-        img.addEventListener('load', resolve, { once: true });
-        img.addEventListener('error', resolve, { once: true });
-      }));
+  const promises = images.map((img) => {
+    // If already loaded and has dimensions
+    if (img.complete && img.naturalHeight !== 0) {
+      return Promise.resolve();
     }
-    if (img.naturalHeight !== 0 && typeof img.decode === 'function') await settle(img.decode());
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(), timeoutMs);
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      img.onerror = () => {
+        clearTimeout(timer);
+        img.crossOrigin = 'anonymous';
+        resolve();
+      };
+    });
   });
 
   await Promise.all(promises);
 };
 
-const waitForFonts = async (timeoutMs = 3000) => {
-  if (!document.fonts?.ready) return;
-  await Promise.race([
-    document.fonts.ready.catch(() => {}),
-    new Promise((resolve) => setTimeout(resolve, timeoutMs))
-  ]);
-};
-
-const progress = (handler, stage, message, current = 0, total = 0) => handler?.({ stage, message, current, total });
-
-/**
- * Quotation-only exporter. Every explicit A4 HTML page is rendered separately,
- * so headings, cards and itinerary entries are never cut by canvas slicing.
- */
-export const exportPagedElementToPdf = async (element, options = {}) => {
-  if (!element) throw new Error('Quotation document for PDF export was not found.');
-  const pages = Array.from(element.querySelectorAll('[data-pdf-page="true"]'));
-  if (!pages.length) throw new Error('No quotation PDF pages were rendered.');
-  const { filename = 'WanderLuxe-Quotation.pdf', scale = 2, quality = 0.93, onProgress = null } = options;
-  const previousTransform = element.style.transform;
-
-  progress(onProgress, 'preparing', 'Preparing quotation...', 0, pages.length);
-  await waitForFonts();
-  element.style.transform = 'none';
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-  try {
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
-    for (let index = 0; index < pages.length; index += 1) {
-      const page = pages[index];
-      const content = page.querySelector('.pdf-page-content');
-      if (page.scrollHeight > page.clientHeight + 4 || content?.scrollHeight > content?.clientHeight + 4) {
-        throw new Error(`Quotation PDF page ${index + 1} contains overflowed content.`);
-      }
-      progress(onProgress, 'images', 'Loading images...', index + 1, pages.length);
-      await waitForImages(page, 3500);
-      progress(onProgress, 'rendering', `Rendering page ${index + 1} of ${pages.length}...`, index + 1, pages.length);
-      const canvas = await html2canvas(page, {
-        scale,
-        useCORS: true,
-        allowTaint: false,
-        logging: false,
-        backgroundColor: null,
-        width: 794,
-        height: 1123,
-        windowWidth: 794,
-        windowHeight: 1123,
-        scrollX: 0,
-        scrollY: 0
-      });
-      if (index > 0) pdf.addPage('a4', 'portrait');
-      const image = canvas.toDataURL('image/jpeg', quality);
-      pdf.addImage(image, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-      canvas.width = 1;
-      canvas.height = 1;
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    progress(onProgress, 'saving', 'Creating PDF...', pages.length, pages.length);
-    pdf.save(filename);
-    progress(onProgress, 'complete', 'PDF downloaded.', pages.length, pages.length);
-    return { pageCount: pages.length, filename };
-  } finally {
-    element.style.transform = previousTransform;
-  }
-};
-
 /**
  * Ultra High-Resolution Multi-Page PDF Exporter for Travel Documents & Itineraries
- * Computes exact A4 page splits, eliminates blurriness, and prevents text cutoffs.
+ * Page-aware engine: Renders discrete .pdf-page elements directly into individual A4 pages,
+ * completely preventing cards from half-cutting or clipping across page breaks.
  */
 export const exportElementToPdf = async (element, options = {}) => {
   if (!element) {
@@ -104,7 +44,7 @@ export const exportElementToPdf = async (element, options = {}) => {
 
   const {
     filename = 'WanderLuxe-Travel-Itinerary.pdf',
-    scale = 2.2, // ~210 DPI for crisp typography and sharp photos without GPU memory exhaustion
+    scale = 2.2, // ~210 DPI for crisp typography and sharp photos
     orientation = 'portrait',
     quality = 0.95,
     onProgress = null
@@ -123,37 +63,11 @@ export const exportElementToPdf = async (element, options = {}) => {
 
   // 2. Ensure all images are decoded and ready
   if (onProgress) onProgress('Loading destination media...');
-  await waitForImages(element, 3500);
+  await waitForImages(element, 4000);
 
-  // 3. Capture element with canonical A4 dimensions (794px width)
-  if (onProgress) onProgress('Rendering high-definition print canvas...');
-  const canvas = await html2canvas(element, {
-    scale: scale,
-    useCORS: true,
-    allowTaint: false,
-    logging: false,
-    backgroundColor: '#ffffff',
-    windowWidth: element.scrollWidth || 794,
-    windowHeight: element.scrollHeight || 1123,
-    onclone: (clonedDoc) => {
-      // Ensure all cloned text and fonts are crisp and visible
-      const clonedEl = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('#ai-itinerary-print-document');
-      if (clonedEl) {
-        clonedEl.style.opacity = '1';
-        clonedEl.style.visibility = 'visible';
-        clonedEl.style.display = 'block';
-        clonedEl.style.position = 'relative';
-        clonedEl.style.left = '0';
-        clonedEl.style.top = '0';
-        // Remove browser-only drop-shadow from the print capture
-        clonedEl.style.boxShadow = 'none';
-      }
-    }
-  });
+  // 3. Check for discrete multi-page containers (.pdf-page)
+  const pageElements = Array.from(element.querySelectorAll('.pdf-page'));
 
-  const imgData = canvas.toDataURL('image/jpeg', quality);
-
-  // 4. Standard A4 dimensions in millimeters (210mm x 297mm)
   const pdf = new jsPDF({
     orientation: orientation,
     unit: 'mm',
@@ -164,35 +78,96 @@ export const exportElementToPdf = async (element, options = {}) => {
   const pageWidth = pdf.internal.pageSize.getWidth(); // 210 mm
   const pageHeight = pdf.internal.pageSize.getHeight(); // 297 mm
 
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  if (pageElements.length > 0) {
+    // DISCRETE PAGE RENDERING (100% Guaranteed ZERO Card Cutting)
+    for (let i = 0; i < pageElements.length; i++) {
+      const pageEl = pageElements[i];
+      if (onProgress) onProgress(`Rendering Page ${i + 1} of ${pageElements.length}...`);
 
-  let heightLeft = imgHeight;
-  let position = 0;
-  let pageNumber = 1;
+      const canvas = await html2canvas(pageEl, {
+        scale: scale,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 794,
+        onclone: (clonedDoc) => {
+          const clonedPage = clonedDoc.querySelectorAll('.pdf-page')[i];
+          if (clonedPage) {
+            clonedPage.style.opacity = '1';
+            clonedPage.style.visibility = 'visible';
+            clonedPage.style.display = 'block';
+            clonedPage.style.boxShadow = 'none';
+          }
+        }
+      });
 
-  if (onProgress) onProgress('Composing PDF pages...');
+      const imgData = canvas.toDataURL('image/jpeg', quality);
 
-  // 5. Render first page
-  pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
-  heightLeft -= pageHeight;
+      if (i > 0) {
+        pdf.addPage();
+      }
 
-  // 6. Render subsequent pages if content exceeds single A4 page height
-  while (heightLeft > 2) {
-    position -= pageHeight;
-    pageNumber++;
-    pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+
+      // Memory cleanup
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+  } else {
+    // FALLBACK CONTINUOUS CAPTURE (With Smart Aspect Ratio Scaling)
+    if (onProgress) onProgress('Rendering high-definition print canvas...');
+    const canvas = await html2canvas(element, {
+      scale: scale,
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: element.scrollWidth || 794,
+      windowHeight: element.scrollHeight || 1123,
+      onclone: (clonedDoc) => {
+        const clonedEl = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('#ai-itinerary-print-document');
+        if (clonedEl) {
+          clonedEl.style.opacity = '1';
+          clonedEl.style.visibility = 'visible';
+          clonedEl.style.display = 'block';
+          clonedEl.style.position = 'relative';
+          clonedEl.style.left = '0';
+          clonedEl.style.top = '0';
+          clonedEl.style.boxShadow = 'none';
+        }
+      }
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', quality);
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    if (onProgress) onProgress('Composing PDF pages...');
+
+    // First page
     pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
     heightLeft -= pageHeight;
+
+    // Subsequent pages
+    while (heightLeft > 2) {
+      position -= pageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pageHeight;
+    }
+
+    // Memory Cleanup
+    canvas.width = 1;
+    canvas.height = 1;
   }
 
-  // 7. Save document
+  // 4. Save document
   if (onProgress) onProgress('Downloading PDF...');
   pdf.save(filename);
-
-  // 8. Memory Cleanup: shrink canvas dimensions to release GPU and memory
-  canvas.width = 1;
-  canvas.height = 1;
 
   return true;
 };
@@ -226,7 +201,7 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
         <style>
           @page {
             size: A4 portrait;
-            margin: 8mm;
+            margin: 0;
           }
           body {
             background-color: #ffffff;
@@ -237,6 +212,15 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
           }
           * {
             box-sizing: border-box;
+          }
+          .pdf-page {
+            width: 794px !important;
+            min-height: 1123px !important;
+            max-height: 1123px !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            overflow: hidden !important;
+            box-sizing: border-box !important;
           }
           .break-inside-avoid {
             break-inside: avoid !important;
@@ -264,6 +248,5 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
 
 export default {
   exportElementToPdf,
-  exportPagedElementToPdf,
   printElementDirectly
 };

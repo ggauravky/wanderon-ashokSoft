@@ -1,7 +1,7 @@
-import React, { useCallback, useState, useEffect } from 'react';
-import {
-  X, Search, Image as ImageIcon, Check, Eye,
-  Sparkles, RefreshCw, Upload, AlertCircle
+import React, { useState, useEffect } from 'react';
+import { 
+  X, Search, Filter, Image as ImageIcon, Check, Eye, Tag, MapPin, 
+  Sparkles, RefreshCw, Upload, AlertCircle, Compass, CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { listMediaAssetsApi } from '../services/api.js';
@@ -11,12 +11,9 @@ export default function MediaLibraryModal({
   onClose,
   onSelectMedia,
   initialDestination = '',
-  initialLocation: _initialLocation = '',
+  initialLocation = '',
   currentSelectedAssetId = null,
-  onOpenUpload = null,
-  purpose = 'generic',
-  keepOpenOnUpload = false,
-  pendingAsset = null
+  onOpenUpload = null
 }) {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -25,102 +22,40 @@ export default function MediaLibraryModal({
   const [destinationsList, setDestinationsList] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [previewAsset, setPreviewAsset] = useState(null);
-  const [error, setError] = useState('');
-  const [fallbackNotice, setFallbackNotice] = useState('');
-  const [brokenAssets, setBrokenAssets] = useState(() => new Set());
-  const isHotel = purpose === 'hotel';
-  const copy = isHotel ? {
-    title: 'Hotel & Resort Media',
-    subtitle: 'Choose approved hotel, resort, room or property imagery.',
-    search: 'Search hotels, resorts, rooms or property styles...',
-    emptyTitle: 'No Hotel or Resort Media Found',
-    emptyBody: 'No approved hotel imagery matches this search. Upload a property photo to add it to the library.',
-    selectHint: 'Choose an image above to use for this hotel option',
-    confirm: 'Use for Hotel'
-  } : {
-    title: 'Location Media Library',
-    subtitle: 'Select real, database-driven photography for this itinerary day',
-    search: 'Search POI, location, attraction or tags...',
-    emptyTitle: 'No Location Images Found',
-    emptyBody: 'No canonical media matches your search query or destination filter. Upload a new photo to index this location.',
-    selectHint: 'Click on an image above to attach to this itinerary day',
-    confirm: 'Attach to Day'
-  };
 
-  const fetchAssets = useCallback(async (searchValue = '', destinationValue = '') => {
+  useEffect(() => {
+    if (isOpen) {
+      if (initialDestination && !destinationFilter) {
+        setDestinationFilter(initialDestination);
+      }
+      fetchAssets();
+    }
+  }, [isOpen, destinationFilter]);
+
+  const fetchAssets = async () => {
     try {
       setLoading(true);
-      setError('');
       const params = { limit: 60 };
-      if (isHotel) {
-        params.type = 'IMAGE';
-        params.usage = 'hotel';
-      }
-      if (searchValue.trim()) params.search = searchValue.trim();
-      const hasDestination = destinationValue && destinationValue !== 'ALL';
-      if (hasDestination) {
-        params.destination = destinationValue;
-        if (isHotel) params.destinationExact = 'true';
-      }
-
-      let res = await listMediaAssetsApi(params);
-      let usedFallback = false;
-      if (isHotel && hasDestination && (!res.data || res.data.length === 0)) {
-        const fallbackParams = { ...params };
-        delete fallbackParams.destination;
-        delete fallbackParams.destinationExact;
-        res = await listMediaAssetsApi(fallbackParams);
-        usedFallback = true;
-      }
+      if (search.trim()) params.search = search.trim();
+      if (destinationFilter && destinationFilter !== 'ALL') params.destination = destinationFilter;
+      
+      const res = await listMediaAssetsApi(params);
       if (res.data) {
         setAssets(res.data);
-        setFallbackNotice(usedFallback && res.data.length
-          ? 'No destination-specific hotel media found. Showing approved hotel inspiration.'
-          : '');
         if (res.destinations) {
           setDestinationsList(res.destinations);
         }
       }
     } catch (err) {
-      setError(err.message || 'Unable to load media assets.');
+      console.error('Failed to load media library:', err);
     } finally {
       setLoading(false);
     }
-  }, [isHotel]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setDestinationFilter(initialDestination || '');
-    setSearch('');
-    setSelectedAsset(null);
-    setBrokenAssets(new Set());
-  }, [initialDestination, isOpen, purpose]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    fetchAssets('', destinationFilter);
-  }, [destinationFilter, fetchAssets, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !pendingAsset?._id) return;
-    setAssets((current) => [pendingAsset, ...current.filter((asset) => asset._id !== pendingAsset._id)]);
-    setSelectedAsset(pendingAsset);
-    setFallbackNotice('');
-  }, [isOpen, pendingAsset]);
-
-  const openUpload = () => {
-    if (!keepOpenOnUpload) onClose();
-    onOpenUpload?.();
-  };
-
-  const markBroken = (assetId) => {
-    setBrokenAssets((current) => new Set([...current, assetId]));
-    setSelectedAsset((current) => current?._id === assetId ? null : current);
   };
 
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
-    fetchAssets(search, destinationFilter);
+    fetchAssets();
   };
 
   const handleConfirmSelect = () => {
@@ -128,13 +63,13 @@ export default function MediaLibraryModal({
     onSelectMedia({
       assetId: selectedAsset._id,
       url: selectedAsset.storage?.secureUrl || selectedAsset.url,
-      altText: selectedAsset.altText || `${selectedAsset.title}, ${selectedAsset.geography?.destination || ''}`,
+      altText: selectedAsset.altText || `${selectedAsset.title}, ${selectedAsset.location?.destination}`,
       caption: selectedAsset.caption || selectedAsset.title,
       width: selectedAsset.storage?.width || 1600,
       height: selectedAsset.storage?.height || 900,
-      credit: selectedAsset.source?.attribution || '',
-      locationName: selectedAsset.geography?.poi || selectedAsset.geography?.locality || selectedAsset.geography?.city || selectedAsset.title,
-      destination: selectedAsset.geography?.destination || ''
+      credit: selectedAsset.attribution?.credit || '',
+      locationName: selectedAsset.location?.poi || selectedAsset.location?.locality || selectedAsset.location?.city || selectedAsset.title,
+      destination: selectedAsset.location?.destination || ''
     });
     onClose();
   };
@@ -156,9 +91,9 @@ export default function MediaLibraryModal({
               <ImageIcon size={20} />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black tracking-tight">{copy.title}</h2>
+              <h2 className="text-base sm:text-lg font-black tracking-tight">Location Media Library</h2>
               <p className="text-xs text-slate-400 font-medium">
-                {copy.subtitle}
+                Select real, database-driven photography for this itinerary day
               </p>
             </div>
           </div>
@@ -167,10 +102,13 @@ export default function MediaLibraryModal({
             {onOpenUpload && (
               <button
                 type="button"
-                onClick={openUpload}
+                onClick={() => {
+                  onClose();
+                  onOpenUpload();
+                }}
                 className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <Upload size={13} /> {isHotel ? 'Upload from device' : 'Upload New'}
+                <Upload size={13} /> Upload New
               </button>
             )}
             <button
@@ -192,7 +130,7 @@ export default function MediaLibraryModal({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={copy.search}
+                placeholder="Search POI, location, attraction or tags..."
                 className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-emerald-500"
               />
             </div>
@@ -218,7 +156,7 @@ export default function MediaLibraryModal({
 
             <button
               type="button"
-              onClick={() => fetchAssets(search, destinationFilter)}
+              onClick={fetchAssets}
               className="p-2 bg-white border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
               title="Refresh Media List"
             >
@@ -229,10 +167,7 @@ export default function MediaLibraryModal({
 
         {/* Media Asset Grid */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          {!error && fallbackNotice && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold text-amber-800">{fallbackNotice}</div>}
-          {error ? (
-            <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-rose-700 space-y-3"><AlertCircle size={24} /><p className="text-sm font-semibold">{error}</p><button type="button" onClick={() => fetchAssets(search, destinationFilter)} className="rounded-lg bg-rose-700 px-4 py-2 text-xs font-semibold text-white">Retry</button></div>
-          ) : loading ? (
+          {loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-2">
               <RefreshCw size={24} className="animate-spin text-emerald-600" />
               <span className="text-xs font-bold">Scanning canonical media repository...</span>
@@ -243,18 +178,21 @@ export default function MediaLibraryModal({
                 <AlertCircle size={24} />
               </div>
               <div>
-                <h4 className="font-black text-slate-800 text-sm">{copy.emptyTitle}</h4>
+                <h4 className="font-black text-slate-800 text-sm">No Location Images Found</h4>
                 <p className="text-xs text-slate-500 max-w-sm mt-0.5">
-                  {copy.emptyBody}
+                  No canonical media matches your search query or destination filter. Upload a new photo to index this location.
                 </p>
               </div>
               {onOpenUpload && (
                 <button
                   type="button"
-                  onClick={openUpload}
+                  onClick={() => {
+                    onClose();
+                    onOpenUpload();
+                  }}
                   className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-colors cursor-pointer"
                 >
-                  {isHotel ? 'Upload Hotel Image' : 'Upload First Photo for this Location'}
+                  Upload First Photo for this Location
                 </button>
               )}
             </div>
@@ -263,13 +201,13 @@ export default function MediaLibraryModal({
               {assets.map((asset) => {
                 const isSelected = selectedAsset?._id === asset._id || currentSelectedAssetId === asset._id;
                 const imgUrl = asset.storage?.secureUrl || asset.url;
-                const poi = asset.geography?.poi || asset.title;
-                const dest = asset.geography?.destination;
+                const poi = asset.location?.poi || asset.title;
+                const dest = asset.location?.destination;
 
                 return (
                   <div
                     key={asset._id}
-                    onClick={() => { if (!brokenAssets.has(asset._id)) setSelectedAsset(asset); }}
+                    onClick={() => setSelectedAsset(asset)}
                     className={`group relative rounded-2xl overflow-hidden border-2 cursor-pointer transition-all bg-slate-900 ${
                       isSelected
                         ? 'border-emerald-500 ring-4 ring-emerald-500/20 shadow-lg scale-[1.02]'
@@ -277,13 +215,12 @@ export default function MediaLibraryModal({
                     }`}
                   >
                     <div className="aspect-16/10 overflow-hidden bg-slate-100">
-                      {brokenAssets.has(asset._id) ? <div className="flex h-full items-center justify-center bg-slate-100 text-center text-[11px] font-semibold text-slate-400"><span><ImageIcon size={22} className="mx-auto mb-1"/>Image unavailable</span></div> : <img
+                      <img
                         src={imgUrl}
                         alt={asset.altText || poi}
                         loading="lazy"
-                        onError={() => markBroken(asset._id)}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />}
+                      />
                     </div>
 
                     {/* Overlay info */}
@@ -313,7 +250,7 @@ export default function MediaLibraryModal({
                     </div>
 
                     {/* Preview Button */}
-                    {!brokenAssets.has(asset._id) && <button
+                    <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -323,7 +260,7 @@ export default function MediaLibraryModal({
                       title="Preview Full Photo"
                     >
                       <Eye size={13} />
-                    </button>}
+                    </button>
                   </div>
                 );
               })}
@@ -338,11 +275,11 @@ export default function MediaLibraryModal({
               <div>
                 <strong className="text-slate-900 font-black">{selectedAsset.title}</strong>
                 <span className="text-slate-500 block truncate">
-                  📍 {selectedAsset.geography?.poi || selectedAsset.geography?.locality || selectedAsset.geography?.destination} • {selectedAsset.storage?.width}x{selectedAsset.storage?.height}px
+                  📍 {selectedAsset.location?.poi || selectedAsset.location?.locality || selectedAsset.location?.destination} • {selectedAsset.storage?.width}x{selectedAsset.storage?.height}px
                 </span>
               </div>
             ) : (
-              <span className="text-slate-400 font-medium">{copy.selectHint}</span>
+              <span className="text-slate-400 font-medium">Click on an image above to attach to this itinerary day</span>
             )}
           </div>
 
@@ -360,7 +297,7 @@ export default function MediaLibraryModal({
               disabled={!selectedAsset}
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl text-xs font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
             >
-              <Check size={14} /> {copy.confirm}
+              <Check size={14} /> Attach to Day
             </button>
           </div>
         </div>
@@ -382,7 +319,7 @@ export default function MediaLibraryModal({
               <div className="text-white text-center">
                 <h3 className="font-black text-sm">{previewAsset.title}</h3>
                 <p className="text-xs text-slate-400">
-                  {previewAsset.geography?.destination} • {previewAsset.source?.attribution || 'WanderLuxe Media'}
+                  {previewAsset.location?.destination} • {previewAsset.attribution?.credit || 'WanderLuxe Canonical Archive'}
                 </p>
               </div>
             </div>

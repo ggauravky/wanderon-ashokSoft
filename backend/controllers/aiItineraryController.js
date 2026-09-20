@@ -38,7 +38,7 @@ async function enrichItineraryMediaIfNeeded(doc) {
  * Normalizes raw output into safe, complete structured JSON using Central Knowledge
  */
 function normalizeGeneratedItinerary(raw, reqData, destinationMeta) {
-  const destination = destinationMeta.name || reqData.destination || 'Meghalaya';
+  const destination = destinationMeta.name || reqData.destination || 'Unknown Destination';
   const duration = Math.max(3, Math.min(Number(reqData.days) || 5, 10));
   const travelers = Number(reqData.travelers) || 2;
   const mood = reqData.mood || 'Adventure';
@@ -518,7 +518,9 @@ export const saveItineraryController = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid itinerary data provided.' });
     }
 
-    const userId = mongoose.Types.ObjectId.isValid(req.user?._id) ? req.user._id : null;
+    const userId = req.user?._id && req.user._id !== 'usr_admin' && req.user._id !== 'usr_influencer'
+      ? req.user._id
+      : null;
     const userEmail = req.user?.email || '';
 
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
@@ -717,9 +719,9 @@ export const getMyItinerariesController = async (req, res) => {
     const userId = req.user?._id;
 
     let filter = {};
-    if (['admin', 'super_admin'].includes(req.user?.role)) {
+    if (req.user?.role === 'admin') {
       filter = {}; // Admin has master visibility into all saved AI itineraries
-    } else if (mongoose.Types.ObjectId.isValid(userId)) {
+    } else if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
       filter = { $or: [{ user: userId }, { userEmail }] };
     } else if (userEmail) {
       filter = { userEmail };

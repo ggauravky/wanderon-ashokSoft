@@ -14,7 +14,7 @@ const travelKnowledge = JSON.parse(rawData);
  */
 export const normalizeDestinationSlug = (input = '') => {
   const q = String(input || '').toLowerCase().trim();
-  if (!q) return 'meghalaya';
+  if (!q) return null;
 
   if (q.includes('meghalaya') || q.includes('shillong') || q.includes('cherrapunji') || q.includes('dawki') || q.includes('nongriat') || q.includes('guwahati') || q.includes('jowai')) {
     return 'meghalaya';
@@ -47,18 +47,51 @@ export const normalizeDestinationSlug = (input = '') => {
     return 'uttarakhand';
   }
 
+  // Fallback to closest match — or return raw query slug for dynamic synthesis
   const matched = travelKnowledge.destinations.find(d => 
     q.includes(d.id) || q.includes(d.slug) || q.includes(d.name.toLowerCase()) || q.includes(d.state.toLowerCase())
   );
 
-  return matched ? matched.slug : 'meghalaya';
+  return matched ? matched.slug : q.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 };
 
 export const getDestinations = () => travelKnowledge.destinations || [];
 
 export const getDestinationBySlug = (slugOrName = '') => {
   const canonicalSlug = normalizeDestinationSlug(slugOrName);
-  return travelKnowledge.destinations.find(d => d.slug === canonicalSlug) || travelKnowledge.destinations[0];
+  if (!canonicalSlug) return travelKnowledge.destinations[0];
+  const found = travelKnowledge.destinations.find(d => d.slug === canonicalSlug);
+  if (found) return found;
+
+  // Backend dynamic synthesis for unknown destinations
+  const name = slugOrName.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  const slug = slugOrName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return {
+    id: slug, slug, name, country: 'Unknown', region: name, state: name,
+    summary: `Discover the vibrant culture, iconic landmarks, and local flavors of ${name}.`,
+    description: `${name} offers a rich tapestry of history, art, architecture, and gastronomy. A curated travel experience through the best this destination has to offer.`,
+    heroImage: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?w=1200&auto=format&fit=crop&q=80',
+    gallery: [],
+    bestMonths: ['October', 'November', 'December', 'January', 'February', 'March'],
+    seasons: ['autumn', 'winter', 'spring'],
+    travelStyles: ['culture', 'heritage', 'gastronomy'],
+    weatherSuitability: { sunny: 0.90, cloudy: 0.85, rainy: 0.70, snow: 0.0 },
+    weatherProfile: { temp: '28°C', condition: 'Pleasant & Clear', humidity: '55%', iconType: 'Sun', statusTag: 'Great Travel Window', bestMonthsText: 'Year Round', vibe: `Ideal weather for exploring ${name}.` },
+    recommendedDurations: [4, 5, 6, 7],
+    budgetLevel: ['budget', 'mid-range', 'luxury'],
+    defaultDailyCost: { budget: '₹2,000 - ₹3,500', 'mid-range': '₹4,000 - ₹6,000', luxury: '₹8,000 - ₹12,000' },
+    attractions: [
+      { name: `${name} Signature Landmark`, location: name, type: 'Top Highlight' },
+      { name: `${name} Heritage Quarter`, location: name, type: 'Cultural Walk' },
+      { name: `${name} Scenic Viewpoint`, location: name, type: 'Panoramic Vista' },
+      { name: `${name} Local Market & Food Trail`, location: name, type: 'Gastronomy' },
+      { name: `${name} Hidden Gem`, location: name, type: 'Offbeat Discovery' }
+    ],
+    activities: ['heritage-walks', 'food-tours', 'museum-visits', 'local-market-exploration'],
+    food: [`Authentic ${name} regional cuisine`, 'Local street food specialties', 'Traditional sweets & desserts'],
+    packingTags: ['comfortable-shoes', 'light-layers', 'sunscreen', 'camera'],
+    _synthesized: true
+  };
 };
 
 export const getTravelStyles = () => travelKnowledge.travelStyles || [];
@@ -90,7 +123,7 @@ export const getDestinationWeather = (locationString = '') => {
  * Compact AI Context Selector: Builds token-efficient payload (< 3KB) for Gemini AI
  */
 export const buildAITravelContext = ({
-  destination = 'Meghalaya',
+  destination = '',
   duration = 5,
   travelers = 2,
   style = 'Adventure',

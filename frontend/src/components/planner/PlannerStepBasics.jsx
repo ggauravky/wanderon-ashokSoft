@@ -54,15 +54,31 @@ const PlannerStepBasics = ({ formData, updateFormData }) => {
           Where are you traveling to? *
         </label>
         <div className="relative">
-          <MapPin size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <MapPin size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-600" />
           <input
             id="planner-dest-input"
             type="text"
             value={formData.destination || ''}
             onChange={(e) => updateFormData({ destination: e.target.value })}
-            placeholder="e.g. Meghalaya, Spiti Valley, Bali..."
-            className="w-full pl-10 pr-4 py-3 bg-white rounded-2xl border border-slate-200 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 shadow-2xs"
+            placeholder="e.g. Spiti Valley, Ladakh, Meghalaya, Kashmir, Bali, Kerala..."
+            className="w-full pl-10 pr-4 py-3.5 bg-white rounded-2xl border border-slate-200 text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 shadow-2xs"
           />
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          {['Spiti Valley', 'Ladakh', 'Meghalaya', 'Kashmir', 'Bali', 'Kerala', 'Rajasthan', 'Goa'].map((dest) => (
+            <button
+              key={dest}
+              type="button"
+              onClick={() => updateFormData({ destination: dest })}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                formData.destination.toLowerCase().includes(dest.toLowerCase())
+                  ? 'bg-emerald-700 text-white shadow-2xs font-black'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/60'
+              }`}
+            >
+              {dest}
+            </button>
+          ))}
         </div>
       </div>
 

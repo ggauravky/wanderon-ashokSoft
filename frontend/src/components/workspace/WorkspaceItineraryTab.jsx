@@ -33,7 +33,8 @@ const WorkspaceItineraryTab = ({
   // Mobile Bottom Sheet state for Copilot
   const [mobileCopilotOpen, setMobileCopilotOpen] = useState(false);
 
-  const activeDay = days[selectedDayIdx] || days[0];
+  const safeSelectedDayIdx = Math.min(selectedDayIdx, Math.max(0, days.length - 1));
+  const activeDay = days[safeSelectedDayIdx] || days[0];
 
   const handleOpenActivityEdit = (activity, slotName) => {
     setActiveActivityForEdit(activity);
@@ -94,16 +95,16 @@ const WorkspaceItineraryTab = ({
           <div className="flex lg:hidden overflow-x-auto gap-2 pb-2 scrollbar-none">
             {days.map((d, idx) => (
               <button
-                key={d.day}
+                key={d.day || idx}
                 type="button"
                 onClick={() => setSelectedDayIdx(idx)}
                 className={`px-3.5 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
-                  selectedDayIdx === idx
+                  safeSelectedDayIdx === idx
                     ? 'bg-slate-900 text-white shadow-sm'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                Day {d.day}
+                Day {d.day || idx + 1}
               </button>
             ))}
           </div>
@@ -111,7 +112,7 @@ const WorkspaceItineraryTab = ({
           {/* Desktop Vertical Day List */}
           <div className="hidden lg:flex flex-col gap-1.5">
             {days.map((d, idx) => {
-              const isSelected = selectedDayIdx === idx;
+              const isSelected = safeSelectedDayIdx === idx;
               const mainTitle = d.title ? d.title.replace(/^Day\s*\d+:\s*/i, '') : `Exploration ${d.day}`;
               const stayLocation = d.stay ? d.stay.split(' ')[0] : itinerary?.destination;
 

@@ -19,7 +19,7 @@ const buildAITravelContext = (p) => (travelKnowledgeService.buildAITravelContext
  * Calls secure Backend Gemini API first, falling back to central travel knowledge
  */
 export const generateAIItinerary = async ({
-  destination = 'Meghalaya',
+  destination = '',
   days = 5,
   travelers = 2,
   pace = 'Balanced',
@@ -57,7 +57,7 @@ export const generateAIItinerary = async ({
   // Fallback to local intelligence generated from central knowledge base
   await new Promise((resolve) => setTimeout(resolve, 350));
 
-  const targetDays = Math.max(3, Math.min(Number(days) || 5, 10));
+  const targetDays = Math.max(1, Math.min(Number(days) || 5, 30));
   const attractions = destMeta.attractions || [];
   const galleryPool = Array.isArray(destMeta.galleryImages) ? destMeta.galleryImages : [];
   let generatedDays = [];
