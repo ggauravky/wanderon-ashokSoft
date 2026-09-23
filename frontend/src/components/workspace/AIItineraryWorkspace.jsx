@@ -1,36 +1,60 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, Save, Share2, Download, ArrowLeft, Sliders, 
   MapPin, Check, BookmarkCheck, FileText, ChevronDown 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WorkspaceOverviewTab from './WorkspaceOverviewTab';
+import WorkspaceStoryTab from './WorkspaceStoryTab';
 import WorkspaceItineraryTab from './WorkspaceItineraryTab';
 import WorkspaceMapTab from './WorkspaceMapTab';
 import WorkspaceBudgetTab from './WorkspaceBudgetTab';
 import ShareItineraryModal from '../ShareItineraryModal';
 import AIItineraryDocument from '../AIItineraryDocument';
 import { exportElementToPdf } from '../../utils/pdfGenerator';
-import * as apiService from '../../services/api.js';
-
-const { saveAIItineraryApi, updateAIItineraryApi } = apiService;
+import { saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'itinerary', label: 'Itinerary' },
+  { id: 'story', label: 'Story & Narrative' },
+  { id: 'itinerary', label: 'Daily Schedule' },
   { id: 'map', label: 'Route Map' },
   { id: 'budget', label: 'Budget' }
 ];
 
 const AIItineraryWorkspace = ({
   itinerary,
+  initialTab = 'overview',
+  activeTab: controlledActiveTab,
+  onTabChange,
   onEditPreferences,
+  onCustomize,
+  onReserve,
   onRegenerateDay,
   regeneratingDayIdx,
   onUpdateItinerary,
-  userTargetBudget
+  userTargetBudget,
+  formData = {},
+  updateFormData,
+  missingFields = [],
+  onRegenerate
 }) => {
-  const [activeTab, setActiveTab] = useState('itinerary');
+  const [internalActiveTab, setInternalActiveTab] = useState(initialTab || 'overview');
+  const activeTab = controlledActiveTab || internalActiveTab;
+
+  const handleTabClick = (tabId) => {
+    setInternalActiveTab(tabId);
+    if (onTabChange) {
+      onTabChange(tabId);
+    }
+  };
+
+  useEffect(() => {
+    if (controlledActiveTab && controlledActiveTab !== internalActiveTab) {
+      setInternalActiveTab(controlledActiveTab);
+    }
+  }, [controlledActiveTab]);
+
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -43,7 +67,7 @@ const AIItineraryWorkspace = ({
   const printDocRef = useRef(null);
 
   const destination = itinerary?.destination || 'Meghalaya';
-  const duration = itinerary?.duration || itinerary?.daysCount || 5;
+  const duration = itinerary?.duration || itinerary?.daysCount || (itinerary?.days?.length || 5);
   const travelers = itinerary?.travelers || 2;
   const pace = itinerary?.pace || 'Balanced';
 
@@ -172,7 +196,7 @@ const AIItineraryWorkspace = ({
             type="button"
             onClick={handleSavePlan}
             disabled={saveStatus === 'saving'}
-            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs ${
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
               saveStatus === 'saved'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-900 hover:bg-slate-800 text-white'
@@ -186,7 +210,7 @@ const AIItineraryWorkspace = ({
           <button
             type="button"
             onClick={() => setIsShareModalOpen(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <Share2 size={13} />
             <span>Share</span>
@@ -215,7 +239,7 @@ const AIItineraryWorkspace = ({
                     key={t}
                     type="button"
                     onClick={() => handleDownloadPdf(t)}
-                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-slate-100 font-bold text-slate-700 capitalize flex items-center justify-between"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-slate-100 font-bold text-slate-700 capitalize flex items-center justify-between cursor-pointer"
                   >
                     <span>{t} Layout</span>
                     {pdfTemplate === t && <Check size={12} className="text-emerald-600" />}
@@ -228,15 +252,15 @@ const AIItineraryWorkspace = ({
       </div>
 
       {/* =================================================================== */}
-      {/* 4 PRIMARY WORKSPACE TABS */}
+      {/* 5 PRIMARY WORKSPACE TABS */}
       {/* =================================================================== */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-px">
+      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-px overflow-x-auto scrollbar-none">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-2.5 rounded-t-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            onClick={() => handleTabClick(tab.id)}
+            className={`px-5 py-2.5 rounded-t-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap shrink-0 ${
               activeTab === tab.id
                 ? 'bg-white text-emerald-800 border-t-2 border-emerald-600 border-x border-slate-200/80 shadow-2xs -mb-px'
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50'
@@ -254,7 +278,23 @@ const AIItineraryWorkspace = ({
         {activeTab === 'overview' && (
           <WorkspaceOverviewTab
             itinerary={itinerary}
-            onSwitchTab={setActiveTab}
+            formData={formData}
+            updateFormData={updateFormData}
+            missingFields={missingFields}
+            onSwitchTab={handleTabClick}
+            onCustomize={onCustomize}
+            onReserve={onReserve}
+            onUpdateItinerary={onUpdateItinerary}
+            onRegenerate={onRegenerate}
+          />
+        )}
+
+        {activeTab === 'story' && (
+          <WorkspaceStoryTab
+            itinerary={itinerary}
+            onSwitchTab={handleTabClick}
+            onReserve={onReserve}
+            onDownloadPdf={handleDownloadPdf}
           />
         )}
 
@@ -278,7 +318,7 @@ const AIItineraryWorkspace = ({
             itinerary={itinerary}
             userTargetBudget={userTargetBudget}
             onTriggerCopilot={(prompt) => {
-              setActiveTab('itinerary');
+              handleTabClick('itinerary');
               handleApplyCopilotChanges({
                 patch: {
                   totalEstimatedCost: Math.round((itinerary?.totalEstimatedCost || 45000) * 0.88)

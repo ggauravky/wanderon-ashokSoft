@@ -205,6 +205,11 @@ const bookingSchema = new mongoose.Schema(
       ref: 'User',
       default: null
     },
+    inventoryCommittedAt: {
+      type: Date,
+      default: null,
+      index: true
+    },
     inventoryReleasedAt: {
       type: Date,
       default: null

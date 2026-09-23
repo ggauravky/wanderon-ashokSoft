@@ -16,7 +16,7 @@ export const HOME_SECTIONS_META = {
   community: {
     id: 'community-trips',
     eyebrow: 'Fixed Batch Departures',
-    title: 'Upcoming Adventures',
+    title: 'Upcoming Community Trips',
     description: 'Social group expeditions with like-minded travelers and certified trip leaders.',
     viewAllBaseLabel: 'Community Departures',
     viewAllPath: '/community-trips',
@@ -26,7 +26,7 @@ export const HOME_SECTIONS_META = {
   india: {
     id: 'india-circuits',
     eyebrow: 'Domestic Escapes',
-    title: 'Discover India',
+    title: 'Explore India Circuits',
     description: 'From high-altitude Himalayan passes to pristine Northeast valleys and coastal backwaters.',
     viewAllBaseLabel: 'India Trips',
     viewAllPath: '/trips/india',
@@ -36,7 +36,7 @@ export const HOME_SECTIONS_META = {
   international: {
     id: 'international-escapes',
     eyebrow: 'Global Adventures',
-    title: 'Beyond Borders',
+    title: 'International Escapes',
     description: 'Seamless visa guidance, boutique private villas & certified local tour specialists.',
     viewAllBaseLabel: 'International Trips',
     viewAllPath: '/trips/international',
@@ -46,7 +46,7 @@ export const HOME_SECTIONS_META = {
   weekend: {
     id: 'weekend-getaways',
     eyebrow: 'Quick Breaks',
-    title: 'Quick Escapes',
+    title: 'Weekend Getaways',
     description: 'Overnight departures from Delhi & Chandigarh. Zero leave needed.',
     viewAllBaseLabel: 'Weekend Getaways',
     viewAllPath: '/weekend-trips',

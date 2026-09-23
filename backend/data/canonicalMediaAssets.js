@@ -1,59 +1,6 @@
 import { generateLocationKeys } from '../models/MediaAsset.js';
 
-const curatedHotel = ({ id, title, altText, destination, city, category, urlId, tags = [] }) => ({
-  title,
-  altText,
-  caption: title,
-  storage: {
-    provider: 'external',
-    publicId: `wanderluxe/seed/hotel/${id}`,
-    secureUrl: `https://images.unsplash.com/photo-${urlId}?q=80&w=1200&auto=format&fit=crop`,
-    width: 1600,
-    height: 900,
-    format: 'jpg'
-  },
-  geography: {
-    country: destination === 'Bali' ? 'Indonesia' : 'India',
-    destination,
-    city,
-    locality: '',
-    poi: ''
-  },
-  tags: ['hotel', 'property', category.toLowerCase(), ...tags],
-  categories: [category],
-  featured: false,
-  usage: { itinerary: false, destination: false, tripCard: false, hero: false, gallery: true, hotel: true },
-  source: {
-    sourceType: 'UNSPLASH_CURATED',
-    attribution: 'Unsplash curated hotel inspiration',
-    sourceUrl: `https://unsplash.com/photos/${urlId}`,
-    license: 'Unsplash License'
-  }
-});
-
-export const HOTEL_MEDIA_ASSETS = [
-  curatedHotel({ id: 'luxury_resort_pool', title: 'Luxury Resort Pool Inspiration', altText: 'Luxury resort pool and hotel exterior used as curated property inspiration', destination: 'Goa', city: 'Goa', category: 'Resort', urlId: '1566073771259-6a8506099945', tags: ['pool', 'luxury', 'exterior'] }),
-  curatedHotel({ id: 'heritage_hotel_exterior', title: 'Heritage Hotel Exterior Inspiration', altText: 'Elegant heritage-style hotel exterior used as curated accommodation inspiration', destination: 'Rajasthan', city: 'Jaipur', category: 'Heritage Hotel', urlId: '1542314831-068cd1dbfeeb', tags: ['heritage', 'architecture', 'exterior'] }),
-  curatedHotel({ id: 'boutique_hotel_lobby', title: 'Boutique Hotel Lobby Inspiration', altText: 'Warm boutique hotel lobby used as curated property inspiration', destination: 'Rajasthan', city: 'Udaipur', category: 'Boutique Hotel', urlId: '1564501049412-61c2a3083791', tags: ['lobby', 'boutique', 'interior'] }),
-  curatedHotel({ id: 'premium_hotel_room', title: 'Premium Hotel Room Inspiration', altText: 'Premium hotel bedroom with a contemporary interior used as curated room inspiration', destination: 'Manali', city: 'Manali', category: 'Room', urlId: '1582719478250-c89cae4dc85b', tags: ['bedroom', 'premium', 'interior'] }),
-  curatedHotel({ id: 'mountain_suite', title: 'Boutique Mountain Stay Inspiration', altText: 'Comfortable boutique room used as curated mountain stay inspiration', destination: 'Spiti Valley', city: 'Kaza', category: 'Mountain Resort', urlId: '1590490360182-c33d57733427', tags: ['mountain', 'suite', 'himalaya'] }),
-  curatedHotel({ id: 'family_room', title: 'Comfortable Family Room Inspiration', altText: 'Spacious family hotel room used as curated accommodation inspiration', destination: 'Kashmir', city: 'Srinagar', category: 'Room', urlId: '1611892440504-42a792e24d32', tags: ['family', 'bedroom', 'suite'] }),
-  curatedHotel({ id: 'private_villa', title: 'Private Villa Inspiration', altText: 'Modern private villa used as curated holiday property inspiration', destination: 'Goa', city: 'North Goa', category: 'Villa', urlId: '1600607687939-ce8a6c25118c', tags: ['private', 'villa', 'luxury'] }),
-  curatedHotel({ id: 'premium_hotel_interior', title: 'Premium Hotel Interior Inspiration', altText: 'Refined hotel interior used as curated premium property inspiration', destination: 'Kerala', city: 'Kochi', category: 'Luxury Hotel', urlId: '1600566753086-00f18fb6b3ea', tags: ['interior', 'premium', 'design'] }),
-  curatedHotel({ id: 'deluxe_twin_room', title: 'Deluxe Twin Room Inspiration', altText: 'Deluxe twin hotel room used as curated room inspiration', destination: 'Ladakh', city: 'Leh', category: 'Room', urlId: '1566665797739-1674de7a421a', tags: ['twin room', 'deluxe', 'bedroom'] }),
-  curatedHotel({ id: 'hotel_suite', title: 'Luxury Hotel Suite Inspiration', altText: 'Luxury hotel suite used as curated premium room inspiration', destination: 'Bali', city: 'Ubud', category: 'Luxury Hotel', urlId: '1578683010236-d716f9a3f461', tags: ['suite', 'luxury', 'bedroom'] }),
-  curatedHotel({ id: 'beach_resort', title: 'Beach Resort Inspiration', altText: 'Tropical beach resort pool used as curated coastal stay inspiration', destination: 'Bali', city: 'Nusa Dua', category: 'Beach Resort', urlId: '1520250497591-112f2f40a3f4', tags: ['beach', 'pool', 'tropical'] }),
-  curatedHotel({ id: 'resort_infinity_pool', title: 'Resort Pool Inspiration', altText: 'Resort infinity pool used as curated leisure property inspiration', destination: 'Kerala', city: 'Kovalam', category: 'Resort', urlId: '1540541338287-41700207dee6', tags: ['pool', 'wellness', 'leisure'] }),
-  curatedHotel({ id: 'tropical_resort', title: 'Tropical Resort Inspiration', altText: 'Tropical resort property used as curated hospitality inspiration', destination: 'Goa', city: 'South Goa', category: 'Beach Resort', urlId: '1584132967334-10e028bd69f7', tags: ['tropical', 'resort', 'garden'] }),
-  curatedHotel({ id: 'premium_resort_exterior', title: 'Premium Resort Exterior Inspiration', altText: 'Premium resort exterior used as curated accommodation inspiration', destination: 'Kashmir', city: 'Gulmarg', category: 'Mountain Resort', urlId: '1549294413-26f195200c16', tags: ['exterior', 'resort', 'mountain'] }),
-  curatedHotel({ id: 'coastal_hotel', title: 'Coastal Hotel Inspiration', altText: 'Coastal hotel property used as curated seaside accommodation inspiration', destination: 'Goa', city: 'Panaji', category: 'Hotel', urlId: '1522798514-97ceb8c4f1c8', tags: ['coastal', 'hotel', 'seaside'] }),
-  curatedHotel({ id: 'luxury_villa_pool', title: 'Luxury Villa Pool Inspiration', altText: 'Luxury villa and private pool used as curated property inspiration', destination: 'Bali', city: 'Seminyak', category: 'Villa', urlId: '1613490493576-7fde63acd811', tags: ['villa', 'pool', 'private'] }),
-  curatedHotel({ id: 'hotel_lounge', title: 'Contemporary Hotel Lounge Inspiration', altText: 'Contemporary hotel lounge used as curated interior inspiration', destination: 'Manali', city: 'Manali', category: 'Boutique Hotel', urlId: '1568495248636-6432b97bd949', tags: ['lounge', 'lobby', 'interior'] }),
-  curatedHotel({ id: 'homestay_room', title: 'Welcoming Homestay Room Inspiration', altText: 'Welcoming guest room used as curated homestay inspiration', destination: 'Spiti Valley', city: 'Kaza', category: 'Homestay', urlId: '1596394516093-501ba68a0ba6', tags: ['homestay', 'guest room', 'mountain'] })
-];
-
 export const RAW_SEED_ASSETS = [
-  ...HOTEL_MEDIA_ASSETS,
   // =========================================================================
   // HIMACHAL PRADESH / MANALI / SPITI
   // =========================================================================
@@ -740,7 +687,7 @@ export const RAW_SEED_ASSETS = [
     storage: {
       provider: 'cloudinary',
       publicId: 'wanderluxe/seed/laitlum_canyons',
-      secureUrl: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&auto=format&fit=crop&q=80',
+      secureUrl: 'https://images.unsplash.com/photo-1578592083908-1111531e21b7?w=1200&auto=format&fit=crop&q=80',
       width: 1600,
       height: 900
     },
@@ -978,7 +925,7 @@ export const RAW_SEED_ASSETS = [
     storage: {
       provider: 'cloudinary',
       publicId: 'wanderluxe/seed/tibumana_waterfall',
-      secureUrl: 'https://images.unsplash.com/photo-1433086966358-54859d0ed716?w=1200&auto=format&fit=crop&q=80',
+      secureUrl: 'https://images.unsplash.com/photo-1552055909-5a133f99335f?w=1200&auto=format&fit=crop&q=80',
       width: 1600,
       height: 900
     },
@@ -1249,8 +1196,8 @@ export const CANONICAL_MEDIA_ASSETS = RAW_SEED_ASSETS.map((asset, idx) => ({
   active: true,
   orientation: 'LANDSCAPE',
   locationKeys: generateLocationKeys(asset.geography, asset.title, asset.tags || []),
-  usage: asset.usage || { itinerary: true, destination: true, tripCard: true, hero: true, gallery: true, hotel: false },
-  source: asset.source || {
+  usage: { itinerary: true, destination: true, tripCard: true, hero: true, gallery: true },
+  source: {
     sourceType: 'PROJECT_ASSET',
     attribution: 'WanderLuxe Editorial Archive',
     license: 'Commercial Editorial License'

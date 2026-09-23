@@ -21,6 +21,7 @@ import followUpRoutes from './routes/followUpRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
+import { razorpayWebhookHandler } from './controllers/webhookController.js';
 import { getAllowedOrigins, validateRuntimeConfig } from './config/environment.js';
 
 const environment = process.env.NODE_ENV || 'development';
@@ -60,6 +61,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Razorpay Webhook (must receive unparsed raw Buffer for HMAC-SHA256 signature verification)
+app.post(
+  '/api/payments/razorpay/webhook',
+  express.raw({ type: 'application/json' }),
+  razorpayWebhookHandler
+);
 
 app.use(express.json());
 app.use((req, res, next) => {

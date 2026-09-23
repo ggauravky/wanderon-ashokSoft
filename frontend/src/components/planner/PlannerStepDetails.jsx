@@ -188,20 +188,26 @@ const PlannerStepDetails = ({ formData, updateFormData }) => {
                   <Utensils size={13} className="text-emerald-600" /> Meal & Dietary Needs
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {DIETARY_OPTIONS.map((diet) => (
-                    <button
-                      key={diet}
-                      type="button"
-                      onClick={() => updateFormData({ dietaryPreference: diet })}
-                      className={`py-1.5 px-3 text-xs font-bold rounded-xl border transition-all ${
-                        (formData.dietaryPreference || 'No preference') === diet
-                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {diet}
-                    </button>
-                  ))}
+                  {DIETARY_OPTIONS.map((diet) => {
+                    const isSelected = (formData.dietaryPreference || 'No preference') === diet;
+                    const isNonVeg = diet === 'Non-Vegetarian';
+                    return (
+                      <button
+                        key={diet}
+                        type="button"
+                        onClick={() => updateFormData({ dietaryPreference: diet })}
+                        className={`py-1.5 px-3 text-xs font-bold rounded-xl border transition-all ${
+                          isSelected
+                            ? isNonVeg
+                              ? 'bg-red-600 border-red-600 text-white shadow-2xs'
+                              : 'bg-emerald-600 border-emerald-600 text-white shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {diet}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

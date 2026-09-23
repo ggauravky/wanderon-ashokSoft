@@ -4,12 +4,19 @@
   "description": "WanderLuxe Travel Platform Backend API",
   "main": "server.js",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
     "staff:create": "node scripts/createStaffUser.js",
     "quotations:v2:migrate": "node scripts/migrateQuotationV2.js",
-    "test:quotation-v2": "node --test test_quotation_v2.js"
+    "test:quotation-v2": "node --test test_quotation_v2.js",
+    "test:razorpay": "node scripts/testRazorpayIntegration.js",
+    "test:payment-reliability": "node test_payment_reliability.js",
+    "payment:inspect": "node scripts/inspectBookingPayment.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
