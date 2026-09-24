@@ -36,6 +36,9 @@ export function validateQuotationV2Client(quotation = {}, { forFinalization = fa
   if (!quotation.hotelOptions?.length) warnings.push(issue('hotels', 'NO_HOTELS', 'No hotels have been added.'));
   if (!quotation.transportOptions?.length) warnings.push(issue('transport', 'NO_TRANSPORT', 'No transportation has been added.'));
   if (!quotation.inclusions?.length) warnings.push(issue('inclusions', 'NO_INCLUSIONS', 'No inclusions have been added.'));
+  if ((quotation.hotelOptions || []).some((item) => String(item.optionId || '').startsWith('ai_hotel_') && item.selected === true)) warnings.push(issue('hotels', 'AI_SUGGESTED_HOTEL_UNVERIFIED', 'Review availability, room allocation, meal plan, and supplier details for selected AI stay suggestions.'));
+  if ((quotation.transportOptions || []).some((item) => String(item.optionId || '').startsWith('ai_transport_') && item.selected === true)) warnings.push(issue('transport', 'TRANSPORT_REQUIRES_REVIEW', 'Confirm provider, route, schedule, and price for selected AI transport suggestions.'));
+  if ((quotation.activities || []).some((item) => String(item.activityId || '').startsWith('ai_act_') && item.selected === true)) warnings.push(issue('activities', 'ACTIVITY_REQUIRES_COMMERCIAL_REVIEW', 'Confirm inclusion and price for selected AI activity suggestions.'));
   const finalPrice = number(pricing.finalCustomerPrice);
   const deposit = number(pricing.depositAmount);
   if ((forFinalization || forShare) && finalPrice <= 0) errors.push(issue('pricing', 'FINAL_PRICE_REQUIRED', 'Admin must enter a final customer price.'));

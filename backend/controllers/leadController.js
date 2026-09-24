@@ -8,6 +8,8 @@ import { sendErrorResponse } from '../utils/httpResponse.js';
 import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js';
 import { recordStaffActivity } from '../services/staffActivityService.js';
 import { hasMeaningfulAttribution, resolveLeadAttribution } from '../services/marketingAttributionService.js';
+import { canStaffAccessLead } from '../services/leadAccessService.js';
+import { verifyItineraryHandoffToken } from '../services/itineraryHandoffService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -46,6 +48,7 @@ export const createLead = async (req, res) => {
       message,
       source,
       sourceItineraryId,
+      sourceItineraryHandoffToken,
       marketingAttribution
     } = req.body;
 
@@ -95,6 +98,16 @@ export const createLead = async (req, res) => {
 
     // Securely resolve authenticated customer user ObjectId (Staff roles or synthetic IDs resolve to null)
     const authUserId = await resolveCustomerUserObjectId(req.user);
+    let validSourceItineraryId = null;
+    if (sourceItineraryId) {
+      if (!mongoose.Types.ObjectId.isValid(sourceItineraryId)) return res.status(400).json({ message: 'Invalid linked AI itinerary.' });
+      const sourceItinerary = await Itinerary.findById(sourceItineraryId).select('_id user').lean();
+      if (!sourceItinerary) return res.status(400).json({ message: 'Linked AI itinerary was not found. Please save the plan and try again.' });
+      const ownedByAccount = authUserId && sourceItinerary.user && String(sourceItinerary.user) === String(authUserId);
+      const guestProof = !sourceItinerary.user && verifyItineraryHandoffToken(sourceItineraryHandoffToken, sourceItinerary._id);
+      if (!ownedByAccount && !guestProof) return res.status(403).json({ message: 'This AI itinerary cannot be linked to your request. Save it again and retry.' });
+      validSourceItineraryId = sourceItinerary._id;
+    }
 
     // Calculate priority based on group size and intent
     const parsedPax = Number(travelersCount) || 1;
@@ -133,6 +146,10 @@ export const createLead = async (req, res) => {
     }
     const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
     if (existingLead) {
+      if (validSourceItineraryId && determinedSource === 'ai_planner') {
+        existingLead.sourceItineraryId = validSourceItineraryId;
+        await existingLead.save();
+      }
       if (resolvedAttribution && !hasMeaningfulAttribution(existingLead.marketingAttribution)) {
         existingLead.marketingAttribution = resolvedAttribution;
         await existingLead.save();
@@ -155,13 +172,6 @@ export const createLead = async (req, res) => {
     } else if (!tripRef && tripId && isValidMongoObjectId(tripId)) {
       validTripRef = toObjectIdOrNull(tripId);
     }
-    let validSourceItineraryId = null;
-    if (sourceItineraryId && mongoose.Types.ObjectId.isValid(sourceItineraryId)) {
-      const sourceItinerary = await Itinerary.findById(sourceItineraryId).select('_id').lean();
-      if (!sourceItinerary) return res.status(400).json({ message: 'Linked AI itinerary was not found. Please save the plan and try again.' });
-      validSourceItineraryId = sourceItinerary._id;
-    }
-
     const leadPayload = {
       referenceId,
       name: name.trim(),
@@ -544,7 +554,7 @@ export const getLeadById = async (req, res) => {
     // For callback requests and AI Planner enquiries, all sales specialists operate on a shared queue.
     // Other lead types remain restricted from unauthorized sales access.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      if (!(lead.leadType === 'callback_request' || (lead.leadType === 'trip_enquiry' && lead.source === 'ai_planner'))) {
+      if (!canStaffAccessLead(lead, req.user)) {
         return res.status(403).json({ message: 'Access denied: Sales portal is restricted to Travel Expert Requests.' });
       }
     }

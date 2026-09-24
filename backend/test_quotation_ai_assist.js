@@ -3,8 +3,16 @@ import assert from 'node:assert/strict';
 import {
   applyQuotationAiPatch,
   buildDeterministicPatch,
-  detectConflicts
+  detectConflicts,
+  parseSharedItineraryToken,
+  sanitizeAiQuotationPatch
 } from './services/quotationAiService.js';
+import { buildQuotationPolicyDefaults, normalizeQuotationPolicies } from './config/quotationPolicyPresets.js';
+import { buildFactualInclusions, buildFieldContext, generateQuotationFieldSuggestion } from './services/quotationFieldAiService.js';
+import { signItineraryHandoffToken, verifyItineraryHandoffToken } from './services/itineraryHandoffService.js';
+import { canStaffAccessLead } from './services/leadAccessService.js';
+import { quotationRateLimit } from './middlewares/quotationRateLimit.js';
+import jwt from 'jsonwebtoken';
 
 const baseItinerary = {
   title: 'Spiti Valley Slow Circuit',
@@ -92,4 +100,112 @@ test('fill-empty merge preserves existing destination conflict', () => {
   const result = applyQuotationAiPatch({ quotation: current, patch, mergeMode: 'FILL_EMPTY_ONLY', selectedSections: ['journey'] });
   assert.equal(result.quotation.tripRequirements.destination, 'Kashmir');
   assert.equal(result.quotation.manualPricing.finalCustomerPrice, 12345);
+});
+
+test('import leaves meals and commercial inclusions unconfirmed', () => {
+  const patch = buildDeterministicPatch(baseItinerary);
+  assert.deepEqual(patch.itinerary[0].mealsIncluded, []);
+  assert.equal(patch.hotelOptions[0].mealPlan, '');
+  assert.equal(patch.hotelOptions[0].selected, false);
+  assert.equal(patch.activities[0].isIncluded, false);
+  assert.equal(patch.activities[0].selected, false);
+  assert.deepEqual(patch.inclusions, []);
+  assert.equal(patch.tripRequirements.travelStyle, 'Custom');
+  assert.deepEqual(buildDeterministicPatch({ ...baseItinerary, days: [{ ...baseItinerary.days[0], mealsIncluded: ['Breakfast'] }] }).itinerary[0].mealsIncluded, ['Breakfast']);
+});
+
+test('commercial fields from a forged client patch cannot survive sanitization', () => {
+  const injected = {
+    ...buildDeterministicPatch(baseItinerary),
+    manualPricing: { finalCustomerPrice: 1 }, pricing: { finalTotal: 1 },
+    hotelOptions: [{ ...buildDeterministicPatch(baseItinerary).hotelOptions[0], pricePerNight: 999999 }],
+    transportOptions: [{ optionId: 'x', unitPrice: 999999, selected: true }]
+  };
+  const safe = sanitizeAiQuotationPatch(injected);
+  assert.equal(safe.manualPricing, undefined);
+  assert.equal(safe.pricing, undefined);
+  assert.equal(safe.hotelOptions[0].pricePerNight, 0);
+  assert.equal(safe.transportOptions[0].unitPrice, 0);
+  assert.equal(safe.transportOptions[0].selected, false);
+});
+
+test('replace mode retains existing commercial service prices and policy text', () => {
+  const current = { hotelOptions: [{ optionId: 'manual', hotelName: 'Verified', pricePerNight: 5000, selected: true }],
+    policies: { paymentTerms: 'Approved payment text' }, tripRequirements: { budgetPerPerson: 20000 } };
+  const patch = sanitizeAiQuotationPatch(buildDeterministicPatch(baseItinerary));
+  const { quotation } = applyQuotationAiPatch({ quotation: current, patch, mergeMode: 'REPLACE_SELECTED_SECTIONS', selectedSections: ['journey', 'hotels', 'terms'] });
+  assert.equal(quotation.hotelOptions[0].pricePerNight, 5000);
+  assert.equal(quotation.hotelOptions[0].selected, true);
+  assert.equal(quotation.hotelOptions[1].selected, false);
+  assert.equal(quotation.policies.paymentTerms, 'Approved payment text');
+  assert.equal(quotation.tripRequirements.budgetPerPerson, 20000);
+});
+
+test('policy defaults use current structured payment numbers and avoid sample cancellation percentages', () => {
+  const first = buildQuotationPolicyDefaults({ paymentTerms: { paymentMode: 'PARTIAL', depositPercent: 10, balanceDueDays: 6 } });
+  const second = buildQuotationPolicyDefaults({ paymentTerms: { paymentMode: 'PARTIAL', depositPercent: 20, balanceDueDays: 10 } });
+  assert.match(first.paymentTerms, /10%/);
+  assert.match(first.paymentTerms, /6 days/);
+  assert.match(second.paymentTerms, /20%/);
+  assert.match(second.paymentTerms, /10 days/);
+  assert.doesNotMatch(first.cancellationPolicy, /\d+%/);
+  assert.doesNotMatch(buildQuotationPolicyDefaults({ paymentTerms: { paymentMode: 'FULL' } }).paymentTerms, /deposit/i);
+  assert.equal(normalizeQuotationPolicies({ policies: { termsAndConditions: 'Canonical' }, termsAndConditions: ['Legacy'] }).termsAndConditions, 'Canonical');
+  assert.equal(normalizeQuotationPolicies({ cancellationPolicy: ['Legacy line'] }).cancellationPolicy, 'Legacy line');
+});
+
+test('field context excludes identity and financial data; inclusions require selected services', async () => {
+  const quotation = { customerSnapshot: { name: 'Jane Doe', email: 'jane@example.com', notes: 'Call jane@example.com' },
+    tripRequirements: { destination: 'Spiti', budgetPerPerson: 99999 }, manualPricing: { finalCustomerPrice: 999999 },
+    hotelOptions: [{ hotelName: 'Selected Stay', selected: true, mealPlan: '' }, { hotelName: 'Candidate Stay', selected: false, mealPlan: 'MAP' }],
+    activities: [{ name: 'Walk', selected: false, isIncluded: true }], transportOptions: [{ title: 'Unconfirmed car', selected: false }] };
+  const context = buildFieldContext(quotation, 'customer.notes');
+  assert.doesNotMatch(JSON.stringify(context), /Jane Doe|jane@example.com|99999/);
+  const lines = buildFactualInclusions(quotation);
+  assert(lines.some((line) => line.includes('Selected Stay')));
+  assert(lines.every((line) => !/Candidate Stay|Walk|car|breakfast|dinner/i.test(line)));
+  assert.deepEqual((await generateQuotationFieldSuggestion({ quotation, field: 'inclusions' })).suggestion, lines);
+});
+
+test('guest handoff proof is bound to itinerary and expires', () => {
+  process.env.JWT_SECRET = 'quotation-ai-handoff-test-secret-that-is-long-enough';
+  const token = signItineraryHandoffToken('itinerary-a');
+  assert.equal(verifyItineraryHandoffToken(token, 'itinerary-a'), true);
+  assert.equal(verifyItineraryHandoffToken(token, 'itinerary-b'), false);
+  const expired = jwt.sign({ purpose: 'ai_itinerary_lead_handoff', itineraryId: 'itinerary-a', exp: Math.floor(Date.now() / 1000) - 1 }, process.env.JWT_SECRET);
+  assert.equal(verifyItineraryHandoffToken(expired, 'itinerary-a'), false);
+});
+
+test('Sales can import only lead types visible in their workspace', () => {
+  assert.equal(canStaffAccessLead({ leadType: 'trip_enquiry', source: 'ai_planner' }, { role: 'sales' }), true);
+  assert.equal(canStaffAccessLead({ leadType: 'trip_enquiry', source: 'contact_page' }, { role: 'sales' }), false);
+  assert.equal(canStaffAccessLead({ leadType: 'trip_enquiry', source: 'contact_page' }, { role: 'admin' }), true);
+});
+
+test('shared-plan links accept configured origins but reject unrelated hosts and paths', () => {
+  const previous = process.env.FRONTEND_URL;
+  process.env.FRONTEND_URL = 'https://wanderon-ashok-soft.vercel.app';
+  try {
+    assert.equal(parseSharedItineraryToken('https://wanderon-ashok-soft.vercel.app/itinerary/shared/valid_token_123'), 'valid_token_123');
+    assert.equal(parseSharedItineraryToken('http://127.0.0.1:5174/itinerary/shared/valid_token_123'), 'valid_token_123');
+    assert.throws(() => parseSharedItineraryToken('https://evil.example/itinerary/shared/valid_token_123'));
+    assert.throws(() => parseSharedItineraryToken('https://wanderluxe.evil.example/itinerary/shared/valid_token_123'));
+    assert.throws(() => parseSharedItineraryToken('https://wanderon-ashok-soft.vercel.app/other/valid_token_123'));
+  } finally {
+    if (previous === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = previous;
+  }
+});
+
+test('AI rate limiter rejects requests after its action limit', () => {
+  const middleware = quotationRateLimit({ action: 'test-ai-rate-limit', limit: 2, windowMs: 3600000 });
+  let status = 0;
+  const req = { user: { _id: 'test-actor' }, ip: '127.0.0.1', body: {} };
+  const res = { set: () => {}, status: (code) => { status = code; return res; }, json: () => res };
+  let allowed = 0;
+  middleware(req, res, () => { allowed += 1; });
+  middleware(req, res, () => { allowed += 1; });
+  middleware(req, res, () => { allowed += 1; });
+  assert.equal(allowed, 2);
+  assert.equal(status, 429);
 });

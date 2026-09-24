@@ -187,6 +187,9 @@ async function quotationV2Request(path, { method = 'GET', body, auth = true } = 
 
 export const createQuotationV2Api = (payload) => quotationV2Request('/v2', { method: 'POST', body: payload });
 export const previewQuotationAiImportApi = (payload) => quotationV2Request('/v2/ai/import-preview', { method: 'POST', body: payload });
+export const listImportableItinerariesApi = (search = '') => quotationV2Request(`/v2/ai/importable-itineraries?search=${encodeURIComponent(search)}`);
+export const getQuotationPolicyDefaultsApi = (quotation) => quotationV2Request('/v2/ai/policy-defaults', { method: 'POST', body: { quotation } });
+export const suggestQuotationAiFieldApi = (payload, id = null) => quotationV2Request(`${id ? `/${encodeURIComponent(id)}` : ''}/v2/ai/field-suggest`, { method: 'POST', body: payload });
 export const draftQuotationAiTextApi = (payload) => quotationV2Request('/v2/ai/draft-text', { method: 'POST', body: payload });
 export const updateQuotationV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2`, { method: 'PATCH', body: payload });
 export const applyQuotationAiImportApi = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/ai/import-apply`, { method: 'POST', body: payload });
@@ -708,16 +711,16 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
     segmentId: segmentId || 'seg_1',
     segmentName: segmentName || 'Primary Stay',
     segmentOrder: 1,
-    tier: 'Deluxe',
+    tier: 'Custom',
     label: '',
     hotelName: '',
     city: '',
     location: '',
-    category: 'Deluxe',
-    roomType: 'Deluxe Room',
+    category: '',
+    roomType: '',
     rooms: 1,
-    occupancy: 'Double Sharing',
-    mealPlan: 'MAP (Breakfast + Dinner)',
+    occupancy: '',
+    mealPlan: '',
     checkIn: '',
     checkOut: '',
     nights: 1,
@@ -786,7 +789,7 @@ export function getEmptyTransportOption(index = 1) {
     totalPrice: 0,
     inclusions: [],
     notes: '',
-    selected: index === 1,
+    selected: false,
     vehicleMedia: [],
     documents: []
   };
@@ -805,9 +808,9 @@ export function getEmptyActivity(index = 1) {
     unitPrice: 0,
     totalCost: 0,
     totalPrice: 0,
-    isIncluded: true,
-    isOptional: false,
-    selected: true
+    isIncluded: false,
+    isOptional: true,
+    selected: false
   };
 }
 

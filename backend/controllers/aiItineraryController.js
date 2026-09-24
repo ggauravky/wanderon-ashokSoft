@@ -13,6 +13,7 @@ import {
 import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/mediaResolverService.js';
 import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
 import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
+import { signItineraryHandoffToken } from '../services/itineraryHandoffService.js';
 
 const asText = (value, max = 160) => (typeof value === 'string' ? value.trim().replace(/<[^>]*>?/gm, '').slice(0, max) : '');
 const asList = (value, maxItems = 12, maxLength = 80) => (
@@ -599,8 +600,9 @@ export const saveItineraryController = async (req, res) => {
     if (targetId) {
       let existingDoc = await Itinerary.findById(targetId);
       if (existingDoc) {
+        if (!req.user) return res.status(403).json({ success: false, message: 'Sign in to update a saved itinerary.' });
         // Ownership check
-        if (existingDoc.user && existingDoc.user.toString() !== userId?.toString() && existingDoc.userEmail !== userEmail && req.user?.role !== 'admin') {
+        if ((existingDoc.user && existingDoc.user.toString() !== userId?.toString()) || (!existingDoc.user && (!existingDoc.userEmail || existingDoc.userEmail !== userEmail))) {
           return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
         }
 
@@ -671,7 +673,7 @@ export const saveItineraryController = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'AI Itinerary saved successfully to your travel profile.',
-      data: newDoc
+      data: { ...newDoc.toObject(), handoffToken: userId ? undefined : signItineraryHandoffToken(newDoc._id) }
     });
   } catch (error) {
     console.error('Save Itinerary Error:', error);
@@ -697,7 +699,7 @@ export const updateItineraryController = async (req, res) => {
     // Ownership check
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
     }
 
@@ -750,9 +752,6 @@ export const getItineraryByIdController = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Itinerary not found.' });
     }
 
-    // Auto-enrich media if legacy or missing gallery
-    await enrichItineraryMediaIfNeeded(doc);
-
     // Ownership check
     if (!doc.isPublic) {
       if (!req.user) {
@@ -760,10 +759,12 @@ export const getItineraryByIdController = async (req, res) => {
       }
       const userEmail = req.user?.email || '';
       const userId = req.user?._id?.toString();
-      if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+      if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Not authorized to view this private itinerary.' });
       }
     }
+
+    await enrichItineraryMediaIfNeeded(doc);
 
     res.json({
       success: true,
@@ -782,17 +783,19 @@ export const getItineraryByIdController = async (req, res) => {
  */
 export const getMyItinerariesController = async (req, res) => {
   try {
+    if (!req.user) return res.status(401).json({ success: false, message: 'Sign in to view saved itineraries.' });
     const userEmail = req.user?.email || '';
     const userId = req.user?._id;
 
-    let filter = {};
-    if (req.user?.role === 'admin') {
+    let filter = null;
+    if (['admin', 'super_admin'].includes(req.user?.role)) {
       filter = {}; // Admin has master visibility into all saved AI itineraries
     } else if (userId && userId !== 'usr_admin' && userId !== 'usr_influencer') {
       filter = { $or: [{ user: userId }, { userEmail }] };
     } else if (userEmail) {
       filter = { userEmail };
     }
+    if (!filter) return res.status(403).json({ success: false, message: 'Saved itineraries are unavailable for this account.' });
 
     const docs = await Itinerary.find(filter).sort({ createdAt: -1 });
 
@@ -828,7 +831,7 @@ export const deleteItineraryController = async (req, res) => {
     // Ownership check
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized to delete this itinerary.' });
     }
 
@@ -862,7 +865,7 @@ export const toggleShareItineraryController = async (req, res) => {
     // Ownership check
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && doc.userEmail !== userEmail && req.user?.role !== 'admin') {
+    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Not authorized to modify share settings for this itinerary.' });
     }
 

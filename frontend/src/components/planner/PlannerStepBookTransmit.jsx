@@ -70,9 +70,18 @@ const PlannerStepBookTransmit = ({
         plannerContext,
         days: itinerary.days || itinerary.itineraryDays || []
       };
-      savedItinerary = itinerary._id
-        ? await updateAIItineraryApi(itinerary._id, savePayload)
-        : await saveAIItineraryApi(savePayload);
+      if (itinerary._id) {
+        try {
+          savedItinerary = await updateAIItineraryApi(itinerary._id, savePayload);
+        } catch (updateError) {
+          if (!/sign in|unauthorized|not authorized/i.test(updateError.message || '')) throw updateError;
+          delete savePayload._id;
+          delete savePayload.id;
+          savedItinerary = await saveAIItineraryApi(savePayload);
+        }
+      } else {
+        savedItinerary = await saveAIItineraryApi(savePayload);
+      }
       onItinerarySaved?.({ ...itinerary, ...savedItinerary, _id: savedItinerary._id || savedItinerary.id });
     } catch (err) {
       setSubmitError(err.message || 'Could not save the AI itinerary before creating the lead.');
@@ -106,6 +115,7 @@ const PlannerStepBookTransmit = ({
       source: 'ai_planner',
       leadType: 'trip_enquiry',
       sourceItineraryId,
+      sourceItineraryHandoffToken: savedItinerary?.handoffToken || itinerary?.handoffToken || '',
       priority: 'HIGH',
       topics: ['Customized AI Itinerary', 'Direct WhatsApp Dispatch', `${duration} Days ${destination}`],
       itinerarySnapshot: {

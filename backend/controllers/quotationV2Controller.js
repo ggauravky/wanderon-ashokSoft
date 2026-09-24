@@ -9,12 +9,17 @@ import QuotationEvent from '../models/QuotationEvent.js';
 import QuotationApprovalVerification from '../models/QuotationApprovalVerification.js';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
+import { loadAuthorizedLeadForStaff } from '../services/leadAccessService.js';
 import {
   applyQuotationAiPatch,
   buildQuotationAiImportPreview,
-  generateQuotationTextDrafts
+  generateQuotationTextDrafts,
+  listImportableItineraries,
+  resolveImportSource
 } from '../services/quotationAiService.js';
 import { getJwtSecret } from '../config/environment.js';
+import { buildQuotationPolicyDefaults } from '../config/quotationPolicyPresets.js';
+import { generateQuotationFieldSuggestion } from '../services/quotationFieldAiService.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
 import { syncLeadConversionFromBooking } from '../services/leadConversionService.js';
 import {
@@ -108,8 +113,22 @@ const editableFields = [
   'leadId', 'customerId', 'customerSnapshot', 'tripRequirements', 'personalNote', 'itinerary',
   'hotelOptions', 'transportOptions', 'activities', 'addOns', 'attachments', 'inclusions',
   'exclusions', 'policies', 'termsAndConditions', 'cancellationPolicy', 'paymentTerms',
-  'presentationSettings', 'validUntil', 'assignedTo', 'assignedToSnapshot', 'sourceItineraryId'
+  'presentationSettings', 'validUntil', 'assignedTo', 'assignedToSnapshot'
 ];
+const AI_FIELD_AUDIT_KEYS = new Set([
+  'customer.notes', 'journey.title', 'journey.specialRequests', 'journey.personalNote',
+  'itinerary.title', 'itinerary.description', 'itinerary.morning', 'itinerary.afternoon',
+  'itinerary.evening', 'itinerary.transferDetails', 'itinerary.missingDescriptions', 'hotel.label', 'hotel.notes',
+  'transport.title', 'transport.notes', 'activity.description', 'addon.description',
+  'inclusions', 'exclusions', 'policies.all', 'policies.paymentTerms',
+  'policies.cancellationPolicy', 'policies.refundNotes', 'policies.travelRequirements',
+  'policies.importantInformation', 'policies.termsAndConditions'
+]);
+const auditAiFields = async (quotationId, actor, fields) => {
+  const names = [...new Set((Array.isArray(fields) ? fields : []).filter((field) => AI_FIELD_AUDIT_KEYS.has(field)))];
+  if (names.length) await createQuotationEvent({ quotationId, type: 'AI_CONTENT_APPLIED', actor,
+    details: { fields: names, source: 'STAFF_REPORTED', pricingChanged: false } });
+};
 
 const applyEditableFields = (quotation, input) => {
   editableFields.forEach((field) => {
@@ -181,13 +200,20 @@ export const createQuotationV2 = async (req, res) => {
   try {
     if (!ensureDatabase(res)) return;
     const payload = normalizeQuotationAttachmentPayload(req.body || {});
+    const linkedLead = payload.leadId ? await loadAuthorizedLeadForStaff(payload.leadId, req.user) : null;
+    if (payload.sourceItineraryId) {
+      if (linkedLead && String(payload.sourceItineraryId) !== String(linkedLead.sourceItineraryId || '')) {
+        return fail(res, 403, 'The source itinerary must belong to the linked lead.');
+      }
+      if (!linkedLead) await resolveImportSource({ sourceType: 'SAVED_ITINERARY', itineraryId: payload.sourceItineraryId }, req.user);
+    }
     const userId = req.user._id || req.user.id;
     const quotation = new Quotation({
       schemaVersion: 2,
       quotationNumber: await generateQuotationNumber(),
       version: 1,
       leadId: payload.leadId || null,
-      sourceItineraryId: payload.sourceItineraryId || null,
+      sourceItineraryId: linkedLead?.sourceItineraryId || payload.sourceItineraryId || null,
       customerId: payload.customerId || null,
       assignedTo: payload.assignedTo || userId,
       assignedToSnapshot: payload.assignedToSnapshot || { name: actorName(req.user), email: req.user.email || '', phone: req.user.phone || '' },
@@ -233,6 +259,7 @@ export const createQuotationV2 = async (req, res) => {
       });
     }
     await createQuotationEvent({ quotationId: quotation._id, type: 'QUOTATION_CREATED', actor: req.user, details: { schemaVersion: 2 } });
+    await auditAiFields(quotation._id, req.user, req.body?.aiAppliedFields);
     return res.status(201).json({ success: true, quotation, validation: validateQuotationV2(quotation) });
   } catch (error) {
     console.error('Create Quotation V2 Error:', error);
@@ -254,6 +281,43 @@ export const previewQuotationAiImport = async (req, res) => {
   }
 };
 
+export const getImportableAiItineraries = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const itineraries = await listImportableItineraries(req.user, req.query.search);
+    return res.json({ success: true, itineraries });
+  } catch (error) {
+    return fail(res, error.status || 500, error.message || 'Unable to list importable itineraries.');
+  }
+};
+
+export const getQuotationPolicyDefaults = (req, res) => res.json({
+  success: true,
+  defaults: buildQuotationPolicyDefaults(req.body?.quotation || {})
+});
+
+export const suggestQuotationAiField = async (req, res) => {
+  try {
+    if (req.params.id) {
+      if (!ensureDatabase(res)) return;
+      const quotation = await loadAuthorized(req, res, { edit: true });
+      if (!quotation) return;
+      if (!['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
+        return fail(res, 409, 'This revision is frozen. Create a new revision before using AI assistance.');
+      }
+    }
+    const result = await generateQuotationFieldSuggestion({
+      quotation: req.body?.quotation || {},
+      field: req.body?.field,
+      index: req.body?.index ?? 0,
+      mode: req.body?.mode || 'generate'
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return fail(res, error.status || 500, error.message || 'Unable to prepare AI suggestion.');
+  }
+};
+
 export const applyQuotationAiImport = async (req, res) => {
   try {
     if (!ensureDatabase(res)) return;
@@ -262,13 +326,49 @@ export const applyQuotationAiImport = async (req, res) => {
     if (!['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
       return fail(res, 409, 'This revision is frozen. Create a new revision before importing AI itinerary content.');
     }
+    const source = req.body?.source || {};
+    const sourceRequest = {
+      sourceType: source.type,
+      itineraryId: source.itineraryId,
+      leadId: source.leadId,
+      shareToken: source.shareToken,
+      itineraryPayload: source.itineraryPayload
+    };
+    const preview = await buildQuotationAiImportPreview({ request: sourceRequest, user: req.user });
+    if (req.body?.expectedSourceUpdatedAt && preview.source.updatedAt
+      && new Date(req.body.expectedSourceUpdatedAt).getTime() !== new Date(preview.source.updatedAt).getTime()) {
+      return fail(res, 409, 'The source plan changed since preview. Refresh the import preview before applying.');
+    }
+    const choices = req.body?.candidateSelections || {};
+    const selectedHotels = new Set(Array.isArray(choices.hotelCandidateIds) ? choices.hotelCandidateIds : []);
+    const selectedActivities = new Set(Array.isArray(choices.activityCandidateIds) ? choices.activityCandidateIds : []);
+    preview.deterministicPatch.hotelOptions = preview.deterministicPatch.hotelOptions.filter((item) => selectedHotels.has(item.optionId));
+    preview.deterministicPatch.activities = preview.deterministicPatch.activities.filter((item) => selectedActivities.has(item.activityId));
+    preview.deterministicPatch.transportOptions = choices.includeTransportCandidate === true ? preview.deterministicPatch.transportOptions : [];
+    const sections = req.body?.selectedSections;
+    if (!Array.isArray(sections) || !sections.length || sections.some((section) => !['journey', 'itinerary', 'hotels', 'transport', 'activities', 'inclusions', 'terms', 'presentation'].includes(section))) {
+      return fail(res, 422, 'Select valid import sections.');
+    }
+    if (!['FILL_EMPTY_ONLY', 'REPLACE_SELECTED_SECTIONS'].includes(req.body?.mergeMode || 'FILL_EMPTY_ONLY')) {
+      return fail(res, 422, 'Select a valid merge mode.');
+    }
     const result = applyQuotationAiPatch({
       quotation: quotation.toObject(),
-      patch: req.body?.patch || {},
+      patch: preview.deterministicPatch,
       mergeMode: req.body?.mergeMode || 'FILL_EMPTY_ONLY',
-      selectedSections: req.body?.selectedSections || []
+      selectedSections: sections,
+      conflictChoices: req.body?.conflictChoices || {}
     });
     applyEditableFields(quotation, result.quotation);
+    if (preview.source.itineraryId) quotation.sourceItineraryId = preview.source.itineraryId;
+    quotation.aiImportProvenance = {
+      sourceType: preview.source.type,
+      sourceTitle: preview.source.title,
+      sourceDestination: preview.source.destination,
+      sourceUpdatedAt: preview.source.updatedAt || null,
+      importedAt: new Date(),
+      importedBy: req.user._id
+    };
     quotation.updatedBy = req.user._id;
     await quotation.save();
     await createQuotationEvent({
@@ -276,10 +376,15 @@ export const applyQuotationAiImport = async (req, res) => {
       type: 'AI_ITINERARY_IMPORTED',
       actor: req.user,
       details: {
-        sourceItineraryId: req.body?.source?.itineraryId || quotation.sourceItineraryId || null,
-        sourceType: req.body?.source?.type || '',
+        sourceItineraryId: preview.source.itineraryId || null,
+        sourceType: preview.source.type,
         mergeMode: req.body?.mergeMode || 'FILL_EMPTY_ONLY',
-        sectionsApplied: result.appliedSections
+        sectionsApplied: result.appliedSections,
+        candidateCounts: {
+          hotels: preview.deterministicPatch.hotelOptions.length,
+          activities: preview.deterministicPatch.activities.length,
+          transport: preview.deterministicPatch.transportOptions.length
+        }
       }
     });
     return res.json({ success: true, quotation, validation: validateQuotationV2(quotation), ...result });
@@ -337,6 +442,7 @@ export const updateQuotationV2 = async (req, res) => {
     }
     quotation.updatedBy = req.user._id;
     await quotation.save();
+    await auditAiFields(quotation._id, req.user, req.body?.aiAppliedFields);
     await createQuotationEvent({ quotationId: quotation._id, type: 'DRAFT_UPDATED', actor: req.user, details: { version: quotation.version } });
     return res.json({ success: true, quotation, validation: validateQuotationV2(quotation) });
   } catch (error) {
@@ -879,8 +985,11 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     const manual = snapshot.manualPricing || {};
     const finalAmount = asNumber(manual.finalCustomerPrice);
     if (finalAmount <= 0) return fail(res, 409, 'Approved revision does not contain a valid final price.');
-    const selectedHotel = (snapshot.hotelOptions || []).find((item) => item.selected) || snapshot.hotelOptions?.[0] || null;
-    const selectedTransport = (snapshot.transportOptions || []).filter((item) => item.selected !== false);
+    const bookingHotels = (snapshot.hotelOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true));
+    const bookingTransport = (snapshot.transportOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true));
+    const bookingActivities = (snapshot.activities || []).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true));
+    const selectedHotel = bookingHotels.find((item) => item.selected) || bookingHotels[0] || null;
+    const selectedTransport = bookingTransport.filter((item) => item.selected !== false);
     const bookingId = `WLX-${new Date().getFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     const verificationToken = crypto.randomBytes(16).toString('hex');
     let userId = quotation.customerId || null;
@@ -932,10 +1041,10 @@ export const createBookingFromQuotationV2 = async (req, res) => {
         customerSnapshot: customer,
         tripRequirements: journey,
         selectedHotel,
-        hotelOptions: snapshot.hotelOptions || [],
+        hotelOptions: bookingHotels,
         selectedTransport,
-        transportOptions: snapshot.transportOptions || [],
-        activities: snapshot.activities || [],
+        transportOptions: bookingTransport,
+        activities: bookingActivities,
         addOns: snapshot.addOns || [],
         itinerary: snapshot.itinerary || [],
         manualPricing: manual,

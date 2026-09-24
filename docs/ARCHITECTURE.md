@@ -267,8 +267,10 @@ Planner handoff creates a canonical `Lead` with `leadType: trip_enquiry`, `sourc
 
 Quotation Smart Assist uses two layers:
 
-1. Deterministic import maps factual itinerary data into Quotation V2 fields: journey, traveler counts, flexible date notes, day-by-day itinerary strings, approved media links, and review-only stay/activity/transport candidates.
-2. AI text assistance drafts customer-facing copy such as personal notes, inclusions, exclusions, travel requirements, and important information. Staff must preview/apply/save these suggestions.
+1. Deterministic import maps factual itinerary data into Quotation V2 fields: journey, traveler counts, flexible date notes, day-by-day itinerary strings, approved media links, and review-only stay/activity/transport candidates. The server re-resolves an authorized source at apply time, rejects stale previews, and never trusts a browser-supplied patch. AI candidates remain unselected and are excluded from public/PDF/booking output until staff selects them.
+2. Field-level AI text assistance drafts only allowlisted customer-facing fields from limited trip context. Staff sees current and suggested content before applying it. Deterministic policy presets fill empty canonical V2 policy fields; payment text uses structured payment settings and AI output cannot change their numbers. Legacy policy fields are normalized for old quotations.
+
+Saved and lead-linked sources use staff ownership/visibility checks. Public shared plans require an active share token; guest planner-to-lead linking requires a short-lived signed handoff proof. AI endpoints have rate limits, and import/AI saves are audited. See `QUOTATION_AI_SMART_BUILDER_REPORT.md` for verification scope and remaining manual QA.
 
 AI never controls commercial price. The Smart Builder never sets `manualPricing`, supplier costs, payment milestone amounts, discount/markup, GST/TCS, deposit amount, final customer price, booking references, PNRs, vehicle numbers, driver details, or customer identity. Admin pricing, immutable revision snapshots, public sharing, customer approval, and booking conversion continue through the existing Quotation V2 workflow.
 

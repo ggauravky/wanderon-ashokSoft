@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import QuotationEvent from '../models/QuotationEvent.js';
 import { getJwtSecret } from '../config/environment.js';
 import { QUOTATION_ATTACHMENT_VISIBILITIES } from '../constants/quotationAttachments.js';
+import { normalizeQuotationPolicies } from '../config/quotationPolicyPresets.js';
 
 export const V2_TEMPLATES = Object.freeze(['minimal', 'journey', 'signature_luxe']);
 export const ATTACHMENT_VISIBILITIES = QUOTATION_ATTACHMENT_VISIBILITIES;
@@ -78,6 +79,15 @@ export const validateQuotationV2 = (quotation = {}, { forFinalization = false, f
   if (!quotation.transportOptions?.length) warnings.push(issue('transport', 'NO_TRANSPORT', 'No transportation has been added.'));
   if (!quotation.inclusions?.length) warnings.push(issue('inclusions', 'NO_INCLUSIONS', 'No inclusions have been added.'));
   if (!(quotation.itinerary || []).some((day) => day.coverMedia?.url)) warnings.push(issue('itinerary', 'NO_ITINERARY_IMAGES', 'No itinerary cover images have been selected.'));
+  if ((quotation.hotelOptions || []).some((item) => String(item.optionId || '').startsWith('ai_hotel_') && item.selected === true)) {
+    warnings.push(issue('hotels', 'AI_SUGGESTED_HOTEL_UNVERIFIED', 'Review availability, room allocation, meal plan, and supplier details for selected AI stay suggestions.'));
+  }
+  if ((quotation.transportOptions || []).some((item) => String(item.optionId || '').startsWith('ai_transport_') && item.selected === true)) {
+    warnings.push(issue('transport', 'TRANSPORT_REQUIRES_REVIEW', 'Confirm provider, route, schedule, and price for selected AI transport suggestions.'));
+  }
+  if ((quotation.activities || []).some((item) => String(item.activityId || '').startsWith('ai_act_') && item.selected === true)) {
+    warnings.push(issue('activities', 'ACTIVITY_REQUIRES_COMMERCIAL_REVIEW', 'Confirm inclusion and price for selected AI activity suggestions.'));
+  }
 
   const finalPrice = number(pricing.finalCustomerPrice);
   const deposit = number(pricing.depositAmount);
@@ -124,9 +134,9 @@ export const buildRevisionSnapshot = (quotation) => {
     attachments: value.attachments || [],
     inclusions: value.inclusions || [],
     exclusions: value.exclusions || [],
-    policies: value.policies || {},
-    termsAndConditions: value.termsAndConditions || [],
-    cancellationPolicy: value.cancellationPolicy || [],
+    policies: normalizeQuotationPolicies(value),
+    termsAndConditions: [],
+    cancellationPolicy: [],
     manualPricing: value.manualPricing || {},
     paymentTerms: value.paymentTerms || {},
     presentationSettings: value.presentationSettings || {},
@@ -286,18 +296,18 @@ export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
     tripRequirements: snapshot.tripRequirements,
     personalNote: snapshot.personalNote,
     itinerary: (snapshot.itinerary || []).map(publicItineraryDay),
-    hotelOptions: (snapshot.hotelOptions || []).map((item) => publicHotel(item, context)),
-    transportOptions: (snapshot.transportOptions || []).map((item) => publicTransport(item, context)),
-    activities: (snapshot.activities || []).map((item) => publicActivity(item, context)),
+    hotelOptions: (snapshot.hotelOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true)).map((item) => publicHotel(item, context)),
+    transportOptions: (snapshot.transportOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true)).map((item) => publicTransport(item, context)),
+    activities: (snapshot.activities || []).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true)).map((item) => publicActivity(item, context)),
     addOns: (snapshot.addOns || []).map((item) => publicAddOn(item, context)),
     attachments: showAttachments ? [...new Map([...(snapshot.attachments || []), ...(quotation.attachments || [])]
       .filter((attachment) => attachmentAllowed(attachment, context))
       .map((attachment) => [attachment.id, publicAttachment(attachment)])).values()] : [],
     inclusions: snapshot.inclusions,
     exclusions: snapshot.exclusions,
-    policies: snapshot.policies,
-    termsAndConditions: snapshot.termsAndConditions,
-    cancellationPolicy: snapshot.cancellationPolicy,
+    policies: normalizeQuotationPolicies(snapshot),
+    termsAndConditions: [],
+    cancellationPolicy: [],
     pricing: {
       currency: manual.currency || 'INR',
       finalCustomerPrice: number(manual.finalCustomerPrice),

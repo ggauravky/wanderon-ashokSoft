@@ -12,6 +12,7 @@ const QuotationBuilderPage = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const leadId = searchParams.get('leadId');
+  const itineraryId = searchParams.get('itineraryId');
   const navigate = useNavigate();
   const [lead, setLead] = useState(null);
   const [loadingLead, setLoadingLead] = useState(Boolean(!id && leadId));
@@ -80,6 +81,7 @@ const QuotationBuilderPage = () => {
       quotationId={id || null}
       initialQuotation={existingQuotation}
       initialLead={lead}
+      initialItineraryId={itineraryId}
       onClose={handleClose}
       onQuotationSaved={handleSaved}
     />

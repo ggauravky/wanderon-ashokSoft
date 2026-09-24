@@ -99,9 +99,9 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const approved = status === 'APPROVED' || Boolean(quotation.approval?.approvedAt);
   const booked = status === 'CONVERTED' || Boolean(quotation.bookingId);
   const itinerary = list(quotation.itinerary).map(safeItinerary);
-  const hotels = list(quotation.hotelOptions).map(safeHotel).sort((a, b) => priority(a) - priority(b));
-  const transport = list(quotation.transportOptions).map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
-  const activities = list(quotation.activities).map((item, index) => ({
+  const hotels = list(quotation.hotelOptions).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true)).map(safeHotel).sort((a, b) => priority(a) - priority(b));
+  const transport = list(quotation.transportOptions).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true)).map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
+  const activities = list(quotation.activities).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true)).map((item, index) => ({
     id: item.activityId || String(index), dayNumber: numeric(item.dayNumber), date: item.date || '', name: text(item.name),
     description: text(item.description), location: text(item.location), selected: item.selected !== false,
     optional: item.isOptional === true
@@ -197,11 +197,9 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
     inclusions: list(quotation.inclusions).map(text).filter(Boolean),
     exclusions: list(quotation.exclusions).map(text).filter(Boolean),
     policies: settings.showTerms ? {
-      paymentTerms: text(quotation.policies?.paymentTerms), cancellationPolicy: text(quotation.policies?.cancellationPolicy),
+      paymentTerms: text(quotation.policies?.paymentTerms), cancellationPolicy: text(quotation.policies?.cancellationPolicy || list(quotation.cancellationPolicy).map(text).filter(Boolean).join('\n')),
       refundNotes: text(quotation.policies?.refundNotes), travelRequirements: text(quotation.policies?.travelRequirements),
-      importantInformation: text(quotation.policies?.importantInformation), termsAndConditions: text(quotation.policies?.termsAndConditions),
-      legacyTerms: list(quotation.termsAndConditions).map(text).filter(Boolean),
-      legacyCancellation: list(quotation.cancellationPolicy).map(text).filter(Boolean)
+      importantInformation: text(quotation.policies?.importantInformation), termsAndConditions: text(quotation.policies?.termsAndConditions || list(quotation.termsAndConditions).map(text).filter(Boolean).join('\n'))
     } : {},
     attachments: [...new Map([...topLevelAttachments, ...nestedAttachments].map((item) => [item.id || item.secureUrl, item])).values()],
     advisor: settings.showAdvisor ? {

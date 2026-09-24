@@ -2,6 +2,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import mongoose from 'mongoose';
 import Itinerary from '../models/Itinerary.js';
 import Lead from '../models/Lead.js';
+import { getAllowedOrigins } from '../config/environment.js';
+import { loadAuthorizedLeadForStaff } from './leadAccessService.js';
+import { buildFactualInclusions, buildSafeExclusions } from './quotationFieldAiService.js';
 
 const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_DAYS = 21;
@@ -14,7 +17,7 @@ const SECTION_FIELDS = {
   transport: ['transportOptions'],
   activities: ['activities'],
   inclusions: ['inclusions', 'exclusions'],
-  terms: ['policies', 'termsAndConditions', 'cancellationPolicy'],
+  terms: ['policies'],
   presentation: ['personalNote']
 };
 
@@ -26,6 +29,7 @@ const list = (value, maxItems = 20, maxLength = 180) => (
 );
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
+const pick = (value, keys) => Object.fromEntries(keys.filter((key) => Object.prototype.hasOwnProperty.call(value || {}, key)).map((key) => [key, clone(value[key])]));
 
 const isPlainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const rejectPrototypeKeys = (value) => {
@@ -61,7 +65,6 @@ const activityLine = (activity = {}) => {
   return parts.join(' - ');
 };
 
-const slotText = (slot) => list(slot, MAX_ACTIVITIES_PER_SLOT, 260).map((item) => item).join('\n') || '';
 const slotObjectText = (slot) => (
   Array.isArray(slot)
     ? slot.slice(0, MAX_ACTIVITIES_PER_SLOT).map(activityLine).filter(Boolean).join('\n')
@@ -91,7 +94,7 @@ const itineraryDay = (day = {}, index = 0) => {
     afternoon: slotObjectText(day.afternoon),
     evening: slotObjectText(day.evening),
     stay: text(day.stay, 220),
-    mealsIncluded: ['Breakfast'],
+    mealsIncluded: list(day.mealsIncluded, 4, 50),
     transferDetails: '',
     activityHighlights: [
       ...(Array.isArray(day.morning) ? day.morning : []),
@@ -111,7 +114,7 @@ const travelStyle = (value = '') => {
   if (/budget/.test(normalized)) return 'Budget';
   if (/backpack/.test(normalized)) return 'Backpacking';
   if (/family/.test(normalized)) return 'Family';
-  if (/honeymoon|couple/.test(normalized)) return 'Honeymoon';
+  if (/honeymoon/.test(normalized)) return 'Honeymoon';
   if (/adventure|trek|bike/.test(normalized)) return 'Adventure';
   return 'Custom';
 };
@@ -144,10 +147,10 @@ const hotelCandidates = (itinerary = {}) => (
     city: text(itinerary.destination, 120),
     location: '',
     category: 'Suggested stay',
-    roomType: text(itinerary.plannerContext?.roomStyle, 100) || 'To be reviewed',
+    roomType: '',
     rooms: 1,
-    occupancy: 'Double Sharing',
-    mealPlan: 'MAP (Breakfast + Dinner)',
+    occupancy: '',
+    mealPlan: '',
     nights: Math.max(1, number(itinerary.duration, 2) - 1),
     costPerNight: 0,
     pricePerNight: 0,
@@ -180,8 +183,8 @@ const activityCandidates = (itinerary = {}) => {
           unitPrice: 0,
           totalCost: 0,
           totalPrice: 0,
-          isIncluded: true,
-          isOptional: false,
+          isIncluded: false,
+          isOptional: true,
           selected: false
         });
       });
@@ -258,22 +261,18 @@ export function buildDeterministicPatch(itinerary = {}) {
       infants: travelers.infants,
       totalTravelers: travelers.total,
       travelStyle: travelStyle(itinerary.travelStyle || itinerary.tripType),
-      budgetPerPerson: number(ctx.budgetAmount, 0),
+      budgetPerPerson: 0,
       specialRequests: special
     },
     itinerary: importedDays,
     hotelOptions: stayCandidates,
     transportOptions: transport ? [transport] : [],
     activities,
-    inclusions: [
-      'Accommodation as finalized by the WanderLuxe team',
-      'Daily itinerary planning and destination assistance',
-      'Travel coordination support from the assigned advisor'
-    ],
+    inclusions: [],
     exclusions: [
       'Flights, trains, and transport tickets unless explicitly included',
       'Personal expenses and optional activities not confirmed in the final quotation',
-      'Applicable taxes and fees unless specified in pricing'
+      'Services not expressly listed in the final inclusions'
     ],
     policies: {
       importantInformation: [
@@ -290,6 +289,35 @@ export function buildDeterministicPatch(itinerary = {}) {
     },
     personalNote: itinerary.tagline || ''
   };
+}
+
+export function sanitizeAiQuotationPatch(patch = {}) {
+  rejectPrototypeKeys(patch);
+  const safe = pick(patch, ['sourceItineraryId', 'personalNote', 'inclusions', 'exclusions']);
+  safe.tripRequirements = pick(patch.tripRequirements, [
+    'title', 'destination', 'startDate', 'endDate', 'duration', 'days', 'nights',
+    'adults', 'children', 'infants', 'totalTravelers', 'travelStyle', 'specialRequests'
+  ]);
+  safe.itinerary = (patch.itinerary || []).map((day) => pick(day, [
+    'day', 'title', 'locationName', 'destination', 'description', 'morning', 'afternoon',
+    'evening', 'stay', 'mealsIncluded', 'transferDetails', 'activityHighlights',
+    'coverMedia', 'coverMediaAssetId', 'galleryMedia', 'mediaSelectionMode'
+  ]));
+  safe.hotelOptions = (patch.hotelOptions || []).map((item) => ({ ...pick(item, [
+    'optionId', 'segmentId', 'segmentName', 'segmentOrder', 'tier', 'label', 'hotelName',
+    'city', 'location', 'category', 'roomType', 'rooms', 'occupancy', 'mealPlan', 'nights',
+    'imageUrl', 'amenities', 'notes', 'recommendationType'
+  ]), selected: false, costPerNight: 0, pricePerNight: 0, totalCost: 0, totalPrice: 0 }));
+  safe.transportOptions = (patch.transportOptions || []).map((item) => ({ ...pick(item, [
+    'optionId', 'mode', 'type', 'title', 'vehicle', 'pickup', 'drop', 'route',
+    'capacity', 'quantity', 'pricingType', 'notes'
+  ]), selected: false, unitCost: 0, unitPrice: 0, totalCost: 0, totalPrice: 0, inclusions: [] }));
+  safe.activities = (patch.activities || []).map((item) => ({ ...pick(item, [
+    'activityId', 'dayNumber', 'name', 'description', 'location', 'pricingType', 'quantity'
+  ]), selected: false, isIncluded: false, isOptional: true,
+  unitCost: 0, unitPrice: 0, totalCost: 0, totalPrice: 0 }));
+  safe.policies = pick(patch.policies, ['travelRequirements', 'importantInformation']);
+  return safe;
 }
 
 const empty = (value) => {
@@ -315,9 +343,9 @@ const fieldConflicts = (current = {}, patch = {}, prefix = '') => {
 
 export const detectConflicts = (currentQuotation = {}, patch = {}) => fieldConflicts(currentQuotation, patch);
 
-export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 'FILL_EMPTY_ONLY', selectedSections = [] }) {
+export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 'FILL_EMPTY_ONLY', selectedSections = [], conflictChoices = {} }) {
   const mode = MERGE_MODES.has(mergeMode) ? mergeMode : 'FILL_EMPTY_ONLY';
-  const selected = new Set(selectedSections.length ? selectedSections : Object.keys(SECTION_FIELDS));
+  const selected = new Set(Array.isArray(selectedSections) ? selectedSections : Object.keys(SECTION_FIELDS));
   const next = clone(quotation) || {};
   const appliedSections = [];
 
@@ -327,14 +355,24 @@ export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 
     fields.forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(patch, field)) return;
       if (mode === 'REPLACE_SELECTED_SECTIONS') {
-        next[field] = clone(patch[field]);
+        if (field === 'tripRequirements' || field === 'policies') {
+          next[field] = { ...(next[field] || {}), ...clone(patch[field]) };
+        } else if (['hotelOptions', 'transportOptions', 'activities'].includes(field)) {
+          const idField = { hotelOptions: 'optionId', transportOptions: 'optionId', activities: 'activityId' }[field];
+          const existing = next[field] || [];
+          const existingIds = new Set(existing.map((item) => item[idField]));
+          next[field] = [...existing, ...clone(patch[field]).filter((item) => !existingIds.has(item[idField]))];
+        } else {
+          next[field] = clone(patch[field]);
+        }
         changed = true;
         return;
       }
       if (field === 'tripRequirements') {
+        const starterJourney = !next.tripRequirements?.title && !next.tripRequirements?.destination;
         next.tripRequirements = { ...(next.tripRequirements || {}) };
         Object.entries(patch.tripRequirements || {}).forEach(([key, value]) => {
-          if (empty(next.tripRequirements[key]) && !empty(value)) {
+          if ((empty(next.tripRequirements[key]) || (starterJourney && ['days', 'nights', 'adults', 'children', 'infants', 'totalTravelers', 'duration'].includes(key))) && !empty(value)) {
             next.tripRequirements[key] = clone(value);
             changed = true;
           }
@@ -353,6 +391,20 @@ export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 
       }
     });
     if (changed) appliedSections.push(section);
+  });
+
+  const allowedConflictPaths = new Set(detectConflicts(quotation, patch).map((item) => item.field));
+  Object.entries(conflictChoices || {}).forEach(([path, choice]) => {
+    if (!allowedConflictPaths.has(path) || !['keep', 'use'].includes(choice)) return;
+    const root = path.split('.')[0];
+    if (['hotelOptions', 'transportOptions', 'activities', 'sourceItineraryId'].includes(root)) return;
+    if (!Object.entries(SECTION_FIELDS).some(([section, fields]) => selected.has(section) && fields.includes(root))) return;
+    const parts = path.split('.');
+    const source = choice === 'use' ? patch : quotation;
+    const value = parts.reduce((current, key) => current?.[key], source);
+    if (value === undefined) return;
+    if (parts.length === 1) next[root] = clone(value);
+    else if (parts.length === 2) next[root] = { ...(next[root] || {}), [parts[1]]: clone(value) };
   });
 
   return { quotation: next, appliedSections };
@@ -384,6 +436,25 @@ const validateJsonUpload = (payload) => {
   };
 };
 
+export function parseSharedItineraryToken(value) {
+  const raw = text(value, 500);
+  let shareToken = raw;
+  if (/^https?:\/\//i.test(raw)) {
+    const url = new URL(raw);
+    const configuredHosts = [...getAllowedOrigins()].flatMap((origin) => {
+      try { return [new URL(origin).hostname]; } catch { return []; }
+    });
+    const allowedHost = ['wanderluxe.in', 'www.wanderluxe.in', 'wanderluxe.com', 'www.wanderluxe.com',
+      'localhost', '127.0.0.1', ...configuredHosts].includes(url.hostname);
+    if (!allowedHost) throw Object.assign(new Error('Use a WanderLuxe shared-plan link.'), { status: 422 });
+    shareToken = url.pathname.match(/^\/itinerary\/shared\/([^/]+)\/?$/)?.[1] || '';
+  }
+  if (!/^[a-zA-Z0-9_-]{8,200}$/.test(shareToken)) {
+    throw Object.assign(new Error('A valid shared-plan token is required.'), { status: 422 });
+  }
+  return shareToken;
+}
+
 export async function resolveImportSource(request = {}, user) {
   const sourceType = request.sourceType || 'JSON_UPLOAD';
   if (sourceType === 'SAVED_ITINERARY') {
@@ -391,15 +462,17 @@ export async function resolveImportSource(request = {}, user) {
     return { type: sourceType, itinerary };
   }
   if (sourceType === 'SHARED_ITINERARY') {
-    const shareToken = text(request.shareToken, 200);
+    const shareToken = parseSharedItineraryToken(request.shareToken);
     const doc = await Itinerary.findOne({ shareToken, isPublic: true }).select('-user -userEmail -__v');
     if (!doc) throw Object.assign(new Error('Shared AI itinerary not found or sharing is disabled.'), { status: 404 });
     return { type: sourceType, itinerary: doc.toObject() };
   }
   if (sourceType === 'LEAD_LINKED_ITINERARY') {
-    const lead = await Lead.findById(request.leadId).populate('sourceItineraryId');
-    if (!lead || !lead.sourceItineraryId) throw Object.assign(new Error('This lead does not have a linked AI itinerary.'), { status: 404 });
-    return { type: sourceType, itinerary: lead.sourceItineraryId.toObject ? lead.sourceItineraryId.toObject() : lead.sourceItineraryId };
+    const lead = await loadAuthorizedLeadForStaff(request.leadId, user);
+    if (!lead.sourceItineraryId) throw Object.assign(new Error('This lead does not have a linked AI itinerary.'), { status: 404 });
+    const itinerary = await Itinerary.findById(lead.sourceItineraryId);
+    if (!itinerary) throw Object.assign(new Error('Linked AI itinerary was removed.'), { status: 404 });
+    return { type: sourceType, itinerary: itinerary.toObject() };
   }
   if (sourceType === 'JSON_UPLOAD') {
     return { type: sourceType, itinerary: validateJsonUpload(request.itineraryPayload) };
@@ -412,7 +485,8 @@ export async function buildQuotationAiImportPreview({ request = {}, user }) {
   if (!Array.isArray(itinerary.days) || itinerary.days.length > MAX_DAYS) {
     throw Object.assign(new Error(`AI itinerary must include ${MAX_DAYS} days or fewer.`), { status: 422 });
   }
-  const patch = buildDeterministicPatch(itinerary);
+  const patch = sanitizeAiQuotationPatch(buildDeterministicPatch(itinerary));
+  if (type === 'JSON_UPLOAD') delete patch.sourceItineraryId;
   const conflicts = detectConflicts(request.currentQuotation || {}, patch);
   const warnings = [];
   if (!itinerary.plannerContext || Object.keys(itinerary.plannerContext || {}).length === 0) {
@@ -456,6 +530,35 @@ export async function buildQuotationAiImportPreview({ request = {}, user }) {
   };
 }
 
+export async function listImportableItineraries(user, search = '') {
+  const role = String(user?.role || '').toLowerCase();
+  const leadFilter = ['admin', 'super_admin'].includes(role)
+    ? { sourceItineraryId: { $ne: null } }
+    : { sourceItineraryId: { $ne: null }, $or: [
+      { leadType: 'callback_request' }, { leadType: 'trip_enquiry', source: 'ai_planner' }
+    ] };
+  const leads = await Lead.find(leadFilter).select('_id sourceItineraryId').sort({ updatedAt: -1 }).limit(100).lean();
+  const ids = [...new Set(leads.map((lead) => String(lead.sourceItineraryId)).filter(Boolean))];
+  const needle = text(search, 80);
+  const ownId = mongoose.Types.ObjectId.isValid(user?._id || user?.id) ? (user._id || user.id) : null;
+  const filter = { $and: [{ $or: [
+    { _id: { $in: ids } },
+    ...(ownId ? [{ user: ownId }] : [])
+  ] }] };
+  if (needle) filter.$and.push({ $or: [
+    { title: { $regex: needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+    { destination: { $regex: needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
+  ] });
+  const docs = await Itinerary.find(filter).select('title destination duration travelers updatedAt').sort({ updatedAt: -1 }).limit(30).lean();
+  return docs.map((doc) => ({
+    itineraryId: String(doc._id),
+    leadId: String(leads.find((lead) => String(lead.sourceItineraryId) === String(doc._id))?._id || ''),
+    title: doc.title, destination: doc.destination, duration: doc.duration,
+    travelers: doc.travelers, updatedAt: doc.updatedAt,
+    source: leads.some((lead) => String(lead.sourceItineraryId) === String(doc._id)) ? 'Lead linked plan' : 'Staff owned plan'
+  }));
+}
+
 const allowedDraftFields = new Set([
   'personalNote',
   'journeyTitle',
@@ -463,36 +566,10 @@ const allowedDraftFields = new Set([
   'inclusions',
   'exclusions',
   'travelRequirements',
-  'importantInformation',
-  'termsAndConditions',
-  'cancellationPolicy'
+  'importantInformation'
 ]);
 
-const fallbackDrafts = (quotation = {}, fields = []) => {
-  const trip = quotation.tripRequirements || {};
-  const destination = trip.destination || 'your journey';
-  const requested = fields.length ? fields : [...allowedDraftFields];
-  const drafts = {};
-  requested.forEach((field) => {
-    if (!allowedDraftFields.has(field)) return;
-    if (field === 'personalNote') drafts.personalNote = `A thoughtfully paced ${destination} journey shaped around your travel preferences, with final stays, transport, and pricing confirmed by the WanderLuxe team.`;
-    if (field === 'journeyTitle') drafts.journeyTitle = `${destination} Custom Journey`;
-    if (field === 'inclusions') drafts.inclusions = ['Curated day-wise itinerary planning', 'Advisor support before departure', 'Stay and transport options reviewed by the team'];
-    if (field === 'exclusions') drafts.exclusions = ['Flights or train tickets unless explicitly included', 'Personal expenses and optional activities', 'Taxes or fees not listed in the final pricing'];
-    if (field === 'travelRequirements') drafts.travelRequirements = 'Carry valid government ID, weather-appropriate clothing, and any personal medication. Permits and special requirements will be confirmed before departure.';
-    if (field === 'importantInformation') drafts.importantInformation = 'Availability, routing, and final inclusions are subject to staff confirmation. Commercial pricing is finalized only by Admin.';
-    if (field === 'termsAndConditions') drafts.termsAndConditions = quotation.termsAndConditions || [];
-    if (field === 'cancellationPolicy') drafts.cancellationPolicy = quotation.cancellationPolicy || [];
-    if (field === 'dayDescriptions') drafts.dayDescriptions = (quotation.itinerary || []).map((day) => ({
-      day: day.day,
-      description: day.description || `${day.title || `Day ${day.day}`} is planned around ${day.destination || destination}, with staff-reviewed pacing and logistics.`
-    }));
-  });
-  return drafts;
-};
-
-const sanitizeDrafts = (value = {}, fallback = {}) => ({
-  ...fallback,
+const sanitizeDrafts = (value = {}) => ({
   ...(text(value.personalNote, 1200) ? { personalNote: text(value.personalNote, 1200) } : {}),
   ...(text(value.journeyTitle, 180) ? { journeyTitle: text(value.journeyTitle, 180) } : {}),
   ...(Array.isArray(value.dayDescriptions) ? {
@@ -504,22 +581,22 @@ const sanitizeDrafts = (value = {}, fallback = {}) => ({
   ...(Array.isArray(value.inclusions) ? { inclusions: list(value.inclusions, 20, 220) } : {}),
   ...(Array.isArray(value.exclusions) ? { exclusions: list(value.exclusions, 20, 220) } : {}),
   ...(text(value.travelRequirements, 1600) ? { travelRequirements: text(value.travelRequirements, 1600) } : {}),
-  ...(text(value.importantInformation, 1600) ? { importantInformation: text(value.importantInformation, 1600) } : {}),
-  ...(Array.isArray(value.termsAndConditions) ? { termsAndConditions: list(value.termsAndConditions, 20, 260) } : {}),
-  ...(Array.isArray(value.cancellationPolicy) ? { cancellationPolicy: list(value.cancellationPolicy, 20, 260) } : {})
+  ...(text(value.importantInformation, 1600) ? { importantInformation: text(value.importantInformation, 1600) } : {})
 });
 
 export async function generateQuotationTextDrafts({ quotation = {}, itinerary = null, fields = [] }) {
   const requested = (Array.isArray(fields) ? fields : []).filter((field) => allowedDraftFields.has(field));
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {
-    return { available: false, reason: 'Gemini API key is not configured.', drafts: fallbackDrafts(quotation, requested) };
+    return { available: false, reason: 'AI writing is unavailable. Safe defaults remain available.', drafts: {} };
   }
 
   const compact = {
     fields: requested,
     quotation: {
-      tripRequirements: quotation.tripRequirements || {},
+      tripRequirements: pick(quotation.tripRequirements, [
+        'title', 'destination', 'duration', 'days', 'nights', 'travelStyle', 'specialRequests'
+      ]),
       itinerary: (quotation.itinerary || []).map((day) => ({
         day: day.day,
         title: day.title,
@@ -531,15 +608,13 @@ export async function generateQuotationTextDrafts({ quotation = {}, itinerary = 
       })),
       inclusions: quotation.inclusions || [],
       exclusions: quotation.exclusions || [],
-      termsAndConditions: quotation.termsAndConditions || [],
-      cancellationPolicy: quotation.cancellationPolicy || [],
-      paymentTerms: quotation.paymentTerms || {}
+      policies: pick(quotation.policies, ['travelRequirements', 'importantInformation'])
     },
     sourceItinerary: itinerary ? {
       title: itinerary.title,
       tagline: itinerary.tagline,
       destination: itinerary.destination,
-      plannerContext: itinerary.plannerContext || {}
+      plannerContext: pick(itinerary.plannerContext, ['paceRhythm', 'interests', 'stayPreference'])
     } : null
   };
 
@@ -559,9 +634,11 @@ SOURCE_DATA:
 ${JSON.stringify(compact)}`;
     const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
-    const fallback = fallbackDrafts(quotation, requested);
-    return { available: true, drafts: sanitizeDrafts(parsed, fallback) };
+    const drafts = sanitizeDrafts(parsed);
+    if (requested.includes('inclusions')) drafts.inclusions = buildFactualInclusions(quotation);
+    if (requested.includes('exclusions')) drafts.exclusions = buildSafeExclusions();
+    return { available: true, drafts };
   } catch (error) {
-    return { available: false, reason: error.message, drafts: fallbackDrafts(quotation, requested) };
+    return { available: false, reason: 'AI writing is unavailable or returned invalid wording.', drafts: {} };
   }
 }
