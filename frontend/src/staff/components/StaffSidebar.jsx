@@ -18,7 +18,9 @@ import {
   Tags,
   BarChart3,
   ClipboardList,
-  Handshake
+  Handshake,
+  ListChecks,
+  Siren
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -36,6 +38,8 @@ const ICONS = {
   admin_discounts: Tags,
   operations: Compass,
   operations_trips: ClipboardList,
+  operations_tasks: ListChecks,
+  operations_issues: Siren,
   operations_vendors: Handshake,
   sales: Headphones,
   expert_requests: PhoneCall,

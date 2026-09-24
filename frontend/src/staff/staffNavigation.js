@@ -141,6 +141,26 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
+    id: 'operations_tasks',
+    label: 'Tasks',
+    path: '/staff/operations/tasks',
+    icon: 'operations_tasks',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Coordinate shared pre-trip and live journey work.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'operations_issues',
+    label: 'Issues & Emergencies',
+    path: '/staff/operations/issues',
+    icon: 'operations_issues',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Own operational problems, escalation, and resolution history.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'operations_vendors',
     label: 'Vendors',
     path: '/staff/operations/vendors',

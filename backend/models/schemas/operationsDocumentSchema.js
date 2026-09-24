@@ -14,6 +14,7 @@ export const OPERATIONS_DOCUMENT_TYPES = Object.freeze([
   'CONFIRMATION',
   'PERMIT',
   'DRIVER_DOCUMENT',
+  'INCIDENT_EVIDENCE',
   'OTHER'
 ]);
 

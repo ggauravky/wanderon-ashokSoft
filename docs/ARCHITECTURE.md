@@ -167,7 +167,7 @@ The application defines 7 explicit user roles:
 | `admin` | Staff | Full administrative control: trips, bookings, team analytics, media library. |
 | `sales` | Staff | Sales portal: leads, expert inquiries, quotation builder, and customer bookings. |
 | `marketing` | Staff | Marketing workspace: campaigns, banners, and lead acquisition analytics. |
-| `operations` | Staff | Operations Control Center for confirmed departure monitoring, trip execution, service confirmation, coordinators, and the Vendor directory. |
+| `operations` | Staff | Operations Control Center for confirmed departure monitoring, trip execution, team tasks, customer update history, Incidents, coordinators, and the Vendor directory. |
 | `user` | Customer | Standard traveler account for browsing, booking, and profile history. |
 | `influencer` | Creator | Affiliate / creator account for promo codes, referral tracking, and earnings. |
 
@@ -184,7 +184,7 @@ The staff portal is accessed at `/staff/*` and is organized around `StaffShell`:
 ```text
 /staff/
 ├── admin/          # Admin Overview, Analytics, Trips, Bookings, Media Library, Users
-├── operations/     # Live dashboard, Trip Execution, and Vendor directory
+├── operations/     # Live dashboard, Trip Execution, Tasks, Issues, and Vendors
 ├── sales/          # Shared Sales Queue, Expert Requests, Quotations, Bookings
 └── marketing/      # Marketing Overview, Campaign Management, Banners, Analytics
 ```
@@ -193,8 +193,10 @@ The staff portal is accessed at `/staff/*` and is organized around `StaffShell`:
 - **Access Guard**: `frontend/src/staff/staffAccess.js` determines which navigation items are visible and guards routes against unauthorized access based on role capabilities.
 - **Operations Phase 1 read model**: `/staff/operations` derives operational departure membership, timing, traveler load, payment state, and evidence-backed attention from authoritative `Booking` and `Trip` records. Catalog bookings sharing one Trip batch are grouped; custom quotation bookings remain separate. Dashboard GET requests do not create execution records.
 - **Operations Phase 2 execution layer**: `/staff/operations/trips` materializes one `OperationalTrip` only when authorized Staff selects **Open Execution**. The existing Phase 1 `operationKey` is the unique identity, while current Booking membership continues to be resolved from the live read model. `OperationalService` records hold factual Hotel, Transport, Activity, and Guide execution state; `Vendor` is the reusable supplier directory. Required-service confirmation state derives `NOT_CONFIGURED`, `IN_PROGRESS`, or `READY` rather than accepting a manual readiness toggle.
+- **Operations Phase 3 coordination layer**: `OperationalTask` represents human work with explicit start/block/complete/reopen/cancel transitions and an idempotent standard checklist. `OperationalCommunication` is append-only evidence of communication that already occurred; it is not a messaging provider. `OperationalIncident` owns scope, severity, assignment, escalation, resolution, documents, follow-up links, and its audit timeline. Small immutable context snapshots keep global `/staff/operations/tasks` and `/staff/operations/issues` lists understandable without N+1 read-model joins.
+- **Readiness separation**: `executionReadiness` continues to mean only required service confirmation. Tasks and Incidents add `taskSummary`, `incidentSummary`, and factual attention reasons, but an overdue task does not turn a service-ready departure into `IN_PROGRESS`.
 - **Custom quotation handoff**: The first materialization seeds services from the immutable `Booking.quotationSnapshot` with unique service keys and `$setOnInsert`; repeated ensures cannot duplicate services or overwrite operator edits. Provider names are retained only as source context and are never matched automatically to a Vendor.
-- **Operations security boundary**: Operations APIs and internal documents are limited to `operations`, `admin`, and `super_admin`. Source handoff DTOs remove supplier costs, margins, tokens, and other commercial/security internals. Phase 3 tasks/incidents and Phase 4 expenses/settlements/reports remain deferred.
+- **Operations security boundary**: Operations APIs and internal documents are limited to `operations`, `admin`, and `super_admin`. Source handoff DTOs remove supplier costs, margins, tokens, and other commercial/security internals. Communication and Incident notes are never exposed through public routes. Phase 4 expenses, payables, settlements, profitability, feedback, trip closure, and post-trip reports remain deferred.
 
 ---
 

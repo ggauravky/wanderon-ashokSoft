@@ -14,7 +14,20 @@ const PHASE_TONES = {
   ACTIVE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   INACTIVE: 'border-slate-300 bg-slate-100 text-slate-600',
   HIGH: 'border-rose-200 bg-rose-50 text-rose-700',
-  MEDIUM: 'border-amber-200 bg-amber-50 text-amber-800'
+  CRITICAL: 'border-rose-300 bg-rose-100 text-rose-800',
+  MEDIUM: 'border-amber-200 bg-amber-50 text-amber-800',
+  LOW: 'border-sky-200 bg-sky-50 text-sky-700',
+  NORMAL: 'border-slate-200 bg-slate-50 text-slate-700',
+  TODO: 'border-slate-200 bg-slate-50 text-slate-700',
+  BLOCKED: 'border-rose-200 bg-rose-50 text-rose-700',
+  OPEN: 'border-rose-200 bg-rose-50 text-rose-700',
+  RESOLVED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  CLOSED: 'border-slate-300 bg-slate-100 text-slate-600',
+  ESCALATED: 'border-rose-300 bg-rose-100 text-rose-800',
+  ACKNOWLEDGED: 'border-amber-200 bg-amber-50 text-amber-800',
+  NONE: 'border-slate-200 bg-slate-50 text-slate-500',
+  OUTBOUND: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  INBOUND: 'border-sky-200 bg-sky-50 text-sky-700'
 };
 
 export default function OperationsStatusBadge({ value }) {

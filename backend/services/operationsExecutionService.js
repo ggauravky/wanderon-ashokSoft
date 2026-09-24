@@ -355,6 +355,7 @@ export const sanitizeSourceHandoff = (value) => {
 };
 
 export const buildExecutionBookingDto = (booking) => ({
+  _id: booking._id,
   bookingId: booking.bookingId,
   customer: {
     name: booking.customer?.name || '',

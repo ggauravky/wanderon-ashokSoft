@@ -70,6 +70,9 @@ const TeamAnalyticsWorkspace = lazy(() => import('./staff/modules/admin/teamAnal
 const OperationsOverview = lazy(() => import('./staff/modules/operations/OperationsOverview'));
 const OperationsTripsWorkspace = lazy(() => import('./staff/modules/operations/trips/OperationsTripsWorkspace'));
 const OperationsTripDetail = lazy(() => import('./staff/modules/operations/trips/OperationsTripDetail'));
+const OperationsTasksWorkspace = lazy(() => import('./staff/modules/operations/tasks/OperationsTasksWorkspace'));
+const OperationsIssuesWorkspace = lazy(() => import('./staff/modules/operations/issues/OperationsIssuesWorkspace'));
+const OperationalIncidentDetail = lazy(() => import('./staff/modules/operations/issues/OperationalIncidentDetail'));
 const VendorsWorkspace = lazy(() => import('./staff/modules/operations/vendors/VendorsWorkspace'));
 const VendorEditor = lazy(() => import('./staff/modules/operations/vendors/VendorEditor'));
 const VendorDetail = lazy(() => import('./staff/modules/operations/vendors/VendorDetail'));
@@ -117,6 +120,9 @@ function App() {
             <Route path="operations" element={<StaffModuleRoute moduleId="operations"><OperationsOverview /></StaffModuleRoute>} />
             <Route path="operations/trips" element={<StaffModuleRoute moduleId="operations_trips"><OperationsTripsWorkspace /></StaffModuleRoute>} />
             <Route path="operations/trips/:id" element={<StaffModuleRoute moduleId="operations_trips"><OperationsTripDetail /></StaffModuleRoute>} />
+            <Route path="operations/tasks" element={<StaffModuleRoute moduleId="operations_tasks"><OperationsTasksWorkspace /></StaffModuleRoute>} />
+            <Route path="operations/issues" element={<StaffModuleRoute moduleId="operations_issues"><OperationsIssuesWorkspace /></StaffModuleRoute>} />
+            <Route path="operations/issues/:incidentId" element={<StaffModuleRoute moduleId="operations_issues"><OperationalIncidentDetail /></StaffModuleRoute>} />
             <Route path="operations/vendors" element={<StaffModuleRoute moduleId="operations_vendors"><VendorsWorkspace /></StaffModuleRoute>} />
             <Route path="operations/vendors/new" element={<StaffModuleRoute moduleId="operations_vendors"><VendorEditor /></StaffModuleRoute>} />
             <Route path="operations/vendors/:id" element={<StaffModuleRoute moduleId="operations_vendors"><VendorDetail /></StaffModuleRoute>} />

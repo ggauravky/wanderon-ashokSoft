@@ -1,0 +1,24 @@
+import { useState } from 'react';
+import OperationsDialog from './OperationsDialog.jsx';
+
+const localDateTime = (value) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+
+export default function TaskFormModal({ initial = null, coordinators = [], services = [], incidents = [], bookings = [], defaultIncidentId = '', onClose, onSave }) {
+  const [form, setForm] = useState({
+    title: initial?.title || (defaultIncidentId ? 'Follow up on operational incident' : ''), description: initial?.description || '', category: initial?.category || 'GENERAL', priority: initial?.priority || 'NORMAL',
+    assignedTo: initial?.assignedTo?._id || initial?.assignedTo || '', dueAt: localDateTime(initial?.dueAt), linkedServiceId: initial?.linkedServiceId || '', linkedIncidentId: initial?.linkedIncidentId || defaultIncidentId,
+    linkedBookingId: initial?.linkedBookingId || '', updatedAt: initial?.updatedAt
+  });
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  const update = (key) => (event) => setForm((value) => ({ ...value, [key]: event.target.value }));
+  const submit = async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await onSave({ ...form, dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null }); onClose(); } catch (requestError) { setError(requestError.message || 'Unable to save the task.'); } finally { setBusy(false); } };
+  const field = 'mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-500';
+  return <OperationsDialog title={initial ? 'Edit task' : defaultIncidentId ? 'Create follow-up task' : 'Add task'} description="Human coordination work only; service confirmation remains in fulfillment." onClose={onClose} wide footer={<><button type="button" onClick={onClose} className="min-h-10 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700">Cancel</button><button form="task-form" disabled={busy} className="min-h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : 'Save task'}</button></>}>
+    <form id="task-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2 text-sm font-medium text-slate-700">Title<input required maxLength="220" autoFocus value={form.title} onChange={update('title')} className={field}/></label><label className="sm:col-span-2 text-sm font-medium text-slate-700">Description<textarea rows="3" maxLength="3000" value={form.description} onChange={update('description')} className={`${field} py-2`}/></label>
+      <label className="text-sm font-medium text-slate-700">Category<select value={form.category} onChange={update('category')} className={field}><option value="PRE_TRIP">Pre-trip</option><option value="DURING_TRIP">During trip</option><option value="GENERAL">General</option></select></label><label className="text-sm font-medium text-slate-700">Priority<select value={form.priority} onChange={update('priority')} className={field}><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>CRITICAL</option></select></label>
+      <label className="text-sm font-medium text-slate-700">Assignee<select value={form.assignedTo} onChange={update('assignedTo')} className={field}><option value="">Unassigned</option>{coordinators.map((person) => <option key={person._id} value={person._id}>{person.name} · {person.role}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Due date &amp; time<input type="datetime-local" value={form.dueAt} onChange={update('dueAt')} className={field}/></label>
+      <label className="text-sm font-medium text-slate-700">Linked service<select value={form.linkedServiceId} onChange={update('linkedServiceId')} className={field}><option value="">None</option>{services.map((service) => <option key={service._id} value={service._id}>{service.serviceType} · {service.title}</option>)}</select></label><label className="text-sm font-medium text-slate-700">Linked booking<select value={form.linkedBookingId} onChange={update('linkedBookingId')} className={field}><option value="">None</option>{bookings.map((booking) => <option key={booking._id} value={booking._id}>{booking.bookingId} · {booking.customer?.name || 'Traveler'}</option>)}</select></label>
+      <label className="sm:col-span-2 text-sm font-medium text-slate-700">Linked incident<select value={form.linkedIncidentId} onChange={update('linkedIncidentId')} className={field}><option value="">None</option>{incidents.map((incident) => <option key={incident._id} value={incident._id}>{incident.incidentCode} · {incident.title}</option>)}</select></label>{error && <p role="alert" className="sm:col-span-2 text-sm text-rose-700">{error}</p>}
+    </form>
+  </OperationsDialog>;
+}

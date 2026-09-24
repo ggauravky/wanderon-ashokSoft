@@ -1350,6 +1350,30 @@ export const getOperationsVendorApi = (vendorId) => operationsRequest(`/vendors/
 export const createOperationsVendorApi = (payload) => operationsRequest('/vendors', { method: 'POST', body: JSON.stringify(payload) });
 export const updateOperationsVendorApi = (vendorId, payload) => operationsRequest(`/vendors/${encodeURIComponent(vendorId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const updateOperationsVendorStatusApi = (vendorId, status) => operationsRequest(`/vendors/${encodeURIComponent(vendorId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+export const getOperationsTasksApi = (params = {}) => operationsRequest(`/tasks${operationsQuery(params)}`);
+export const getOperationalTripTasksApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks`);
+export const initializeOperationalChecklistApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/checklist/initialize`, { method: 'POST' });
+export const createOperationalTaskApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks`, { method: 'POST', body: JSON.stringify(payload) });
+export const updateOperationalTaskApi = (operationId, taskId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const startOperationalTaskApi = (operationId, taskId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}/start`, { method: 'POST' });
+export const blockOperationalTaskApi = (operationId, taskId, reason) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}/block`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const completeOperationalTaskApi = (operationId, taskId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}/complete`, { method: 'POST' });
+export const reopenOperationalTaskApi = (operationId, taskId, reason, toStatus = 'TODO') => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}/reopen`, { method: 'POST', body: JSON.stringify({ reason, toStatus }) });
+export const cancelOperationalTaskApi = (operationId, taskId, reason) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const getOperationalCommunicationsApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/communications`);
+export const createOperationalCommunicationApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/communications`, { method: 'POST', body: JSON.stringify(payload) });
+export const getOperationsIncidentsApi = (params = {}) => operationsRequest(`/incidents${operationsQuery(params)}`);
+export const getOperationalTripIncidentsApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/incidents`);
+export const createOperationalIncidentApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/incidents`, { method: 'POST', body: JSON.stringify(payload) });
+export const getOperationalIncidentApi = (incidentId) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}`);
+export const updateOperationalIncidentApi = (incidentId, payload) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const assignOperationalIncidentApi = (incidentId, assignedTo) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/assign`, { method: 'POST', body: JSON.stringify({ assignedTo }) });
+export const startOperationalIncidentApi = (incidentId) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/start`, { method: 'POST' });
+export const escalateOperationalIncidentApi = (incidentId, note) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/escalate`, { method: 'POST', body: JSON.stringify({ note }) });
+export const acknowledgeOperationalIncidentApi = (incidentId) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/acknowledge`, { method: 'POST' });
+export const resolveOperationalIncidentApi = (incidentId, resolutionSummary) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/resolve`, { method: 'POST', body: JSON.stringify({ resolutionSummary }) });
+export const closeOperationalIncidentApi = (incidentId) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/close`, { method: 'POST' });
+export const reopenOperationalIncidentApi = (incidentId, reason) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/reopen`, { method: 'POST', body: JSON.stringify({ reason }) });
 
 export async function uploadOperationsDocumentApi(file, metadata = {}) {
   const formData = new FormData();

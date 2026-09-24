@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import OperationalTrip from '../models/OperationalTrip.js';
 import OperationalService from '../models/OperationalService.js';
+import OperationalTask from '../models/OperationalTask.js';
+import OperationalIncident from '../models/OperationalIncident.js';
+import OperationalCommunication from '../models/OperationalCommunication.js';
 import Vendor from '../models/Vendor.js';
 import User from '../models/User.js';
 import { OPERATIONS_DOCUMENT_TYPES } from '../models/schemas/operationsDocumentSchema.js';
@@ -28,6 +31,9 @@ import {
 } from '../services/operationsExecutionService.js';
 import { isValidMongoObjectId } from '../utils/mongoId.js';
 import { uploadDocument } from '../utils/cloudinaryService.js';
+import { enrichGroupsWithCoordination } from '../services/operationsCoordinationService.js';
+import { deriveTaskDueState, summarizeTasks } from '../services/operationsTaskService.js';
+import { summarizeIncidents } from '../services/operationsIncidentService.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const fail = (res, status, message, code) => res.status(status).json({ success: false, message, ...(code ? { code } : {}) });
@@ -86,8 +92,21 @@ const loadExecutionView = async (operationId) => {
   const group = resolveOperationalGroup(readModel, operationalTrip.operationKey);
   if (!group) throw new OperationsDomainError(409, 'The source Booking is no longer an eligible Operations handoff.', 'SOURCE_HANDOFF_UNAVAILABLE');
   const bookings = bookingsForOperationalGroup(readModel, group);
-  const services = await OperationalService.find({ operationalTripId: operationalTrip._id }).sort({ serviceType: 1, createdAt: 1 }).lean();
-  return executionView({ operationalTrip, group, bookings, services, readModel });
+  const [services, tasks, incidents, communicationSummary] = await Promise.all([
+    OperationalService.find({ operationalTripId: operationalTrip._id }).sort({ serviceType: 1, createdAt: 1 }).lean(),
+    OperationalTask.find({ operationalTripId: operationalTrip._id }).select('status priority dueAt assignedTo').lean(),
+    OperationalIncident.find({ operationalTripId: operationalTrip._id }).select('status severity escalation resolvedAt').lean(),
+    OperationalCommunication.aggregate([
+      { $match: { operationalTripId: operationalTrip._id } },
+      { $group: { _id: null, count: { $sum: 1 }, latestAt: { $max: '$occurredAt' } } }
+    ])
+  ]);
+  return {
+    ...executionView({ operationalTrip, group, bookings, services, readModel }),
+    taskSummary: summarizeTasks(tasks),
+    incidentSummary: summarizeIncidents(incidents),
+    communicationSummary: communicationSummary[0] ? { count: communicationSummary[0].count, latestAt: communicationSummary[0].latestAt } : { count: 0, latestAt: null }
+  };
 };
 
 export const getOperationsDashboard = async (req, res) => {
@@ -101,9 +120,14 @@ export const getOperationsDashboard = async (req, res) => {
       Vendor.countDocuments({ status: 'ACTIVE' })
     ]);
     const operationIds = operationalTrips.map((trip) => trip._id);
-    const services = operationIds.length ? await OperationalService.find({ operationalTripId: { $in: operationIds } }).lean() : [];
+    const [services, tasks, incidents] = operationIds.length ? await Promise.all([
+      OperationalService.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalTask.find({ operationalTripId: { $in: operationIds } }).populate('assignedTo', 'name role').lean(),
+      OperationalIncident.find({ operationalTripId: { $in: operationIds } }).populate('assignedTo', 'name role').lean()
+    ]) : [[], [], []];
     const base = summarizeOperationsDashboard(readModel.bookings, readModel.tripLookups, { now: readModel.now, awaitingHandoff });
-    const enriched = enrichOperationalGroups(readModel.groups, operationalTrips, services);
+    const executionEnriched = enrichOperationalGroups(readModel.groups, operationalTrips, services);
+    const enriched = enrichGroupsWithCoordination(executionEnriched, tasks, incidents, readModel.now);
     const byKey = new Map(enriched.map((group) => [group.operationKey, group]));
     const section = (groups) => groups.map((group) => byKey.get(group.operationKey) || group);
     const attention = enriched
@@ -114,8 +138,24 @@ export const getOperationsDashboard = async (req, res) => {
       summary: {
         ...base.summary,
         attentionRequired: attention.length,
-        ...executionMetricsFor(enriched, activeVendors)
+        ...executionMetricsFor(enriched, activeVendors),
+        openTasks: tasks.filter((task) => !['COMPLETED', 'CANCELLED'].includes(task.status)).length,
+        overdueTasks: tasks.filter((task) => deriveTaskDueState(task, readModel.now) === 'OVERDUE').length,
+        openIncidents: incidents.filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status)).length,
+        criticalIncidents: incidents.filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status) && incident.severity === 'CRITICAL').length
       },
+      urgentTasks: tasks
+        .filter((task) => !['COMPLETED', 'CANCELLED'].includes(task.status) && (
+          deriveTaskDueState(task, readModel.now) === 'OVERDUE'
+          || task.priority === 'CRITICAL'
+          || (task.priority === 'HIGH' && task.dueAt && new Date(task.dueAt) <= new Date(readModel.now.getTime() + 3 * 86400000))
+        ))
+        .sort((left, right) => Number(new Date(left.dueAt || '9999-12-31')) - Number(new Date(right.dueAt || '9999-12-31')))
+        .slice(0, 8),
+      activeIncidents: incidents
+        .filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status))
+        .sort((left, right) => ({ CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 }[right.severity] - { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 }[left.severity]) || new Date(right.reportedAt) - new Date(left.reportedAt))
+        .slice(0, 8),
       attention,
       ongoing: section(base.ongoing),
       upcoming: section(base.upcoming),
@@ -138,8 +178,12 @@ export const listOperationalTrips = async (req, res) => {
       .populate('coordinatorId', 'name email role isActive')
       .lean();
     const operationIds = operationalTrips.map((trip) => trip._id);
-    const services = operationIds.length ? await OperationalService.find({ operationalTripId: { $in: operationIds } }).lean() : [];
-    let rows = enrichOperationalGroups(readModel.groups, operationalTrips, services);
+    const [services, tasks, incidents] = operationIds.length ? await Promise.all([
+      OperationalService.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalTask.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalIncident.find({ operationalTripId: { $in: operationIds } }).lean()
+    ]) : [[], [], []];
+    let rows = enrichGroupsWithCoordination(enrichOperationalGroups(readModel.groups, operationalTrips, services), tasks, incidents, readModel.now);
     const search = String(req.query.search || '').trim().toLowerCase();
     const phase = String(req.query.phase || 'all').toUpperCase();
     const readiness = String(req.query.readiness || 'all').toUpperCase();

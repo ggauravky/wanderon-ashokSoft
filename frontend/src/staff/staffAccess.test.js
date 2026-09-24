@@ -11,7 +11,7 @@ import {
 const visibleLabels = (role) => getVisibleStaffModules(role).map((module) => module.label);
 
 test('administrators see every department workspace', () => {
-  const expected = ['Overview', 'Admin Overview', 'Team Analytics', 'Trips', 'Bookings', 'Media Library', 'Pages', 'Users & Roles', 'Creator Approvals', 'Payouts', 'Discounts', 'Operations Overview', 'Trip Execution', 'Vendors', 'Sales Overview', 'Expert Requests', 'Quotations', 'Bookings', 'Marketing Overview', 'Lead & Conversion Analytics', 'Campaigns', 'Banners & Promotions'];
+  const expected = ['Overview', 'Admin Overview', 'Team Analytics', 'Trips', 'Bookings', 'Media Library', 'Pages', 'Users & Roles', 'Creator Approvals', 'Payouts', 'Discounts', 'Operations Overview', 'Trip Execution', 'Tasks', 'Issues & Emergencies', 'Vendors', 'Sales Overview', 'Expert Requests', 'Quotations', 'Bookings', 'Marketing Overview', 'Lead & Conversion Analytics', 'Campaigns', 'Banners & Promotions'];
   assert.deepEqual(visibleLabels('admin'), expected);
   assert.deepEqual(visibleLabels('super_admin'), expected);
 });
@@ -32,9 +32,11 @@ test('marketing is presented as Marketing and sees only its workspace', () => {
 });
 
 test('operations sees only the shared overview and Operations workspaces', () => {
-  assert.deepEqual(visibleLabels('operations'), ['Overview', 'Operations Overview', 'Trip Execution', 'Vendors']);
+  assert.deepEqual(visibleLabels('operations'), ['Overview', 'Operations Overview', 'Trip Execution', 'Tasks', 'Issues & Emergencies', 'Vendors']);
   assert.equal(canAccessStaffRoute('operations', getStaffModuleById('operations')), true);
   assert.equal(canAccessStaffRoute('operations', getStaffModuleById('operations_trips')), true);
+  assert.equal(canAccessStaffRoute('operations', getStaffModuleById('operations_tasks')), true);
+  assert.equal(canAccessStaffRoute('operations', getStaffModuleById('operations_issues')), true);
   assert.equal(canAccessStaffRoute('operations', getStaffModuleById('operations_vendors')), true);
   assert.equal(canAccessStaffRoute('operations', getStaffModuleById('admin')), false);
   assert.equal(canAccessStaffRoute('operations', getStaffModuleById('sales')), false);
@@ -53,7 +55,7 @@ test('all department links stay inside the canonical staff application', () => {
     .filter((module) => module.id !== 'overview')
     .map((module) => module.path);
 
-  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/team-analytics', '/staff/admin/trips', '/staff/admin/bookings', '/staff/admin/media', '/staff/admin/pages', '/staff/admin/users', '/staff/admin/creators', '/staff/admin/payouts', '/staff/admin/discounts', '/staff/operations', '/staff/operations/trips', '/staff/operations/vendors', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/marketing', '/staff/marketing/lead-analytics', '/staff/marketing/campaigns', '/staff/marketing/banners']);
+  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/team-analytics', '/staff/admin/trips', '/staff/admin/bookings', '/staff/admin/media', '/staff/admin/pages', '/staff/admin/users', '/staff/admin/creators', '/staff/admin/payouts', '/staff/admin/discounts', '/staff/operations', '/staff/operations/trips', '/staff/operations/tasks', '/staff/operations/issues', '/staff/operations/vendors', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/marketing', '/staff/marketing/lead-analytics', '/staff/marketing/campaigns', '/staff/marketing/banners']);
 });
 
 test('role labels normalize existing backend values', () => {
@@ -74,6 +76,8 @@ test('nested staff routes select the most specific navigation module', () => {
   assert.equal(getActiveStaffModule(modules, '/staff/admin/team-analytics')?.id, 'admin_team_analytics');
   assert.equal(getActiveStaffModule(modules, '/staff/operations')?.id, 'operations');
   assert.equal(getActiveStaffModule(modules, '/staff/operations/trips/operation-1')?.id, 'operations_trips');
+  assert.equal(getActiveStaffModule(modules, '/staff/operations/tasks')?.id, 'operations_tasks');
+  assert.equal(getActiveStaffModule(modules, '/staff/operations/issues/incident-1')?.id, 'operations_issues');
   assert.equal(getActiveStaffModule(modules, '/staff/operations/vendors/vendor-1/edit')?.id, 'operations_vendors');
   assert.equal(getActiveStaffModule(modules, '/staff/administer')?.id, undefined);
 });
