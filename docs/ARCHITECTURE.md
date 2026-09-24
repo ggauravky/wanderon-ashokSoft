@@ -167,7 +167,7 @@ The application defines 7 explicit user roles:
 | `admin` | Staff | Full administrative control: trips, bookings, team analytics, media library. |
 | `sales` | Staff | Sales portal: leads, expert inquiries, quotation builder, and customer bookings. |
 | `marketing` | Staff | Marketing workspace: campaigns, banners, and lead acquisition analytics. |
-| `operations` | Staff (Backend) | Operations role in User schema/auth; **no frontend UI is exposed** in the current build. |
+| `operations` | Staff | Read-only Operations Control Center for confirmed departure timing, traveler load, payment readiness, and fact-based attention signals. |
 | `user` | Customer | Standard traveler account for browsing, booking, and profile history. |
 | `influencer` | Creator | Affiliate / creator account for promo codes, referral tracking, and earnings. |
 
@@ -184,13 +184,14 @@ The staff portal is accessed at `/staff/*` and is organized around `StaffShell`:
 ```text
 /staff/
 ├── admin/          # Admin Overview, Analytics, Trips, Bookings, Media Library, Users
+├── operations/     # Phase 1 read-only live departure dashboard
 ├── sales/          # Shared Sales Queue, Expert Requests, Quotations, Bookings
 └── marketing/      # Marketing Overview, Campaign Management, Banners, Analytics
 ```
 
 - **Navigation Authority**: `frontend/src/staff/staffNavigation.js` defines all modules, sub-routes, and permissions.
 - **Access Guard**: `frontend/src/staff/staffAccess.js` determines which navigation items are visible and guards routes against unauthorized access based on role capabilities.
-- **Operations Role Reality**: The `operations` role exists in the backend database schema for future expansion, but the current UI explicitly returns an empty navigation menu for it (`getVisibleStaffModules('operations') === []`).
+- **Operations Phase 1**: `/staff/operations` derives a read-only operational departure view from authoritative `Booking` and `Trip` records. Catalog bookings sharing one Trip batch are grouped; custom quotation bookings remain separate. Vendor, driver, task, incident, expense, and settlement records are intentionally deferred.
 
 ---
 

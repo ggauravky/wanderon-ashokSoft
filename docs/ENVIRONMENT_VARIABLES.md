@@ -121,7 +121,7 @@ These variables are consumed exclusively when executing `npm run staff:create`:
 | `STAFF_NAME` | Yes | Public | e.g. `"John Doe"` | Full name of the staff member. |
 | `STAFF_EMAIL` | Yes | Public | e.g. `"john@wanderluxe.com"` | Unique email address for login. |
 | `STAFF_PASSWORD` | Yes | **Secret** | Minimum 8 characters | Initial plain-text password (hashed with bcrypt before storage). |
-| `STAFF_ROLE` | Yes | Public | `super_admin`, `admin`, `sales`, `marketing` | Assigned role authority. |
+| `STAFF_ROLE` | Yes | Public | `super_admin`, `admin`, `operations`, `sales`, `marketing` | Assigned role authority. |
 | `STAFF_IS_ACTIVE` | No | Public | `true` / `false` (default: `true`) | Active account state flag. |
 
 ---

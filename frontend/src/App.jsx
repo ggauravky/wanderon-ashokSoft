@@ -67,6 +67,7 @@ const PayoutsWorkspace = lazy(() => import('./staff/modules/admin/payouts/Payout
 const PayoutDetail = lazy(() => import('./staff/modules/admin/payouts/PayoutDetail'));
 const DiscountsWorkspace = lazy(() => import('./staff/modules/admin/discounts/DiscountsWorkspace'));
 const TeamAnalyticsWorkspace = lazy(() => import('./staff/modules/admin/teamAnalytics/TeamAnalyticsWorkspace'));
+const OperationsOverview = lazy(() => import('./staff/modules/operations/OperationsOverview'));
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -103,11 +104,12 @@ function App() {
 
           {/* Canonical unified Staff Control Center */}
           <Route path="/staff" element={
-            <RoleProtectedRoute allowedRoles={['super_admin', 'admin', 'sales', 'marketing']}>
+            <RoleProtectedRoute allowedRoles={['super_admin', 'admin', 'operations', 'sales', 'marketing']}>
               <StaffShell />
             </RoleProtectedRoute>
           }>
             <Route index element={<StaffOverview />} />
+            <Route path="operations" element={<StaffModuleRoute moduleId="operations"><OperationsOverview /></StaffModuleRoute>} />
             <Route path="admin" element={
               <StaffModuleRoute moduleId="admin">
                 <AdminWorkspace />

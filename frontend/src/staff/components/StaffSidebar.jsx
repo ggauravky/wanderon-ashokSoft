@@ -32,6 +32,7 @@ const ICONS = {
   admin_creators: UserCheck,
   admin_payouts: WalletCards,
   admin_discounts: Tags,
+  operations: Compass,
   sales: Headphones,
   expert_requests: PhoneCall,
   quotations: FileText,

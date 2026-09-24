@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import connectDB from '../config/db.js';
 import User from '../models/User.js';
 
-const ALLOWED_STAFF_ROLES = new Set(['super_admin', 'admin', 'sales', 'marketing']);
+export const ALLOWED_STAFF_ROLES = new Set(['super_admin', 'admin', 'operations', 'sales', 'marketing']);
 
 const readStaffConfig = () => ({
   name: String(process.env.STAFF_NAME || '').trim(),
@@ -13,7 +13,7 @@ const readStaffConfig = () => ({
   isActive: String(process.env.STAFF_IS_ACTIVE || 'true').trim().toLowerCase() !== 'false'
 });
 
-const validateStaffConfig = (config) => {
+export const validateStaffConfig = (config) => {
   const missing = ['name', 'email', 'password', 'role'].filter((field) => !config[field]);
   if (missing.length) {
     throw new Error(`Missing required environment values: ${missing.map((field) => `STAFF_${field.toUpperCase()}`).join(', ')}`);

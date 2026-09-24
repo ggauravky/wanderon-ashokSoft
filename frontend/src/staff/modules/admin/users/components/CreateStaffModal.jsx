@@ -9,7 +9,7 @@ const CreateStaffModal = ({ open, actor, busy, error, onClose, onConfirm }) => {
   const [form, setForm] = useState(empty);
   useEffect(() => { if (open) setForm(empty); }, [open]);
   if (!open) return null;
-  const roles = actor?.role === 'super_admin' ? ['admin', 'sales', 'marketing', 'super_admin'] : ['admin', 'sales', 'marketing'];
+  const roles = actor?.role === 'super_admin' ? ['admin', 'operations', 'sales', 'marketing', 'super_admin'] : ['admin', 'operations', 'sales', 'marketing'];
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 p-4" role="dialog" aria-modal="true">
     <form onSubmit={(event) => { event.preventDefault(); onConfirm(form); }} className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl">

@@ -12,7 +12,7 @@ const isDbConnected = () => mongoose.connection && mongoose.connection.readyStat
 const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const USER_ROLES = Object.freeze([...User.schema.path('role').enumValues]);
 const STAFF_ROLES = Object.freeze(['super_admin', 'admin', 'operations', 'sales', 'marketing']);
-const CREATABLE_STAFF_ROLES = Object.freeze(['admin', 'sales', 'marketing']);
+export const CREATABLE_STAFF_ROLES = Object.freeze(['admin', 'operations', 'sales', 'marketing']);
 const ADMIN_USER_SUMMARY_FIELDS = '_id name email phone avatar role isActive influencerStatus createdAt updatedAt';
 const CREATOR_USER_FIELDS = `${ADMIN_USER_SUMMARY_FIELDS} influencerApplication`;
 const ADMIN_USER_FIELDS = '_id name email phone address avatar role isActive influencerStatus influencerApplication bookedTrips accessAudit createdAt updatedAt';

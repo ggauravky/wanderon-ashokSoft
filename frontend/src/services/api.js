@@ -1317,6 +1317,16 @@ export async function getSalesDashboardApi() {
   return data;
 }
 
+export async function getOperationsDashboardApi() {
+  const response = await request(`${API_BASE_URL}/operations/dashboard`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to load Operations dashboard.');
+  return data;
+}
+
 // ================================================================
 // MARKETING API HELPERS
 // ================================================================
