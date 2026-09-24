@@ -427,42 +427,10 @@ const quotationSchema = new mongoose.Schema(
       default: []
     },
 
-    inclusions: { 
-      type: [String], 
-      default: [
-        'All stays as specified in the selected hotel option',
-        'Daily breakfast & dinner (as per meal plan)',
-        'Private airport/station pick and drop transfers',
-        'Dedicated tour captain and local sightseeing guides',
-        'Driver allowance, tolls, fuel, parking, and state permits'
-      ] 
-    },
-    exclusions: { 
-      type: [String], 
-      default: [
-        'Airfare / Train tickets to starting point',
-        'Personal expenses, room service, laundry, telephone charges',
-        'Optional adventure activities and entry tickets unless specified',
-        'Any cost arising due to unforeseen road blocks or weather calamities',
-        'Applicable 5% GST'
-      ] 
-    },
-    termsAndConditions: { 
-      type: [String], 
-      default: [
-        'Rates are valid for 7 days from the quotation date.',
-        '10% advance deposit confirms provisional reservation.',
-        'Remaining 90% balance is due 6 days prior to departure date.'
-      ] 
-    },
-    cancellationPolicy: { 
-      type: [String], 
-      default: [
-        '100% refund of deposit if cancelled 15+ days prior to departure.',
-        '50% refund if cancelled between 7-14 days prior to departure.',
-        'Non-refundable within 6 days of departure.'
-      ] 
-    },
+    inclusions: { type: [String], default: [] },
+    exclusions: { type: [String], default: [] },
+    termsAndConditions: { type: [String], default: [] },
+    cancellationPolicy: { type: [String], default: [] },
 
     policies: {
       paymentTerms: { type: String, default: '' },

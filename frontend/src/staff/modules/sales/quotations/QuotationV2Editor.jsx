@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCircle2,
   Copy, Download, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
@@ -13,6 +13,9 @@ import {
   finalizeQuotationPricingV2Api,
   getBlankQuotationState,
   getQuotationPolicyDefaultsApi,
+  getQuotationAiStatusApi,
+  getQuotationAiSampleApi,
+  draftQuotationAiTextApi,
   listImportableItinerariesApi,
   suggestQuotationAiFieldApi,
   getEmptyActivity,
@@ -38,6 +41,12 @@ import {
   QUOTATION_ATTACHMENT_VISIBILITIES,
   normalizeQuotationAttachmentState
 } from '../../../../quotation-v2/attachmentEnums.js';
+import {
+  parseStructuredItineraryText,
+  quotationAiPrerequisite,
+  resolveDefaultImportSource,
+  selectMissingCopyFields
+} from './quotationSmartBuilder.js';
 
 const cx = (...values) => values.filter(Boolean).join(' ');
 const inputClass = 'mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-500';
@@ -54,6 +63,7 @@ const sectionFields = {
   terms: ['policies', 'termsAndConditions', 'cancellationPolicy'],
   presentation: ['personalNote']
 };
+const quotationDemoEnabled = import.meta.env.VITE_ENABLE_QUOTATION_AI_DEMOS === 'true';
 
 const AssistActions = ({ label, value, assist, disabled }) => <span className="flex shrink-0 items-center gap-1"><button type="button" title={`Generate ${label}`} aria-label={`Generate ${label}`} disabled={disabled} onClick={(event) => { event.preventDefault(); assist('generate'); }} className="inline-flex h-8 w-8 items-center justify-center rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"><Sparkles size={15} /></button>{value && <select aria-label={`${label} AI action`} disabled={disabled} value="" onChange={(event) => { if (event.target.value) assist(event.target.value); }} className="h-8 max-w-28 rounded border border-slate-200 bg-white px-1 text-xs text-slate-600"><option value="">More</option><option value="improve">Improve</option><option value="shorten">Shorten</option><option value="format">Format</option></select>}</span>;
 const Field = ({ label, hint, assist, ...props }) => <label className={cx(labelClass, props.className)}><span className="flex items-center justify-between gap-2"><span>{label}{hint && <span className="ml-1 text-xs font-normal text-slate-400">{hint}</span>}</span>{assist && <AssistActions label={label} value={props.value} assist={assist} disabled={props.disabled} />}</span><input {...props} className={inputClass} /></label>;
@@ -130,11 +140,13 @@ const SmartAssistPanel = ({
   onApply,
   onBackendApply,
   onUndo,
+  onApplyDrafts,
   canUndo,
   setError,
   setNotice
 }) => {
-  const [sourceType, setSourceType] = useState(initialItineraryId ? 'SAVED_ITINERARY' : lead?.sourceItineraryId || (quotation?.leadId && quotation?.sourceItineraryId) ? 'LEAD_LINKED_ITINERARY' : 'JSON_UPLOAD');
+  const linkedLeadId = lead?._id || lead?.id || quotation?.leadId?._id || quotation?.leadId;
+  const [sourceType, setSourceType] = useState(() => resolveDefaultImportSource({ initialItineraryId, linkedLeadId }));
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [planSearch, setPlanSearch] = useState('');
   const [plans, setPlans] = useState([]);
@@ -148,8 +160,9 @@ const SmartAssistPanel = ({
   const [conflictChoices, setConflictChoices] = useState({});
   const [sourceRequest, setSourceRequest] = useState(null);
   const [ignoredSourceUpdate, setIgnoredSourceUpdate] = useState(false);
+  const [aiStatus, setAiStatus] = useState(null);
+  const [copyPreview, setCopyPreview] = useState(null);
 
-  const linkedLeadId = lead?._id || lead?.id || quotation?.leadId?._id || quotation?.leadId;
   const sourceUpdated = preview?.source?.updatedAt && quotation?.aiImportProvenance?.sourceUpdatedAt
     && new Date(preview.source.updatedAt) > new Date(quotation.aiImportProvenance.sourceUpdatedAt);
   const buildRequest = () => {
@@ -160,8 +173,23 @@ const SmartAssistPanel = ({
       : { sourceType, itineraryId: initialItineraryId, currentQuotation: quotation };
     if (sourceType === 'SHARED_ITINERARY') return { sourceType, shareToken: shareToken.trim(), currentQuotation: quotation };
     if (sourceType === 'LEAD_LINKED_ITINERARY') return { sourceType, leadId: linkedLeadId, currentQuotation: quotation };
-    return { sourceType, itineraryPayload: JSON.parse(jsonText), currentQuotation: quotation };
+    if (sourceType === 'DEMO_SAMPLE') return { sourceType, itineraryPayload: parseStructuredItineraryText(jsonText), currentQuotation: quotation };
+    return { sourceType, itineraryPayload: sourceType === 'PASTED_ITINERARY' ? jsonText : parseStructuredItineraryText(jsonText), currentQuotation: quotation };
   };
+
+  useEffect(() => {
+    getQuotationAiStatusApi().then(setAiStatus).catch(() => setAiStatus({ configured: false, providerReachable: false }));
+  }, []);
+
+  useEffect(() => {
+    setPreview(null); setSourceRequest(null); setSelectedPlan(null); setCandidateSelections({ hotelCandidateIds: [], activityCandidateIds: [], includeTransportCandidate: false }); setConflictChoices({});
+  }, [sourceType]);
+
+  useEffect(() => {
+    if (sourceType !== 'SAVED_ITINERARY' || initialItineraryId) return undefined;
+    const timer = window.setTimeout(() => { searchPlans(); }, 350);
+    return () => window.clearTimeout(timer);
+  }, [planSearch, sourceType]);
 
   const loadPreview = async () => {
     setLoadingAi(true); setError(''); setNotice('');
@@ -196,26 +224,32 @@ const SmartAssistPanel = ({
     return () => { cancelled = true; };
   }, [initialItineraryId, linkedLeadId]);
 
-  const applyPreview = async () => {
+  const applyPreview = async (overrides = {}) => {
     if (!preview?.deterministicPatch) return;
+    const effectiveSections = overrides.quick
+      ? ['journey', 'itinerary', 'inclusions', 'terms', 'presentation']
+      : selectedSections;
+    const effectiveCandidates = overrides.quick
+      ? { hotelCandidateIds: [], activityCandidateIds: [], includeTransportCandidate: false }
+      : candidateSelections;
     setLoadingAi(true); setError(''); setNotice('');
     try {
       if (persistedId && !dirty) {
         const data = await onBackendApply({
           source: { type: sourceRequest.sourceType, itineraryId: sourceRequest.itineraryId, leadId: sourceRequest.leadId, shareToken: sourceRequest.shareToken, itineraryPayload: sourceRequest.itineraryPayload },
           mergeMode,
-          selectedSections,
-          candidateSelections,
+          selectedSections: effectiveSections,
+          candidateSelections: effectiveCandidates,
           conflictChoices,
           expectedSourceUpdatedAt: preview.source.updatedAt
         });
         setNotice(`AI itinerary imported: ${data.summary?.daysAdded || preview.summary?.daysAdded || 0} itinerary days ready. Commercial pricing was not changed.`);
       } else {
         onApply({ ...preview.deterministicPatch,
-          hotelOptions: (preview.deterministicPatch.hotelOptions || []).filter((item) => candidateSelections.hotelCandidateIds.includes(item.optionId)),
-          activities: (preview.deterministicPatch.activities || []).filter((item) => candidateSelections.activityCandidateIds.includes(item.activityId)),
-          transportOptions: candidateSelections.includeTransportCandidate ? preview.deterministicPatch.transportOptions : []
-        }, { mergeMode, selectedSections, conflictChoices });
+          hotelOptions: (preview.deterministicPatch.hotelOptions || []).filter((item) => effectiveCandidates.hotelCandidateIds.includes(item.optionId)),
+          activities: (preview.deterministicPatch.activities || []).filter((item) => effectiveCandidates.activityCandidateIds.includes(item.activityId)),
+          transportOptions: effectiveCandidates.includeTransportCandidate ? preview.deterministicPatch.transportOptions : []
+        }, { mergeMode, selectedSections: effectiveSections, conflictChoices });
         setNotice(`AI itinerary imported into this draft. Save draft to persist it. Commercial pricing was not changed.`);
       }
     } catch (err) {
@@ -236,11 +270,63 @@ const SmartAssistPanel = ({
     setSelectedSections((current) => current.includes(section) ? current.filter((item) => item !== section) : [...current, section]);
   };
 
+  const loadSample = async () => {
+    setLoadingAi(true); setError('');
+    try {
+      const { sample } = await getQuotationAiSampleApi();
+      setJsonText(JSON.stringify(sample, null, 2));
+      setSourceType('DEMO_SAMPLE');
+      setNotice('Safe seven-day demo itinerary loaded. It contains no customer or commercial data.');
+    } catch (err) { setError(err.message || 'Unable to load the demo itinerary.'); }
+    finally { setLoadingAi(false); }
+  };
+
+  const loadPasteSample = async () => {
+    setLoadingAi(true); setError('');
+    try {
+      const { sample } = await getQuotationAiSampleApi();
+      setJsonText(JSON.stringify(sample, null, 2));
+      setSourceType('PASTED_ITINERARY');
+      setNotice('Sample copied into the paste workflow. Preview it, then use Quick Build.');
+    } catch (err) { setError(err.message || 'Unable to load the paste sample.'); }
+    finally { setLoadingAi(false); }
+  };
+
+  const pasteFromClipboard = async () => {
+    try {
+      setJsonText(await navigator.clipboard.readText());
+      setNotice('Clipboard plan pasted. Preview it before applying.');
+    } catch { setNotice('Clipboard access was blocked. Paste into the text area with Ctrl+V.'); }
+  };
+
+  const downloadSample = async () => {
+    try {
+      const { sample } = await getQuotationAiSampleApi();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(sample, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = 'wanderluxe-quotation-ai-sample.json'; link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) { setError(err.message || 'Unable to download the demo itinerary.'); }
+  };
+
+  const generateMissingCopy = async () => {
+    const fields = selectMissingCopyFields(quotation);
+    if (!fields.length) return setNotice('There are no supported empty copy fields to generate.');
+    setLoadingAi(true); setError('');
+    try {
+      const result = await draftQuotationAiTextApi({ quotation, fields });
+      setCopyPreview(result.drafts || {});
+      setNotice('Missing-copy preview is ready. Review it before applying.');
+    } catch (err) {
+      setNotice(err.message || 'AI copy is temporarily unavailable. Structured import and safe defaults still work.');
+    } finally { setLoadingAi(false); }
+  };
+
   return (
     <Panel
       title="Smart Assist"
       description="Import structured AI Planner data into this existing Quotation V2 draft. Customer identity and commercial pricing stay protected."
-      action={<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><Sparkles size={13} />AI plan</span>}
+      action={<span className={cx('inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold', aiStatus?.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800')}><Sparkles size={13} />{aiStatus?.configured ? `AI ready · ${aiStatus.model || 'Gemini'}` : 'AI copy unavailable · import still works'}</span>}
     >
       <div className="grid gap-3 lg:grid-cols-[12rem_1fr_auto]">
         <Select label="Import source" value={sourceType} onChange={(event) => setSourceType(event.target.value)} disabled={frozen || loadingAi}>
@@ -248,13 +334,18 @@ const SmartAssistPanel = ({
           <option value="SAVED_ITINERARY">Saved plans</option>
           <option value="SHARED_ITINERARY">Shared plan link</option>
           <option value="JSON_UPLOAD">Quotation JSON</option>
+          <option value="PASTED_ITINERARY">Paste itinerary JSON</option>
+          {quotationDemoEnabled && <option value="DEMO_SAMPLE">Demo sample</option>}
         </Select>
         {sourceType === 'SAVED_ITINERARY' && <div>{initialItineraryId && !selectedPlan && <p className="mt-2 text-xs text-emerald-700">Plan selected from AI Planner</p>}<div className="flex gap-2"><input aria-label="Search saved plans" placeholder="Search title or destination" value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} className={inputClass} /><button type="button" onClick={searchPlans} disabled={loadingAi} className="mt-1.5 rounded border px-3 text-sm">Search</button></div><select aria-label="Saved plan" value={selectedPlan?.itineraryId || ''} onChange={(event) => setSelectedPlan(plans.find((item) => item.itineraryId === event.target.value) || null)} className={inputClass}><option value="">Choose another plan</option>{plans.map((item) => <option key={item.itineraryId} value={item.itineraryId}>{item.title} - {item.destination} - {item.duration} days - {item.travelers} travelers - {new Date(item.updatedAt).toLocaleDateString()} - {item.source}</option>)}</select></div>}
         {sourceType === 'SHARED_ITINERARY' && <Field label="Share token or WanderLuxe link" value={shareToken} onChange={(event) => setShareToken(event.target.value)} disabled={frozen || loadingAi} />}
         {sourceType === 'LEAD_LINKED_ITINERARY' && <Field label="Lead plan" value={lead?.sourceItineraryId?.title ? `${lead.sourceItineraryId.title} - ${lead.sourceItineraryId.destination || ''}` : linkedLeadId ? 'Linked AI plan' : 'No linked plan'} disabled />}
         {sourceType === 'JSON_UPLOAD' && <label className={labelClass}><span>Quotation-ready JSON</span><input type="file" accept="application/json,.json" disabled={frozen || loadingAi} className={inputClass} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1024 * 1024) { setError('JSON file must be 1 MB or smaller.'); return; } file.text().then(setJsonText).catch(() => setError('Unable to read JSON file.')); }} /></label>}
-        <div className="flex items-end"><button type="button" disabled={frozen || loadingAi || (sourceType === 'JSON_UPLOAD' && !jsonText) || (sourceType === 'SAVED_ITINERARY' && !selectedPlan && !initialItineraryId)} onClick={loadPreview} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{loadingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}Preview</button></div>
+        {['PASTED_ITINERARY', 'DEMO_SAMPLE'].includes(sourceType) && <label className={labelClass}><span className="flex items-center justify-between gap-2"><span>{sourceType === 'DEMO_SAMPLE' ? 'Demo itinerary JSON' : 'Paste structured itinerary JSON'}</span>{sourceType === 'PASTED_ITINERARY' && <button type="button" onClick={pasteFromClipboard} className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">Paste from Clipboard</button>}</span><textarea rows={5} value={jsonText} onChange={(event) => setJsonText(event.target.value)} placeholder="Paste a WanderLuxe quotation-ready itinerary" className={`${inputClass} py-2 font-mono text-xs`} /></label>}
+        <div className="flex items-end gap-2"><button type="button" disabled={frozen || loadingAi || (['JSON_UPLOAD', 'PASTED_ITINERARY', 'DEMO_SAMPLE'].includes(sourceType) && !jsonText) || (sourceType === 'SAVED_ITINERARY' && !selectedPlan && !initialItineraryId)} onClick={loadPreview} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{loadingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}Preview</button></div>
       </div>
+      <div className="mt-3 flex flex-wrap gap-2">{quotationDemoEnabled && <><button type="button" onClick={loadSample} disabled={frozen || loadingAi} className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Load JSON sample</button><button type="button" onClick={loadPasteSample} disabled={frozen || loadingAi} className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Load Paste sample</button><button type="button" onClick={downloadSample} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Download sample JSON</button></>}<button type="button" onClick={generateMissingCopy} disabled={frozen || loadingAi || !aiStatus?.configured} className="min-h-9 rounded-lg border border-emerald-200 px-3 text-xs font-semibold text-emerald-700 disabled:opacity-40">Generate missing copy</button></div>
+      {copyPreview && <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 p-4"><p className="text-sm font-semibold text-violet-950">AI copy preview</p><pre className="mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-xs text-slate-700">{JSON.stringify(copyPreview, null, 2)}</pre><div className="mt-3 flex gap-2"><button type="button" onClick={() => { onApplyDrafts(copyPreview); setCopyPreview(null); }} className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-semibold text-white">Apply reviewed copy</button><button type="button" onClick={() => setCopyPreview(null)} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs">Discard</button></div></div>}
       {preview && (
         <div className="mt-4 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
           {sourceUpdated && !ignoredSourceUpdate && <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"><span>Source AI itinerary changed after this quotation was imported.</span><button type="button" onClick={() => setIgnoredSourceUpdate(true)} className="underline">Ignore</button></div>}
@@ -264,6 +355,8 @@ const SmartAssistPanel = ({
             <span><strong>{preview.summary?.staySuggestions || 0}</strong> stays</span>
             <span><strong>{preview.summary?.activitySuggestions || 0}</strong> activities</span>
           </div>
+          {preview.planSummary && <p className="text-sm text-slate-700"><strong>{preview.planSummary.title || 'Imported plan'}</strong> · {preview.planSummary.destination || 'Destination not set'} · {preview.planSummary.duration || 0} days · {preview.planSummary.travelers || 1} travelers</p>}
+          <div className="grid gap-3 rounded-lg bg-white p-3 text-xs md:grid-cols-3"><div><strong className="text-emerald-700">Auto-fill</strong><p>{(preview.autofill || []).join(', ') || 'None'}</p></div><div><strong className="text-amber-700">Review candidates</strong><p>{(preview.candidateReview || []).join(', ') || 'None'}</p></div><div><strong className="text-slate-700">Still manual</strong><p>{(preview.manualRemaining || []).join(', ')}</p></div></div>
           {preview.conflicts?.length > 0 && <details className="rounded border border-amber-200 bg-white p-3 text-xs"><summary className="cursor-pointer font-semibold text-amber-800">{preview.conflicts.length} existing fields differ. Review choices</summary><div className="mt-3 max-h-56 space-y-3 overflow-y-auto">{preview.conflicts.map((item) => <div key={item.field} className="border-b border-slate-100 pb-2"><p className="font-semibold text-slate-800">{item.field.replaceAll('.', ' ')}</p><p className="mt-1 line-clamp-2 text-slate-600">Current: {typeof item.currentValue === 'string' ? item.currentValue : JSON.stringify(item.currentValue)}</p><p className="line-clamp-2 text-slate-600">Plan: {typeof item.proposedValue === 'string' ? item.proposedValue : JSON.stringify(item.proposedValue)}</p>{!['hotelOptions', 'transportOptions', 'activities', 'sourceItineraryId'].includes(item.field) && <div className="mt-1 flex gap-4"><label><input type="radio" name={`conflict-${item.field}`} checked={(conflictChoices[item.field] || (mergeMode === 'FILL_EMPTY_ONLY' ? 'keep' : 'use')) === 'keep'} onChange={() => setConflictChoices((current) => ({ ...current, [item.field]: 'keep' }))} /> Keep current</label><label><input type="radio" name={`conflict-${item.field}`} checked={(conflictChoices[item.field] || (mergeMode === 'FILL_EMPTY_ONLY' ? 'keep' : 'use')) === 'use'} onChange={() => setConflictChoices((current) => ({ ...current, [item.field]: 'use' }))} /> Use plan</label></div>}</div>)}</div></details>}
           {preview.warnings?.map((warning) => <p key={warning} className="text-xs text-slate-600">{warning}</p>)}
           {preview.source?.updatedAt && <p className="text-xs text-slate-600">Source last updated {new Date(preview.source.updatedAt).toLocaleString()}. Preview again if the plan changes.</p>}
@@ -277,6 +370,7 @@ const SmartAssistPanel = ({
               <option value="REPLACE_SELECTED_SECTIONS">Replace selected sections</option>
             </select>
             <button type="button" disabled={frozen || loadingAi} onClick={applyPreview} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-40"><CheckCircle2 size={16} />Apply import</button>
+            <button type="button" disabled={frozen || loadingAi} onClick={() => applyPreview({ quick: true })} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 text-sm font-semibold text-emerald-800 disabled:opacity-40"><Sparkles size={16} />Quick Build safe fields</button>
             {canUndo && <button type="button" onClick={onUndo} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700">Undo import</button>}
           </div>
         </div>
@@ -325,9 +419,12 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
   const [aiBusy, setAiBusy] = useState(false);
   const [importUndo, setImportUndo] = useState(null);
   const [aiAppliedFields, setAiAppliedFields] = useState([]);
+  const quotationRef = useRef(quotation);
   const isAdmin = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const persistedId = quotation?._id || quotationId;
   const frozen = Boolean(quotation?.manualPricing?.finalizedAt) || !['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation?.status || 'DRAFT');
+
+  useEffect(() => { quotationRef.current = quotation; }, [quotation]);
 
   useEffect(() => {
     if (!quotationId || initialQuotation) return;
@@ -453,28 +550,55 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     } catch (err) { setError(err.message || 'Unable to undo import.'); }
   };
 
-  const fieldValue = (field, index = 0) => {
+  const fieldValue = (field, index = 0, source = quotation) => {
     if (field === 'itinerary.missingDescriptions') return [];
-    if (field === 'customer.notes') return quotation.customerSnapshot?.notes || '';
-    if (field === 'journey.title') return quotation.tripRequirements?.title || '';
-    if (field === 'journey.specialRequests') return quotation.tripRequirements?.specialRequests || '';
-    if (field === 'journey.personalNote') return quotation.personalNote || '';
-    if (field === 'policies.all') return quotation.policies || {};
-    if (field.startsWith('policies.')) return quotation.policies?.[field.split('.')[1]] || '';
-    if (field === 'inclusions' || field === 'exclusions') return quotation[field] || [];
+    if (field === 'customer.notes') return source.customerSnapshot?.notes || '';
+    if (field === 'journey.title') return source.tripRequirements?.title || '';
+    if (field === 'journey.specialRequests') return source.tripRequirements?.specialRequests || '';
+    if (field === 'journey.personalNote') return source.personalNote || '';
+    if (field === 'policies.all') return source.policies || {};
+    if (field.startsWith('policies.')) return source.policies?.[field.split('.')[1]] || '';
+    if (field === 'inclusions' || field === 'exclusions') return source[field] || [];
     const [part, key] = field.split('.');
     const collection = { itinerary: 'itinerary', hotel: 'hotelOptions', transport: 'transportOptions', activity: 'activities', addon: 'addOns' }[part];
-    return quotation[collection]?.[index]?.[key] || '';
+    return source[collection]?.[index]?.[key] || '';
   };
   const requestAiField = async (field, index = 0, mode = 'generate') => {
     if (frozen || aiBusy) return;
+    const prerequisite = quotationAiPrerequisite(quotation, field, index);
+    if (prerequisite) { setNotice(prerequisite); return; }
+    const sourceSnapshot = fieldValue(field, index);
     setAiBusy(true); setError('');
     try {
       const response = await suggestQuotationAiFieldApi({ quotation, field, index, mode }, persistedId);
-      if (!response.available) { setError(response.reason || 'AI writing is unavailable.'); return; }
-      setSuggestion({ field, index, current: fieldValue(field, index), suggestion: response.suggestion, label: field.replaceAll('.', ' ') });
+      if (!response.available) { setNotice(response.reason || 'Add more confirmed facts before using AI.'); return; }
+      const currentValue = fieldValue(field, index, quotationRef.current);
+      setSuggestion({ field, index, current: currentValue, suggestion: response.suggestion, label: field.replaceAll('.', ' '), stale: JSON.stringify(currentValue) !== JSON.stringify(sourceSnapshot) });
     } catch (err) { setError(err.message || 'Unable to prepare suggestion.'); }
     finally { setAiBusy(false); }
+  };
+  const applyGeneratedDrafts = (drafts = {}) => {
+    if (frozen) return;
+    setQuotation((current) => {
+      const next = JSON.parse(JSON.stringify(current));
+      if (!next.tripRequirements?.title && drafts.journeyTitle) next.tripRequirements.title = drafts.journeyTitle;
+      if (!next.personalNote && drafts.personalNote) next.personalNote = drafts.personalNote;
+      (drafts.dayDescriptions || []).forEach((entry) => {
+        const day = next.itinerary?.find((item) => Number(item.day) === Number(entry.day));
+        if (day && !day.description) day.description = entry.description;
+      });
+      (drafts.hotelNotes || []).forEach((entry) => { if (next.hotelOptions?.[entry.index] && !next.hotelOptions[entry.index].notes) next.hotelOptions[entry.index].notes = entry.notes; });
+      (drafts.transportNotes || []).forEach((entry) => { if (next.transportOptions?.[entry.index] && !next.transportOptions[entry.index].notes) next.transportOptions[entry.index].notes = entry.notes; });
+      (drafts.activityDescriptions || []).forEach((entry) => { if (next.activities?.[entry.index] && !next.activities[entry.index].description) next.activities[entry.index].description = entry.description; });
+      if (!next.inclusions?.length && drafts.inclusions?.length) next.inclusions = drafts.inclusions;
+      if (!next.exclusions?.length && drafts.exclusions?.length) next.exclusions = drafts.exclusions;
+      next.policies = { ...(next.policies || {}) };
+      Object.entries(drafts.policies || {}).forEach(([key, value]) => { if (!next.policies[key] && value) next.policies[key] = value; });
+      return normalizeQuotationAttachmentState(next);
+    });
+    setDirty(true); setImportUndo(null);
+    setAiAppliedFields((fields) => [...new Set([...fields, 'journey.title', 'journey.personalNote', 'itinerary.missingDescriptions', 'hotel.notes', 'transport.notes', 'activity.description', 'inclusions', 'exclusions', 'policies.all'])]);
+    setNotice('Reviewed AI copy applied to empty fields. Save the draft to persist it.');
   };
   const applyPolicyDefault = async (key) => {
     if (frozen) return;
@@ -496,6 +620,9 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
   };
   const applySuggestion = (action, selected = []) => {
     if (!suggestion || frozen) return;
+    const proposedSuggestion = Array.isArray(suggestion.suggestion)
+      ? suggestion.suggestion.filter((item, index) => selected.includes(typeof item === 'object' ? `day:${item.day}` : `index:${index}`))
+      : suggestion.suggestion;
     const merge = (current, proposed) => {
       if (action === 'replace' || !current || (Array.isArray(current) && !current.length)) return proposed;
       if (Array.isArray(current)) return [...current, ...proposed.filter((item) => !current.includes(item))];
@@ -507,23 +634,23 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
       if (field === 'customer.notes') next.customerSnapshot = { ...current.customerSnapshot, notes: merge(current.customerSnapshot?.notes, suggestion.suggestion) };
       else if (field === 'itinerary.missingDescriptions') {
         next.itinerary = (current.itinerary || []).map((day) => {
-          const proposed = suggestion.suggestion.find((item) => Number(item.day) === Number(day.day));
+          const proposed = proposedSuggestion.find((item) => Number(item.day) === Number(day.day));
           return proposed && !day.description ? { ...day, description: proposed.description } : day;
         });
       }
       else if (field === 'journey.title' || field === 'journey.specialRequests') {
         const key = field === 'journey.title' ? 'title' : 'specialRequests';
-        next.tripRequirements = { ...current.tripRequirements, [key]: merge(current.tripRequirements?.[key], suggestion.suggestion) };
-      } else if (field === 'journey.personalNote') next.personalNote = merge(current.personalNote, suggestion.suggestion);
-      else if (field === 'inclusions' || field === 'exclusions') next[field] = merge(current[field] || [], suggestion.suggestion);
+        next.tripRequirements = { ...current.tripRequirements, [key]: merge(current.tripRequirements?.[key], proposedSuggestion) };
+      } else if (field === 'journey.personalNote') next.personalNote = merge(current.personalNote, proposedSuggestion);
+      else if (field === 'inclusions' || field === 'exclusions') next[field] = merge(current[field] || [], proposedSuggestion);
       else if (field.startsWith('policies.')) {
         next.policies = { ...current.policies };
         if (field === 'policies.all') selected.forEach((key) => { next.policies[key] = merge(current.policies?.[key], suggestion.suggestion[key]); });
-        else { const key = field.split('.')[1]; next.policies[key] = merge(current.policies?.[key], suggestion.suggestion); }
+        else { const key = field.split('.')[1]; next.policies[key] = merge(current.policies?.[key], proposedSuggestion); }
       } else {
         const [part, key] = field.split('.');
         const collection = { itinerary: 'itinerary', hotel: 'hotelOptions', transport: 'transportOptions', activity: 'activities', addon: 'addOns' }[part];
-        next[collection] = (current[collection] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: merge(item[key], suggestion.suggestion) } : item);
+        next[collection] = (current[collection] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: merge(item[key], proposedSuggestion) } : item);
       }
       return next;
     });
@@ -616,6 +743,7 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
           onApply={applyAiPatch}
           onBackendApply={applyAiPatchOnServer}
           onUndo={undoAiImport}
+          onApplyDrafts={applyGeneratedDrafts}
           canUndo={Boolean(importUndo)}
           setError={setError}
           setNotice={setNotice}

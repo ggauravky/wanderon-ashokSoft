@@ -20,6 +20,8 @@ import {
 import { getJwtSecret } from '../config/environment.js';
 import { buildQuotationPolicyDefaults } from '../config/quotationPolicyPresets.js';
 import { generateQuotationFieldSuggestion } from '../services/quotationFieldAiService.js';
+import { checkGeminiHealth, getGeminiStatus, publicAiError } from '../services/geminiService.js';
+import { cloneQuotationAiSampleItinerary } from '../fixtures/quotationAiSampleItinerary.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
 import { syncLeadConversionFromBooking } from '../services/leadConversionService.js';
 import {
@@ -47,6 +49,10 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase();
 const asNumber = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value ?? null));
 const fail = (res, status, message, details) => res.status(status).json({ success: false, message, ...(details ? { details } : {}) });
+const failAi = (res, error) => {
+  const response = publicAiError(error);
+  return res.status(response.status).json(response.body);
+};
 
 const quotationFailure = (res, error, fallback) => {
   if (error?.status === 422) return fail(res, 422, error.message);
@@ -296,6 +302,29 @@ export const getQuotationPolicyDefaults = (req, res) => res.json({
   defaults: buildQuotationPolicyDefaults(req.body?.quotation || {})
 });
 
+export const getQuotationAiStatus = (_req, res) => res.json({
+  success: true,
+  ...getGeminiStatus({ purpose: 'quotation' })
+});
+
+export const checkQuotationAiStatus = async (_req, res) => {
+  try {
+    return res.json({ success: true, ...(await checkGeminiHealth({ purpose: 'quotation' })) });
+  } catch (error) {
+    return failAi(res, error);
+  }
+};
+
+export const getQuotationAiSample = (_req, res) => {
+  const sample = cloneQuotationAiSampleItinerary();
+  if (String(_req.query?.download || '') === '1') {
+    res.setHeader('Content-Disposition', 'attachment; filename="wanderluxe-quotation-ai-sample.json"');
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return res.send(JSON.stringify(sample, null, 2));
+  }
+  return res.json({ success: true, sample });
+};
+
 export const suggestQuotationAiField = async (req, res) => {
   try {
     if (req.params.id) {
@@ -314,7 +343,9 @@ export const suggestQuotationAiField = async (req, res) => {
     });
     return res.json({ success: true, ...result });
   } catch (error) {
-    return fail(res, error.status || 500, error.message || 'Unable to prepare AI suggestion.');
+    return error?.code?.startsWith('AI_')
+      ? failAi(res, error)
+      : fail(res, error.status || 500, error.message || 'Unable to prepare AI suggestion.');
   }
 };
 
@@ -396,8 +427,8 @@ export const applyQuotationAiImport = async (req, res) => {
 
 export const draftQuotationAiText = async (req, res) => {
   try {
-    if (!ensureDatabase(res)) return;
     if (req.params.id) {
+      if (!ensureDatabase(res)) return;
       const quotation = await loadAuthorized(req, res, { edit: true });
       if (!quotation) return;
       if (!['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
@@ -413,7 +444,9 @@ export const draftQuotationAiText = async (req, res) => {
     return res.json({ success: true, ...drafts });
   } catch (error) {
     console.error('Quotation AI Text Draft Error:', error);
-    return fail(res, error.status || 500, error.message || 'Unable to draft quotation text.');
+    return error?.code?.startsWith('AI_')
+      ? failAi(res, error)
+      : fail(res, error.status || 500, error.message || 'Unable to draft quotation text.');
   }
 };
 

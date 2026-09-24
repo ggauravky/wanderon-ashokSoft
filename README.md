@@ -4,6 +4,8 @@
 
 WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, an Operations execution, coordination, Incident, and Vendor workspace, and an AI-driven itinerary planner powered by Google Gemini.
 
+Quotation Smart Builder accepts saved, lead-linked, shared, uploaded, or pasted AI itineraries through one factual import pipeline. Optional Gemini copy generation is centralized on the current `@google/genai` SDK; run `cd backend && npm run test:gemini` to validate deployed provider configuration.
+
 ---
 
 ## Architecture at a Glance
@@ -39,7 +41,7 @@ React 19 SPA (Vite 8) ──────[ Local Proxy: /api ]──────�
 | **Backend** | Node.js 22 LTS, Express 4, Mongoose 8, JWT, bcryptjs |
 | **Database** | MongoDB Atlas |
 | **Payments** | Razorpay SDK (Order API, Checkout, Webhooks, HMAC SHA-256) |
-| **AI Planner** | Google Generative AI (`gemini-1.5-flash`) |
+| **AI Planner** | Google Gen AI via centralized configurable provider adapter |
 | **Media & CDN** | Cloudinary SDK (with local disk `./uploads` fallback for dev) |
 | **Notifications** | Brevo v3 (Transactional Email / OTP), Twilio (WhatsApp) |
 | **Testing** | Node Native Test Runner (`node --test`), Oxlint |

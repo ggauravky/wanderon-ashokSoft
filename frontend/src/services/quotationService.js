@@ -180,6 +180,10 @@ async function quotationV2Request(path, { method = 'GET', body, auth = true } = 
     const error = new Error(data.message || 'Quotation request failed');
     error.status = response.status;
     error.details = data.details;
+    error.code = data.code;
+    error.retryable = data.retryable;
+    error.referenceId = data.referenceId;
+    error.model = data.model;
     throw error;
   }
   return data;
@@ -189,6 +193,9 @@ export const createQuotationV2Api = (payload) => quotationV2Request('/v2', { met
 export const previewQuotationAiImportApi = (payload) => quotationV2Request('/v2/ai/import-preview', { method: 'POST', body: payload });
 export const listImportableItinerariesApi = (search = '') => quotationV2Request(`/v2/ai/importable-itineraries?search=${encodeURIComponent(search)}`);
 export const getQuotationPolicyDefaultsApi = (quotation) => quotationV2Request('/v2/ai/policy-defaults', { method: 'POST', body: { quotation } });
+export const getQuotationAiStatusApi = () => quotationV2Request('/v2/ai/status');
+export const checkQuotationAiStatusApi = () => quotationV2Request('/v2/ai/status/check', { method: 'POST', body: {} });
+export const getQuotationAiSampleApi = () => quotationV2Request('/v2/ai/sample');
 export const suggestQuotationAiFieldApi = (payload, id = null) => quotationV2Request(`${id ? `/${encodeURIComponent(id)}` : ''}/v2/ai/field-suggest`, { method: 'POST', body: payload });
 export const draftQuotationAiTextApi = (payload) => quotationV2Request('/v2/ai/draft-text', { method: 'POST', body: payload });
 export const updateQuotationV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2`, { method: 'PATCH', body: payload });
@@ -291,48 +298,9 @@ export const TRANSPORT_TYPES = [
   'None'
 ];
 
-export const ADDON_PRESETS = [
-  {
-    name: 'High-Altitude Medical & Oxygen Cylinder Kit',
-    category: 'Adventure Gear',
-    pricingType: 'FIXED',
-    unitCost: 1800,
-    unitPrice: 3000,
-    description: '2 x 10L Portable Oxygen Canisters, medical oximeter & first aid emergency kit.'
-  },
-  {
-    name: 'Comprehensive Mountain Travel & Evacuation Insurance',
-    category: 'Insurance',
-    pricingType: 'PER_PERSON',
-    unitCost: 350,
-    unitPrice: 750,
-    description: 'Emergency evacuation, trip cancellation, and cashless medical up to ₹5 Lakhs.'
-  },
-  {
-    name: 'Private Bonfire, High Tea & Stargazing Session',
-    category: 'Special Meals',
-    pricingType: 'FIXED',
-    unitCost: 2000,
-    unitPrice: 4500,
-    description: 'Exclusive evening bonfire setup with gourmet snacks, hot beverages & acoustic music.'
-  },
-  {
-    name: 'Personal Drone & DSLR Storyteller (1 Full Day)',
-    category: 'Photography',
-    pricingType: 'FIXED',
-    unitCost: 4000,
-    unitPrice: 7000,
-    description: 'Professional creator with 50+ color-graded high-res photos & 4K cinematic reels.'
-  },
-  {
-    name: 'Premium Suite / Panoramic Mountain View Room Upgrade',
-    category: 'Room Upgrade',
-    pricingType: 'PER_NIGHT',
-    unitCost: 1500,
-    unitPrice: 2800,
-    description: 'Guaranteed upgrade to highest category suite with private balcony & heating.'
-  }
-];
+// Commercial add-ons must come from confirmed staff/vendor data. Hard-coded demo
+// pricing, insurance coverage, and availability claims are intentionally disabled.
+export const ADDON_PRESETS = [];
 
 /**
  * Calculates trip days, nights, and duration string safely from two dates.
@@ -363,7 +331,8 @@ export function calculateDuration(startDateStr, endDateStr) {
 /**
  * Generates an empty initial quotation template.
  */
-export function getInitialQuotationState() {
+/** @deprecated Showcase-only fixture retained for old screenshots. Never use for a new quotation. */
+function getDeprecatedInitialQuotationDemoState() {
   return {
     quotationNumber: '',
     version: 1,
@@ -631,6 +600,14 @@ export function getInitialQuotationState() {
     status: 'DRAFT',
     validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   };
+}
+
+/**
+ * Backward-compatible public factory. New quotations always start blank and never
+ * inherit the deprecated showcase's fictional traveler, supplier, or price data.
+ */
+export function getInitialQuotationState() {
+  return getBlankQuotationState();
 }
 
 /**

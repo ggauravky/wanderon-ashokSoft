@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Sparkles, Save, Share2, Download, ArrowLeft, Sliders, 
-  MapPin, Check, BookmarkCheck, FileText, ChevronDown 
+  MapPin, Check, BookmarkCheck, FileText, ChevronDown, Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WorkspaceOverviewTab from './WorkspaceOverviewTab';
@@ -15,6 +15,7 @@ import { exportElementToPdf } from '../../utils/pdfGenerator';
 import { saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
+import { buildQuotationReadyExport } from '../../staff/modules/sales/quotations/quotationSmartBuilder.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -65,6 +66,7 @@ const AIItineraryWorkspace = ({
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState('classic');
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
+  const [quotationCopyStatus, setQuotationCopyStatus] = useState('');
 
   // Undo revision history for Copilot edits
   const [historyStack, setHistoryStack] = useState([]);
@@ -122,23 +124,7 @@ const AIItineraryWorkspace = ({
   };
 
   const handleExportForQuotation = () => {
-    const safeItinerary = {
-      ...itinerary,
-      _id: undefined,
-      id: undefined,
-      user: undefined,
-      userEmail: undefined,
-      shareToken: undefined,
-      isPublic: undefined,
-      plannerContext: undefined
-    };
-    const exportPayload = {
-      schema: 'wanderluxe-ai-itinerary',
-      schemaVersion: 1,
-      exportedAt: new Date().toISOString(),
-      itinerary: safeItinerary,
-      plannerContext: itinerary?.plannerContext || formData?.plannerContext || {}
-    };
+    const exportPayload = buildQuotationReadyExport(itinerary, formData?.plannerContext);
     const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -149,6 +135,16 @@ const AIItineraryWorkspace = ({
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const handleCopyForQuotation = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(buildQuotationReadyExport(itinerary, formData?.plannerContext), null, 2));
+      setQuotationCopyStatus('Quotation-ready plan copied');
+      window.setTimeout(() => setQuotationCopyStatus(''), 3000);
+    } catch {
+      setQuotationCopyStatus('Clipboard access was blocked. Use Export for Quotation instead.');
+    }
   };
 
   const handleCreateQuotation = async () => {
@@ -282,6 +278,16 @@ const AIItineraryWorkspace = ({
             <FileText size={13} />
             <span>Export for Quotation</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleCopyForQuotation}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Copy size={13} />
+            <span>Copy for Quotation</span>
+          </button>
+          <span className="sr-only" role="status" aria-live="polite">{quotationCopyStatus}</span>
 
           {isQuotationStaff && <button type="button" onClick={handleCreateQuotation} disabled={saveStatus === 'saving'} className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white disabled:opacity-50"><FileText size={13} />Create quotation from this plan</button>}
 

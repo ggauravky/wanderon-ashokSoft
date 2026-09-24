@@ -17,12 +17,16 @@
     "test:operations-phase1": "node --test test_operations_phase1.js",
     "test:operations-phase2": "node --test test_operations_phase2.js",
     "test:operations-phase3": "node --test test_operations_phase3.js",
+    "test:quotation-ai": "node --test test_quotation_ai_assist.js test_gemini_service.js",
+    "test:gemini": "node scripts/testGeminiIntegration.js",
+    "seed:quotation-ai-demo": "node scripts/seedQuotationAiDemo.js",
+    "cleanup:quotation-ai-demo": "node scripts/seedQuotationAiDemo.js --cleanup",
     "test:razorpay": "node scripts/testRazorpayIntegration.js",
     "test:payment-reliability": "node test_payment_reliability.js",
     "payment:inspect": "node scripts/inspectBookingPayment.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^2.24.0",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.10.1",
     "cors": "^2.8.5",

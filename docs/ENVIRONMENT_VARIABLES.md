@@ -82,11 +82,14 @@ File location: `backend/.env` (derived from `backend/.env.example`)
 | `RAZORPAY_KEY_SECRET` | Feature | **YES** | **Secret** | `<secret-key>` | Razorpay Key Secret. Used for server-side order generation and HMAC SHA-256 signature verification. |
 | `RAZORPAY_WEBHOOK_SECRET` | Feature | **YES** | **Secret** | `<webhook-secret>` | Secret configured in Razorpay Dashboard for webhook signature verification (`/api/payments/razorpay/webhook`). |
 
-### 5. Google Gemini AI (AI Itinerary Planner 2.0)
+### 5. Google Gemini AI (Planner and Quotation Smart Builder)
 
 | Variable | Dev Required? | Prod Required? | Type | Default / Example | Purpose & Failure Impact |
 | :--- | :---: | :---: | :---: | :--- | :--- |
-| `GEMINI_API_KEY` | Feature | Optional | **Secret** | `AIzaSy...` | Server-side API key for Google Gemini (`gemini-1.5-flash`). Powers dynamic AI itinerary synthesis. If omitted, the planner falls back to the local structured template engine. |
+| `GEMINI_API_KEY` | Feature | Optional | **Secret** | _(secret)_ | Server-side Google Gemini key. Never expose it through a `VITE_` variable. Structured quotation import and safe defaults remain available when omitted. |
+| `GEMINI_MODEL` | Feature | Optional | No | `gemini-3.8-flash` | Central primary model for planner and AI writing. |
+| `QUOTATION_AI_MODEL` | Feature | Optional | No | _(blank)_ | Optional quotation-only model override; inherits `GEMINI_MODEL` when blank. |
+| `DEMO_QUOTATION_STAFF_EMAIL` | Development | Optional | No | `staff@example.com` | Existing active Admin, Super Admin, or Sales account used by the idempotent local demo seed. The seed refuses production. |
 
 ### 6. Cloudinary Media Storage
 
@@ -165,6 +168,9 @@ RAZORPAY_WEBHOOK_SECRET=
 
 # Feature: Gemini AI (Optional)
 GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.8-flash
+QUOTATION_AI_MODEL=
+DEMO_QUOTATION_STAFF_EMAIL=
 
 # Feature: Cloudinary (Optional in dev - falls back to ./uploads)
 CLOUDINARY_CLOUD_NAME=

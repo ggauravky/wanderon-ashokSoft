@@ -231,7 +231,7 @@ The AI Itinerary Planner generates itineraries, but the terminal logs indicate `
 `GEMINI_API_KEY` is empty or missing in `backend/.env`.
 
 **Fix:**
-The planner gracefully falls back to the internal travel knowledge engine (`travelKnowledge.json`). If you want dynamic Gemini synthesis, add a valid Google AI Studio key (`AIzaSy...`) to `backend/.env` under `GEMINI_API_KEY`.
+The planner gracefully falls back to the internal travel knowledge engine (`travelKnowledge.json`). Structured quotation import and safe policy defaults also remain available. For dynamic writing, configure `GEMINI_API_KEY`, optionally set `GEMINI_MODEL` / `QUOTATION_AI_MODEL`, restart the backend, then run `npm run test:gemini` from `backend`. The diagnostic output reports only model, safe error code, latency, and a reference ID.
 
 ---
 

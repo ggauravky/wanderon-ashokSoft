@@ -114,7 +114,9 @@ Configure these in **Render Dashboard -> Environment**:
 | `RAZORPAY_KEY_ID` | **Yes** | Live Key ID (`rzp_live_...`) |
 | `RAZORPAY_KEY_SECRET` | **Yes** | Live Key Secret |
 | `RAZORPAY_WEBHOOK_SECRET` | **Yes** | Live Webhook signing secret |
-| `GEMINI_API_KEY` | Optional | Google Gemini API key for AI Planner 2.0 |
+| `GEMINI_API_KEY` | Optional | Secret server-side key for AI Planner and quotation copy generation |
+| `GEMINI_MODEL` | Optional | Central primary Gemini model (currently `gemini-3.8-flash`) |
+| `QUOTATION_AI_MODEL` | Optional | Quotation-only model override; blank inherits `GEMINI_MODEL` |
 | `CLOUDINARY_CLOUD_NAME` | **Yes** | Production Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | **Yes** | Cloudinary API Key |
 | `CLOUDINARY_API_SECRET` | **Yes** | Cloudinary API Secret |

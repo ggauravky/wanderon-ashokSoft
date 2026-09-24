@@ -5,6 +5,7 @@ import {
   buildDeterministicPatch,
   detectConflicts,
   parseSharedItineraryToken,
+  normalizeImportedItineraryPayload,
   sanitizeAiQuotationPatch
 } from './services/quotationAiService.js';
 import { buildQuotationPolicyDefaults, normalizeQuotationPolicies } from './config/quotationPolicyPresets.js';
@@ -12,7 +13,9 @@ import { buildFactualInclusions, buildFieldContext, generateQuotationFieldSugges
 import { signItineraryHandoffToken, verifyItineraryHandoffToken } from './services/itineraryHandoffService.js';
 import { canStaffAccessLead } from './services/leadAccessService.js';
 import { quotationRateLimit } from './middlewares/quotationRateLimit.js';
+import Quotation from './models/Quotation.js';
 import jwt from 'jsonwebtoken';
+import { cloneQuotationAiSampleItinerary } from './fixtures/quotationAiSampleItinerary.js';
 
 const baseItinerary = {
   title: 'Spiti Valley Slow Circuit',
@@ -57,6 +60,51 @@ test('AI plan journey mapping derives destination duration and traveler total', 
   assert.equal(patch.tripRequirements.nights, 6);
   assert.equal(patch.tripRequirements.duration, '7D/6N');
   assert.equal(patch.tripRequirements.totalTravelers, 5);
+});
+
+test('new quotation model has no fictional service, inclusion, or cancellation content', () => {
+  const draft = new Quotation();
+  assert.deepEqual(draft.itinerary, []);
+  assert.deepEqual(draft.hotelOptions, []);
+  assert.deepEqual(draft.transportOptions, []);
+  assert.deepEqual(draft.activities, []);
+  assert.deepEqual(draft.addOns, []);
+  assert.deepEqual(draft.inclusions, []);
+  assert.deepEqual(draft.exclusions, []);
+  assert.deepEqual(draft.termsAndConditions, []);
+  assert.deepEqual(draft.cancellationPolicy, []);
+});
+
+test('sample fixture is a complete seven-day non-commercial plan', () => {
+  const sample = cloneQuotationAiSampleItinerary();
+  assert.equal(sample.schema, 'wanderluxe-ai-itinerary');
+  assert.equal(sample.itinerary.days.length, 7);
+  assert.equal(sample.itinerary.totalEstimatedCost, undefined);
+  assert.equal(JSON.stringify(sample).includes('@'), false);
+});
+
+test('upload, paste, wrapper, and raw sources normalize identically', () => {
+  const sample = cloneQuotationAiSampleItinerary();
+  const expected = normalizeImportedItineraryPayload(sample);
+  const variants = [
+    JSON.stringify(sample),
+    { data: sample },
+    { itinerary: sample.itinerary, plannerContext: sample.plannerContext },
+    { ...sample.itinerary, plannerContext: sample.plannerContext }
+  ];
+  variants.forEach((variant) => assert.deepEqual(normalizeImportedItineraryPayload(variant), expected));
+  assert.throws(() => normalizeImportedItineraryPayload('{broken'), /invalid/i);
+  assert.throws(() => normalizeImportedItineraryPayload({ days: [] }), /supported structured/i);
+});
+
+test('normalization and deterministic mapping never carry imported pricing', () => {
+  const sample = cloneQuotationAiSampleItinerary();
+  sample.itinerary.totalEstimatedCost = 999999;
+  sample.itinerary.budgetBreakdown = { estimatedTotal: '999999' };
+  const patch = buildDeterministicPatch(normalizeImportedItineraryPayload(sample));
+  assert.equal(Object.hasOwn(patch, 'manualPricing'), false);
+  assert.equal(Object.hasOwn(patch, 'pricing'), false);
+  assert.equal(patch.hotelOptions.every((item) => item.unitPrice === undefined && item.pricePerNight === 0), true);
 });
 
 test('traveler breakdown counts seniors with adults and preserves senior fact', () => {

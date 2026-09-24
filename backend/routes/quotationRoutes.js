@@ -42,6 +42,9 @@ import {
   previewQuotationAiImport,
   getImportableAiItineraries,
   getQuotationPolicyDefaults,
+  getQuotationAiStatus,
+  checkQuotationAiStatus,
+  getQuotationAiSample,
   suggestQuotationAiField,
   trackPublicQuotationEvent,
   updateQuotationV2,
@@ -74,6 +77,9 @@ router.post('/v2', requireRoles('super_admin', 'admin', 'sales'), createQuotatio
 router.post('/v2/ai/import-preview', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-import-preview', limit: 60, windowMs: 3600000 }), previewQuotationAiImport);
 router.get('/v2/ai/importable-itineraries', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-itinerary-list', limit: 120, windowMs: 3600000 }), getImportableAiItineraries);
 router.post('/v2/ai/policy-defaults', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-policy-defaults', limit: 120, windowMs: 3600000 }), getQuotationPolicyDefaults);
+router.get('/v2/ai/status', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-status', limit: 120, windowMs: 3600000 }), getQuotationAiStatus);
+router.post('/v2/ai/status/check', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-status-check', limit: 12, windowMs: 3600000 }), checkQuotationAiStatus);
+router.get('/v2/ai/sample', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-sample', limit: 120, windowMs: 3600000 }), getQuotationAiSample);
 router.post('/v2/ai/field-suggest', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-field-suggest', limit: 30, windowMs: 3600000 }), suggestQuotationAiField);
 router.post('/v2/ai/draft-text', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-quotation-draft', limit: 30, windowMs: 3600000 }), draftQuotationAiText);
 

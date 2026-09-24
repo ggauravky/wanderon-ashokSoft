@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Itinerary from '../models/Itinerary.js';
@@ -14,6 +13,24 @@ import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/m
 import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
 import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
 import { signItineraryHandoffToken } from '../services/itineraryHandoffService.js';
+import { generateStructuredJson } from '../services/geminiService.js';
+
+const PLANNER_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    title: { type: 'string' }, tagline: { type: 'string' }, bestTimeToVisit: { type: 'string' }, totalEstimatedCost: { type: 'number' },
+    days: { type: 'array', items: { type: 'object', properties: {
+      day: { type: 'number' }, title: { type: 'string' }, locationName: { type: 'string' }, stay: { type: 'string' }, dailyCost: { type: 'string' }, tips: { type: 'array', items: { type: 'string' } },
+      morning: { type: 'array', items: { type: 'object', properties: { time: { type: 'string' }, activity: { type: 'string' }, location: { type: 'string' }, description: { type: 'string' }, estimatedCost: { type: 'string' }, travelTime: { type: 'string' } }, required: ['activity'], additionalProperties: false } },
+      afternoon: { type: 'array', items: { type: 'object', properties: { time: { type: 'string' }, activity: { type: 'string' }, location: { type: 'string' }, description: { type: 'string' }, estimatedCost: { type: 'string' }, travelTime: { type: 'string' } }, required: ['activity'], additionalProperties: false } },
+      evening: { type: 'array', items: { type: 'object', properties: { time: { type: 'string' }, activity: { type: 'string' }, location: { type: 'string' }, description: { type: 'string' }, estimatedCost: { type: 'string' }, travelTime: { type: 'string' } }, required: ['activity'], additionalProperties: false } }
+    }, required: ['day', 'title', 'morning', 'afternoon', 'evening'], additionalProperties: false } },
+    staySuggestions: { type: 'array', items: { type: 'string' } }, foodSuggestions: { type: 'array', items: { type: 'string' } }, packingSuggestions: { type: 'array', items: { type: 'string' } }, localTips: { type: 'array', items: { type: 'string' } },
+    budgetBreakdown: { type: 'object', properties: { stay: { type: 'string' }, food: { type: 'string' }, transport: { type: 'string' }, activities: { type: 'string' }, estimatedTotal: { type: 'string' } }, additionalProperties: false }
+  },
+  required: ['title', 'tagline', 'days'],
+  additionalProperties: false
+};
 
 const asText = (value, max = 160) => (typeof value === 'string' ? value.trim().replace(/<[^>]*>?/gm, '').slice(0, max) : '');
 const asList = (value, maxItems = 12, maxLength = 80) => (
@@ -390,22 +407,11 @@ export const generateItineraryController = async (req, res) => {
       avoid
     };
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
     let generatedRaw = null;
     let source = 'template-engine';
 
-    if (apiKey) {
+    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
       try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.4
-          }
-        });
-
         const prompt = `You are an elite travel architect at WanderLuxe.
 Synthesize a realistic day-by-day travel plan using the following structured knowledge:
 
@@ -456,12 +462,14 @@ JSON SCHEMA:
   }
 }`;
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        generatedRaw = JSON.parse(text);
+        const result = await generateStructuredJson({
+          action: 'itinerary-plan', purpose: 'general', contents: prompt,
+          responseJsonSchema: PLANNER_RESPONSE_SCHEMA, temperature: 0.4
+        });
+        generatedRaw = result.data;
         source = 'gemini-ai';
       } catch (geminiError) {
-        console.warn('Gemini API synthesis fallback to template intelligence:', geminiError.message);
+        console.warn(`[ItineraryAI] template fallback code=${geminiError.code || 'AI_PROVIDER_UNAVAILABLE'} referenceId=${geminiError.referenceId || 'none'}`);
       }
     }
 

@@ -543,7 +543,7 @@ def build_doc():
     ext_rows = [
         ["Razorpay", "backend/controllers/bookingController.js", "Razorpay Orders and HMAC signature verification", "Booking checkout and balance payment", "UNVERIFIED"],
         ["Razorpay Checkout JS", "frontend/src/utils/razorpay.js", "https://checkout.razorpay.com/v1/checkout.js", "Browser payment modal", "UNVERIFIED"],
-        ["Google Gemini", "backend/controllers/aiItineraryController.js", "gemini-1.5-flash", "AI itinerary generation", "UNVERIFIED with fallback"],
+        ["Google Gemini", "backend/services/geminiService.js", "GEMINI_MODEL / QUOTATION_AI_MODEL", "AI itinerary and quotation generation", "Central adapter with controlled fallback"],
         ["Cloudinary", "backend/utils/cloudinaryService.js", "Cloudinary uploader SDK", "Image document and video upload", "UNVERIFIED"],
         ["Twilio WhatsApp", "backend/utils/whatsappService.js", "Twilio Messages API", "Booking ticket WhatsApp delivery", "UNVERIFIED optional"],
         ["Brevo Email", "backend/services/quotationEmailService.js", "https://api.brevo.com/v3/smtp/email", "Quotation recipient verification email", "UNVERIFIED optional"],

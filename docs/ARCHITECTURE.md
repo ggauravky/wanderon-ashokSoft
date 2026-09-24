@@ -77,7 +77,7 @@ graph TD
 | **Backend** | Node.js 22 LTS, Express 4, Mongoose 8, JWT, bcryptjs | RESTful API server with strict RBAC, data validation, and crypto verification |
 | **Database** | MongoDB Atlas (Mongoose ODM) | Document database with additive schema versioning and indexing |
 | **Payments** | Razorpay SDK (Order API, Checkout, Webhooks, HMAC SHA-256 verification) | Full payment lifecycle, deposit/balance schedules, and instant verification |
-| **AI Synthesis** | Google Generative AI (`gemini-1.5-flash`) | Context-aware, structured travel itinerary generation |
+| **AI Synthesis** | Google Gen AI (central configurable model adapter) | Context-aware planner generation and safe quotation writing |
 | **Media** | Cloudinary SDK (with local disk `./uploads` dev fallback) | Media management, CDN delivery, and optimization |
 | **Communications** | Brevo REST API v3, Twilio REST API | Transactional OTP verification emails and WhatsApp boarding passes |
 | **Document Generation** | jsPDF, html2canvas, node-qrcode | Client-side and server-side receipt, boarding pass, and quotation PDF generation |
@@ -253,10 +253,10 @@ sequenceDiagram
 
 ## AI Itinerary Planner 2.0
 
-WanderLuxe provides an intelligent travel planner powered by Google Gemini (`gemini-1.5-flash`):
+WanderLuxe provides an intelligent travel planner and Quotation Smart Builder through the centralized `backend/services/geminiService.js` adapter. The primary model is configured with `GEMINI_MODEL` (quotation-specific override: `QUOTATION_AI_MODEL`), with a controlled current-model fallback for transient provider/model availability failures:
 
 1. **Context Extraction**: `buildAITravelContext` constructs a compact (< 3KB) structured summary of traveler preferences (destination, duration, budget, pace, interests, catalog trips).
-2. **Server-Side Generation**: Requests are dispatched server-side from `backend/controllers/aiItineraryController.js`. The `GEMINI_API_KEY` is **never** sent to the client.
+2. **Server-Side Generation**: Planner and quotation requests are dispatched through the shared current `@google/genai` provider adapter. The `GEMINI_API_KEY` is **never** sent to the client.
 3. **Structured JSON Mode**: Gemini generates strict day-by-day JSON itineraries with time slots, activities, and cost estimations.
 4. **Feasibility & Media Enrichment**: Generated itineraries are audited by `itineraryFeasibilityEngine.js` and enriched with high-resolution destination galleries via `mediaResolverService.js`.
 5. **Resilient Fallback**: If `GEMINI_API_KEY` is not configured, the planner gracefully synthesizes rich itineraries using the local knowledge base (`travelKnowledge.json`).
@@ -268,6 +268,10 @@ The AI Planner persists additive `plannerContext` on saved `Itinerary` records. 
 Planner handoff creates a canonical `Lead` with `leadType: trip_enquiry`, `source: ai_planner`, and `sourceItineraryId` pointing at the saved itinerary. The lead links to the AI plan without duplicating the full itinerary. Quotation V2 drafts can also store `sourceItineraryId`.
 
 Quotation Smart Assist uses two layers:
+
+- All saved, lead-linked, shared, uploaded, pasted, and demo itinerary inputs pass through one normalization and deterministic mapping pipeline.
+- Import is usable without Gemini; only optional copy generation requires provider connectivity.
+- Imported budgets never change quotation pricing, and hotel/activity/transport candidates remain unselected until staff confirms them.
 
 1. Deterministic import maps factual itinerary data into Quotation V2 fields: journey, traveler counts, flexible date notes, day-by-day itinerary strings, approved media links, and review-only stay/activity/transport candidates. The server re-resolves an authorized source at apply time, rejects stale previews, and never trusts a browser-supplied patch. AI candidates remain unselected and are excluded from public/PDF/booking output until staff selects them.
 2. Field-level AI text assistance drafts only allowlisted customer-facing fields from limited trip context. Staff sees current and suggested content before applying it. Deterministic policy presets fill empty canonical V2 policy fields; payment text uses structured payment settings and AI output cannot change their numbers. Legacy policy fields are normalized for old quotations.

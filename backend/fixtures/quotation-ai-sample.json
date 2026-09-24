@@ -1,0 +1,34 @@
+{
+  "schema": "wanderluxe-ai-itinerary",
+  "schemaVersion": 1,
+  "plannerContext": {
+    "paceRhythm": "Balanced",
+    "interests": ["mountain scenery", "local culture", "gentle walks"],
+    "stayPreference": "Comfortable locally operated stays",
+    "travelersBreakdown": { "adults": 2, "children": 0, "infants": 0, "seniors": 0 }
+  },
+  "itinerary": {
+    "title": "Himachal Valleys — 7 Day Sample Plan",
+    "tagline": "A staff-training itinerary with factual day structure and no customer or commercial data.",
+    "destination": "Himachal Pradesh",
+    "duration": 7,
+    "travelers": 2,
+    "travelStyle": "Scenic culture",
+    "pace": "Balanced",
+    "budgetLevel": "Not specified",
+    "days": [
+      { "day": 1, "title": "Arrive in Shimla", "locationName": "Shimla", "morning": [], "afternoon": [{ "activity": "Arrival and hotel check-in", "location": "Shimla" }], "evening": [{ "activity": "Orientation walk on Mall Road", "location": "Shimla" }] },
+      { "day": 2, "title": "Shimla heritage", "locationName": "Shimla", "morning": [{ "activity": "Heritage area walk", "location": "Shimla" }], "afternoon": [{ "activity": "Local market visit", "location": "Shimla" }], "evening": [{ "activity": "Leisure time", "location": "Shimla" }] },
+      { "day": 3, "title": "Shimla to Sangla", "locationName": "Sangla", "morning": [{ "activity": "Road transfer toward Sangla", "location": "Himachal Pradesh" }], "afternoon": [{ "activity": "Valley arrival and check-in", "location": "Sangla" }], "evening": [{ "activity": "Riverside leisure", "location": "Sangla" }] },
+      { "day": 4, "title": "Sangla and Chitkul", "locationName": "Sangla", "morning": [{ "activity": "Visit Chitkul village", "location": "Chitkul" }], "afternoon": [{ "activity": "Explore the Baspa Valley", "location": "Sangla" }], "evening": [{ "activity": "Return to stay", "location": "Sangla" }] },
+      { "day": 5, "title": "Sangla to Kalpa", "locationName": "Kalpa", "morning": [{ "activity": "Road transfer to Kalpa", "location": "Kinnaur" }], "afternoon": [{ "activity": "Village orientation walk", "location": "Kalpa" }], "evening": [{ "activity": "Mountain-view leisure", "location": "Kalpa" }] },
+      { "day": 6, "title": "Kalpa exploration", "locationName": "Kalpa", "morning": [{ "activity": "Local monastery visit", "location": "Kalpa" }], "afternoon": [{ "activity": "Short nature walk", "location": "Kalpa" }], "evening": [{ "activity": "Leisure time", "location": "Kalpa" }] },
+      { "day": 7, "title": "Departure", "locationName": "Kalpa", "morning": [{ "activity": "Check-out and onward road transfer", "location": "Kalpa" }], "afternoon": [], "evening": [] }
+    ],
+    "staySuggestions": ["Shimla heritage hotel candidate", "Sangla valley stay candidate", "Kalpa mountain stay candidate"],
+    "foodSuggestions": ["Confirm meal preferences with the traveler"],
+    "packingList": ["Weather-appropriate layers", "Comfortable walking shoes", "Government-issued identification"],
+    "localTips": ["Road travel times can vary with weather and traffic", "Confirm permits and current access rules before departure"],
+    "bestTimeToVisit": "Confirm seasonal road and weather conditions before finalizing travel."
+  }
+}

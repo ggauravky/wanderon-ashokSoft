@@ -12,6 +12,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test:staff-foundation": "node --test src/staff/staffAccess.test.js",
+    "test:quotation-smart-builder": "node --test src/staff/modules/sales/quotations/quotationSmartBuilder.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
