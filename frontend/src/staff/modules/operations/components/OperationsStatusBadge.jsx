@@ -3,6 +3,16 @@ const PHASE_TONES = {
   ONGOING: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   COMPLETED: 'border-slate-200 bg-slate-100 text-slate-700',
   DATE_UNRESOLVED: 'border-rose-200 bg-rose-50 text-rose-700',
+  NOT_CONFIGURED: 'border-slate-200 bg-slate-100 text-slate-700',
+  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-800',
+  READY: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  UNASSIGNED: 'border-slate-200 bg-slate-100 text-slate-700',
+  PENDING_CONFIRMATION: 'border-amber-200 bg-amber-50 text-amber-800',
+  CONFIRMED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  DECLINED: 'border-rose-200 bg-rose-50 text-rose-700',
+  CANCELLED: 'border-slate-300 bg-slate-100 text-slate-600',
+  ACTIVE: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  INACTIVE: 'border-slate-300 bg-slate-100 text-slate-600',
   HIGH: 'border-rose-200 bg-rose-50 text-rose-700',
   MEDIUM: 'border-amber-200 bg-amber-50 text-amber-800'
 };

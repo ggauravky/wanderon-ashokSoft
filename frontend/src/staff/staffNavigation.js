@@ -131,6 +131,26 @@ export const STAFF_MODULES = Object.freeze([
     exact: true
   }),
   Object.freeze({
+    id: 'operations_trips',
+    label: 'Trip Execution',
+    path: '/staff/operations/trips',
+    icon: 'operations_trips',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Configure and confirm the real services required for each operational departure.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'operations_vendors',
+    label: 'Vendors',
+    path: '/staff/operations/vendors',
+    icon: 'operations_vendors',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Maintain the reusable Hotel, Transport, Driver, Activity and Guide directory.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'sales',
     label: 'Sales Overview',
     cardLabel: 'Sales',

@@ -16,7 +16,9 @@ import {
   Users,
   WalletCards,
   Tags,
-  BarChart3
+  BarChart3,
+  ClipboardList,
+  Handshake
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -33,6 +35,8 @@ const ICONS = {
   admin_payouts: WalletCards,
   admin_discounts: Tags,
   operations: Compass,
+  operations_trips: ClipboardList,
+  operations_vendors: Handshake,
   sales: Headphones,
   expert_requests: PhoneCall,
   quotations: FileText,

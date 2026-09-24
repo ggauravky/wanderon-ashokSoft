@@ -2,7 +2,7 @@
 
 > High-performance luxury travel and expedition management platform.
 
-WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, and an AI-driven itinerary planner powered by Google Gemini.
+WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, an Operations execution and Vendor workspace, and an AI-driven itinerary planner powered by Google Gemini.
 
 ---
 
@@ -25,7 +25,7 @@ React 19 SPA (Vite 8) ──────[ Local Proxy: /api ]──────�
 ```
 
 - **Frontend**: React 19 SPA built with Vite 8 and Tailwind CSS, featuring luxury visual aesthetics, role-based staff views, and client-side PDF document generation.
-- **Backend**: Node.js 22 LTS REST API server built with Express 4 and Mongoose 8, featuring strict RBAC, cryptographic signature validation, and resilient fail-closed database connectivity.
+- **Backend**: Node.js 22 LTS REST API server built with Express 4 and Mongoose 8, featuring strict RBAC, idempotent trip execution materialization, cryptographic signature validation, and resilient fail-closed database connectivity.
 - **Persistence**: MongoDB Atlas with additive schema versioning and compound indexes.
 
 ---
