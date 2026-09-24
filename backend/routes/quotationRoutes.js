@@ -37,6 +37,9 @@ import {
   requestQuotationPricing,
   requestQuotationVerification,
   revokeQuotationShare,
+  applyQuotationAiImport,
+  draftQuotationAiText,
+  previewQuotationAiImport,
   trackPublicQuotationEvent,
   updateQuotationV2,
   verifyQuotationRecipient
@@ -65,6 +68,8 @@ router.use(protect);
 
 router.post('/calculate-preview', requireRoles('super_admin', 'admin', 'sales'), calculateQuotationPricingPreview);
 router.post('/v2', requireRoles('super_admin', 'admin', 'sales'), createQuotationV2);
+router.post('/v2/ai/import-preview', requireRoles('super_admin', 'admin', 'sales'), previewQuotationAiImport);
+router.post('/v2/ai/draft-text', requireRoles('super_admin', 'admin', 'sales'), draftQuotationAiText);
 
 router.route('/')
   .get(requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotations)
@@ -77,6 +82,8 @@ router.route('/:id')
 
 // Quotation V2 content, commercial controls, immutable revisions, and sharing.
 router.patch('/:id/v2', requireRoles('super_admin', 'admin', 'sales'), updateQuotationV2);
+router.post('/:id/v2/ai/import-apply', requireRoles('super_admin', 'admin', 'sales'), applyQuotationAiImport);
+router.post('/:id/v2/ai/draft-text', requireRoles('super_admin', 'admin', 'sales'), draftQuotationAiText);
 router.post('/:id/v2/request-pricing', requireRoles('super_admin', 'admin', 'sales'), requestQuotationPricing);
 router.post('/:id/v2/finalize-pricing', requireRoles('super_admin', 'admin'), finalizeQuotationPricing);
 router.post('/:id/v2/revisions', requireRoles('super_admin', 'admin', 'sales'), createQuotationRevisionV2);

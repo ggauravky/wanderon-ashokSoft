@@ -1,13 +1,30 @@
 import React, { useState } from 'react';
 import { Send, ShieldCheck, Phone, User, Mail, Calendar, MessageSquare, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
 import { getExpeditionProfile } from '../../utils/expeditionPlannerData';
-import { createLeadApi } from '../../services/api.js';
+import { createLeadApi, saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
 
-const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, destination = 'Spiti Valley' }) => {
+const futureTravelMonths = (count = 12) => {
+  const formatter = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' });
+  const now = new Date();
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() + index, 1);
+    return formatter.format(date);
+  });
+};
+
+const PlannerStepBookTransmit = ({
+  formData,
+  updateFormData,
+  onTransmitSuccess,
+  destination = 'Spiti Valley',
+  itinerary,
+  plannerContext = {},
+  onItinerarySaved
+}) => {
   const [fullName, setFullName] = useState(formData.fullName || '');
   const [email, setEmail] = useState(formData.email || '');
   const [whatsappNumber, setWhatsappNumber] = useState(formData.whatsappNumber || '');
-  const [travelMonth, setTravelMonth] = useState(formData.flexibleMonth || 'July 2025');
+  const [travelMonth, setTravelMonth] = useState(formData.flexibleMonth || futureTravelMonths(1)[0]);
   const [expertNote, setExpertNote] = useState(formData.customPreferences || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -21,6 +38,14 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
       alert('Please enter a valid 10-digit WhatsApp phone number so our specialist can transmit your itinerary.');
       return;
     }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setSubmitError('Please enter your real email address. It is required for quotation follow-up and approval links.');
+      return;
+    }
+    if (!itinerary) {
+      setSubmitError('Please generate the itinerary before sending it to a specialist.');
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -30,14 +55,36 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
                            (formData.travelers?.infants || 0) +
                            (formData.travelers?.seniors || 0);
 
-    const cleanName = fullName.trim() || 'Valued Explorer';
-    const fallbackEmail = email && email.includes('@') 
-      ? email.trim().toLowerCase() 
-      : `${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'traveler'}.${Date.now().toString().slice(-4)}@wanderluxe.in`;
+    const cleanName = fullName.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanName) {
+      setSubmitError('Please enter your full name.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    let savedItinerary = itinerary;
+    try {
+      const savePayload = {
+        ...itinerary,
+        plannerContext,
+        days: itinerary.days || itinerary.itineraryDays || []
+      };
+      savedItinerary = itinerary._id
+        ? await updateAIItineraryApi(itinerary._id, savePayload)
+        : await saveAIItineraryApi(savePayload);
+      onItinerarySaved?.({ ...itinerary, ...savedItinerary, _id: savedItinerary._id || savedItinerary.id });
+    } catch (err) {
+      setSubmitError(err.message || 'Could not save the AI itinerary before creating the lead.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const sourceItineraryId = savedItinerary?._id || savedItinerary?.id;
 
     const leadPayload = {
       name: cleanName,
-      email: fallbackEmail,
+      email: cleanEmail,
       phone: whatsappNumber.trim(),
       destination: destination || 'Expedition',
       origin: formData.origin || 'Delhi NCR',
@@ -56,8 +103,9 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
       budgetTier: formData.budgetTier || 'Comfort',
       budgetPerPerson: formData.budgetAmount ? `₹${Number(formData.budgetAmount).toLocaleString()}` : '',
       message: expertNote,
-      source: 'ai_planner_booking',
-      leadType: 'ai_planner_booking',
+      source: 'ai_planner',
+      leadType: 'trip_enquiry',
+      sourceItineraryId,
       priority: 'HIGH',
       topics: ['Customized AI Itinerary', 'Direct WhatsApp Dispatch', `${duration} Days ${destination}`],
       itinerarySnapshot: {
@@ -77,36 +125,25 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
       }
     };
 
-    let bookingResult = null;
     try {
       const res = await createLeadApi(leadPayload);
-      bookingResult = res;
-    } catch (err) {
-      console.warn('Backend lead sync note:', err.message);
-      // Generate resilient fallback reference ID for client peace-of-mind even during offline simulation
-      bookingResult = {
-        success: true,
-        referenceId: `WLX-EXP-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-        lead: {
-          referenceId: `WLX-EXP-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`
-        }
-      };
-    } finally {
-      const generatedRefId = bookingResult?.lead?.referenceId || bookingResult?.referenceId || `WLX-EXP-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
-      
+      const generatedRefId = res?.lead?.referenceId || res?.referenceId || '';
       const finalizedData = {
         fullName: cleanName,
-        email: fallbackEmail,
+        email: cleanEmail,
         whatsappNumber,
         flexibleMonth: travelMonth,
         customPreferences: expertNote,
         referenceId: generatedRefId,
+        sourceItineraryId,
         transmittedAt: new Date().toISOString()
       };
-
       updateFormData(finalizedData);
       setIsSubmitting(false);
       onTransmitSuccess?.(finalizedData);
+    } catch (err) {
+      setSubmitError(err.message || 'Could not create the Expert Request. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
@@ -251,13 +288,14 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
                 <label htmlFor="transmit-email" className="block text-xs font-black uppercase tracking-wider text-slate-700">
                   Email Address
                 </label>
-                <span className="text-[10px] text-slate-400">Optional</span>
+                <span className="text-[10px] text-slate-400">Required</span>
               </div>
               <div className="relative">
                 <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   id="transmit-email"
                   type="email"
+                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="e.g. tenzin@example.com"
@@ -304,11 +342,9 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
                   onChange={(e) => setTravelMonth(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-slate-50/70 rounded-2xl border border-slate-200 text-xs font-bold text-slate-800 focus:bg-white focus:outline-hidden focus:border-emerald-500"
                 >
-                  <option value="June 2025">June 2025 (Passes Open)</option>
-                  <option value="July 2025">July 2025 (Peak Alpenglow)</option>
-                  <option value="August 2025">August 2025 (Wildflower Season)</option>
-                  <option value="September 2025">September 2025 (Clear Night Skies)</option>
-                  <option value="October 2025">October 2025 (Autumn Colors)</option>
+                  {futureTravelMonths(12).map((month) => (
+                    <option key={month} value={month}>{month}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -340,6 +376,7 @@ const PlannerStepBookTransmit = ({ formData, updateFormData, onTransmitSuccess, 
               <span>{isSubmitting ? 'TRANSMITTING INQUIRY...' : 'SEND MY PLAN'}</span>
               <ArrowRight size={16} />
             </button>
+            {submitError && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">{submitError}</p>}
           </form>
 
           {/* Guarantees Row */}

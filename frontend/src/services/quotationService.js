@@ -186,7 +186,11 @@ async function quotationV2Request(path, { method = 'GET', body, auth = true } = 
 }
 
 export const createQuotationV2Api = (payload) => quotationV2Request('/v2', { method: 'POST', body: payload });
+export const previewQuotationAiImportApi = (payload) => quotationV2Request('/v2/ai/import-preview', { method: 'POST', body: payload });
+export const draftQuotationAiTextApi = (payload) => quotationV2Request('/v2/ai/draft-text', { method: 'POST', body: payload });
 export const updateQuotationV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2`, { method: 'PATCH', body: payload });
+export const applyQuotationAiImportApi = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/ai/import-apply`, { method: 'POST', body: payload });
+export const draftQuotationAiTextForQuotationApi = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/ai/draft-text`, { method: 'POST', body: payload });
 export const requestQuotationPricingV2Api = (id, payload = {}) => quotationV2Request(`/${encodeURIComponent(id)}/v2/request-pricing`, { method: 'POST', body: payload });
 export const finalizeQuotationPricingV2Api = (id, manualPricing) => quotationV2Request(`/${encodeURIComponent(id)}/v2/finalize-pricing`, { method: 'POST', body: { manualPricing } });
 export const createQuotationRevisionV2Api = (id, payload = {}) => quotationV2Request(`/${encodeURIComponent(id)}/v2/revisions`, { method: 'POST', body: payload });
@@ -361,6 +365,7 @@ export function getInitialQuotationState() {
     quotationNumber: '',
     version: 1,
     leadId: null,
+    sourceItineraryId: null,
     customerId: null,
     assignedTo: null,
     customerSnapshot: {
@@ -636,6 +641,7 @@ export function getBlankQuotationState() {
     quotationNumber: '',
     version: 1,
     leadId: null,
+    sourceItineraryId: null,
     customerId: null,
     assignedTo: null,
     customerSnapshot: { name: '', email: '', phone: '', city: '', notes: '' },

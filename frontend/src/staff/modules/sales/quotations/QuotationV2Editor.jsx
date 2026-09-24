@@ -2,13 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCircle2,
   Copy, Download, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
-  Paperclip, Plus, Save, Send, Trash2, Upload, X
+  Paperclip, Plus, Save, Send, Sparkles, Trash2, Upload, X
 } from 'lucide-react';
 import { useAuth } from '../../../../contexts/AuthContext.jsx';
 import {
   addQuotationAttachmentV2Api,
+  applyQuotationAiImportApi,
   createQuotationV2Api,
   deleteQuotationAttachmentV2Api,
+  draftQuotationAiTextApi,
+  draftQuotationAiTextForQuotationApi,
   finalizeQuotationPricingV2Api,
   getBlankQuotationState,
   getEmptyActivity,
@@ -17,6 +20,7 @@ import {
   getEmptyItineraryDay,
   getEmptyTransportOption,
   getQuotationByIdApi,
+  previewQuotationAiImportApi,
   requestQuotationPricingV2Api,
   updateQuotationV2Api,
   uploadQuotationDocumentApi
@@ -37,6 +41,17 @@ const cx = (...values) => values.filter(Boolean).join(' ');
 const inputClass = 'mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-500';
 const labelClass = 'block text-sm font-medium text-slate-700';
 const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const smartSections = ['journey', 'itinerary', 'hotels', 'transport', 'activities', 'inclusions', 'terms', 'presentation'];
+const sectionFields = {
+  journey: ['tripRequirements', 'sourceItineraryId'],
+  itinerary: ['itinerary'],
+  hotels: ['hotelOptions'],
+  transport: ['transportOptions'],
+  activities: ['activities'],
+  inclusions: ['inclusions', 'exclusions'],
+  terms: ['policies', 'termsAndConditions', 'cancellationPolicy'],
+  presentation: ['personalNote']
+};
 
 const Field = ({ label, hint, ...props }) => <label className={labelClass}><span>{label}</span>{hint && <span className="ml-1 text-xs font-normal text-slate-400">{hint}</span>}<input {...props} className={cx(inputClass, props.className)} /></label>;
 const Select = ({ label, children, ...props }) => <label className={labelClass}><span>{label}</span><select {...props} className={cx(inputClass, props.className)}>{children}</select></label>;
@@ -59,10 +74,167 @@ const calculateReference = (quotation) => {
   );
 };
 
+const isEmptySmartValue = (value) => value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0) || value === 0;
+const applySmartPatchLocally = (quotation, patch, { mergeMode = 'FILL_EMPTY_ONLY', selectedSections = smartSections } = {}) => {
+  const next = JSON.parse(JSON.stringify(quotation || {}));
+  const selected = new Set(selectedSections);
+  smartSections.forEach((section) => {
+    if (!selected.has(section)) return;
+    (sectionFields[section] || []).forEach((field) => {
+      if (!Object.prototype.hasOwnProperty.call(patch || {}, field)) return;
+      if (mergeMode === 'REPLACE_SELECTED_SECTIONS') {
+        next[field] = patch[field];
+        return;
+      }
+      if (field === 'tripRequirements' || field === 'policies') {
+        next[field] = { ...(next[field] || {}) };
+        Object.entries(patch[field] || {}).forEach(([key, value]) => {
+          if (isEmptySmartValue(next[field][key]) && !isEmptySmartValue(value)) next[field][key] = value;
+        });
+        return;
+      }
+      if (isEmptySmartValue(next[field]) && !isEmptySmartValue(patch[field])) next[field] = patch[field];
+    });
+  });
+  return next;
+};
+
+const SmartAssistPanel = ({
+  quotation,
+  lead,
+  frozen,
+  persistedId,
+  dirty,
+  onApply,
+  onBackendApply,
+  onDraftsApplied,
+  setError,
+  setNotice
+}) => {
+  const [sourceType, setSourceType] = useState(lead?.sourceItineraryId ? 'LEAD_LINKED_ITINERARY' : 'JSON_UPLOAD');
+  const [itineraryId, setItineraryId] = useState('');
+  const [shareToken, setShareToken] = useState('');
+  const [jsonText, setJsonText] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [mergeMode, setMergeMode] = useState('FILL_EMPTY_ONLY');
+  const [selectedSections, setSelectedSections] = useState(['journey', 'itinerary', 'hotels', 'activities', 'inclusions', 'presentation']);
+
+  const linkedLeadId = lead?._id || lead?.id || quotation?.leadId;
+  const buildRequest = () => {
+    if (sourceType === 'SAVED_ITINERARY') return { sourceType, itineraryId: itineraryId.trim(), currentQuotation: quotation };
+    if (sourceType === 'SHARED_ITINERARY') return { sourceType, shareToken: shareToken.trim(), currentQuotation: quotation };
+    if (sourceType === 'LEAD_LINKED_ITINERARY') return { sourceType, leadId: linkedLeadId, currentQuotation: quotation };
+    return { sourceType, itineraryPayload: JSON.parse(jsonText), currentQuotation: quotation };
+  };
+
+  const loadPreview = async () => {
+    setLoadingAi(true); setError(''); setNotice('');
+    try {
+      const data = await previewQuotationAiImportApi(buildRequest());
+      setPreview(data);
+      setNotice(`AI itinerary preview ready: ${data.summary?.daysAdded || 0} itinerary days, ${data.summary?.imagesLinked || 0} images, commercial pricing unchanged.`);
+    } catch (err) {
+      setError(err.message || 'Unable to preview AI itinerary import.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  const applyPreview = async () => {
+    if (!preview?.deterministicPatch) return;
+    setLoadingAi(true); setError(''); setNotice('');
+    try {
+      if (persistedId && !dirty) {
+        const data = await onBackendApply({
+          patch: preview.deterministicPatch,
+          source: preview.source,
+          mergeMode,
+          selectedSections
+        });
+        setNotice(`AI itinerary imported: ${data.summary?.daysAdded || preview.summary?.daysAdded || 0} itinerary days ready. Commercial pricing was not changed.`);
+      } else {
+        onApply(preview.deterministicPatch, { mergeMode, selectedSections });
+        setNotice(`AI itinerary imported into this draft. Save draft to persist it. Commercial pricing was not changed.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to apply AI itinerary import.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  const draftCopy = async () => {
+    setLoadingAi(true); setError(''); setNotice('');
+    try {
+      const payload = { quotation, fields: ['personalNote', 'inclusions', 'exclusions', 'travelRequirements', 'importantInformation'] };
+      const data = persistedId && !dirty
+        ? await draftQuotationAiTextForQuotationApi(persistedId, payload)
+        : await draftQuotationAiTextApi(payload);
+      onDraftsApplied(data.drafts || {});
+      setNotice(data.available === false ? 'AI wording is unavailable, so safe starter copy was prepared.' : 'AI wording suggestions applied for review. Save when ready.');
+    } catch (err) {
+      setError(err.message || 'Unable to draft AI copy.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  const toggleSection = (section) => {
+    setSelectedSections((current) => current.includes(section) ? current.filter((item) => item !== section) : [...current, section]);
+  };
+
+  return (
+    <Panel
+      title="Smart Assist"
+      description="Import structured AI Planner data into this existing Quotation V2 draft. Customer identity and commercial pricing stay protected."
+      action={<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><Sparkles size={13} />AI plan</span>}
+    >
+      <div className="grid gap-3 lg:grid-cols-[12rem_1fr_auto]">
+        <Select label="Import source" value={sourceType} onChange={(event) => setSourceType(event.target.value)} disabled={frozen || loadingAi}>
+          <option value="LEAD_LINKED_ITINERARY" disabled={!linkedLeadId}>Lead linked plan</option>
+          <option value="SAVED_ITINERARY">Saved itinerary ID</option>
+          <option value="SHARED_ITINERARY">Shared itinerary token</option>
+          <option value="JSON_UPLOAD">Quotation JSON</option>
+        </Select>
+        {sourceType === 'SAVED_ITINERARY' && <Field label="Itinerary ID" value={itineraryId} onChange={(event) => setItineraryId(event.target.value)} disabled={frozen || loadingAi} />}
+        {sourceType === 'SHARED_ITINERARY' && <Field label="Share token" value={shareToken} onChange={(event) => setShareToken(event.target.value)} disabled={frozen || loadingAi} />}
+        {sourceType === 'LEAD_LINKED_ITINERARY' && <Field label="Lead" value={linkedLeadId ? 'AI plan available on this lead' : 'No linked plan'} disabled />}
+        {sourceType === 'JSON_UPLOAD' && <label className={labelClass}><span>Quotation-ready JSON</span><input type="file" accept="application/json,.json" disabled={frozen || loadingAi} className={inputClass} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1024 * 1024) { setError('JSON file must be 1 MB or smaller.'); return; } file.text().then(setJsonText).catch(() => setError('Unable to read JSON file.')); }} /></label>}
+        <div className="flex items-end"><button type="button" disabled={frozen || loadingAi || (sourceType === 'JSON_UPLOAD' && !jsonText)} onClick={loadPreview} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{loadingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}Preview</button></div>
+      </div>
+      {preview && (
+        <div className="mt-4 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="grid gap-3 text-sm md:grid-cols-4">
+            <span><strong>{preview.summary?.daysAdded || 0}</strong> days</span>
+            <span><strong>{preview.summary?.imagesLinked || 0}</strong> images</span>
+            <span><strong>{preview.summary?.staySuggestions || 0}</strong> stays</span>
+            <span><strong>{preview.summary?.activitySuggestions || 0}</strong> activities</span>
+          </div>
+          {preview.conflicts?.length > 0 && <p className="text-xs font-semibold text-amber-800">{preview.conflicts.length} existing fields conflict. Use fill-empty to preserve current values or replacement for selected sections.</p>}
+          {preview.warnings?.map((warning) => <p key={warning} className="text-xs text-slate-600">{warning}</p>)}
+          <div className="flex flex-wrap gap-2">
+            {smartSections.map((section) => <button key={section} type="button" onClick={() => toggleSection(section)} className={cx('rounded-full border px-3 py-1 text-xs font-semibold capitalize', selectedSections.includes(section) ? 'border-emerald-600 bg-white text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500')}>{section}</button>)}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={mergeMode} onChange={(event) => setMergeMode(event.target.value)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold">
+              <option value="FILL_EMPTY_ONLY">Fill empty only</option>
+              <option value="REPLACE_SELECTED_SECTIONS">Replace selected sections</option>
+            </select>
+            <button type="button" disabled={frozen || loadingAi} onClick={applyPreview} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-40"><CheckCircle2 size={16} />Apply import</button>
+            <button type="button" disabled={frozen || loadingAi} onClick={draftCopy} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 disabled:opacity-40"><Sparkles size={16} />Draft client copy</button>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+};
+
 const leadDraft = (lead) => {
   const draft = getBlankQuotationState();
   if (!lead) return draft;
   draft.leadId = lead._id || lead.id || null;
+  draft.sourceItineraryId = typeof lead.sourceItineraryId === 'object' ? (lead.sourceItineraryId._id || lead.sourceItineraryId.id) : (lead.sourceItineraryId || null);
   draft.customerSnapshot = { name: lead.name || '', email: lead.email || '', phone: lead.phone || '', city: lead.city || '', notes: lead.message || lead.notes || '' };
   draft.tripRequirements.title = lead.tripTitle || lead.tripTitleSnapshot || (lead.destination ? `${lead.destination} journey` : '');
   draft.tripRequirements.destination = lead.destination || '';
@@ -178,6 +350,41 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     finally { setSaving(false); }
   };
 
+  const applyAiPatch = (patch, options) => {
+    setQuotation((current) => normalizeQuotationAttachmentState(applySmartPatchLocally(current, patch, options)));
+    setDirty(true);
+  };
+
+  const applyAiPatchOnServer = async (payload) => {
+    const data = await applyQuotationAiImportApi(persistedId, payload);
+    setQuotation(normalizeQuotationAttachmentState(data.quotation));
+    setDirty(false);
+    onQuotationSaved?.(data.quotation);
+    return data;
+  };
+
+  const applyAiDrafts = (drafts = {}) => {
+    setQuotation((current) => {
+      const next = { ...current };
+      if (drafts.personalNote) next.personalNote = drafts.personalNote;
+      if (drafts.inclusions?.length) next.inclusions = drafts.inclusions;
+      if (drafts.exclusions?.length) next.exclusions = drafts.exclusions;
+      next.policies = { ...(next.policies || {}) };
+      if (drafts.travelRequirements) next.policies.travelRequirements = drafts.travelRequirements;
+      if (drafts.importantInformation) next.policies.importantInformation = drafts.importantInformation;
+      if (drafts.termsAndConditions?.length) next.termsAndConditions = drafts.termsAndConditions;
+      if (drafts.cancellationPolicy?.length) next.cancellationPolicy = drafts.cancellationPolicy;
+      if (drafts.dayDescriptions?.length) {
+        next.itinerary = (next.itinerary || []).map((day) => {
+          const draft = drafts.dayDescriptions.find((item) => Number(item.day) === Number(day.day));
+          return draft?.description ? { ...day, description: draft.description } : day;
+        });
+      }
+      return normalizeQuotationAttachmentState(next);
+    });
+    setDirty(true);
+  };
+
   const uploadAttachment = async (file) => {
     if (!persistedId) return setError('Save the draft before uploading documents.');
     if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return setError('Use PDF, JPG, PNG, or WEBP documents only.');
@@ -253,6 +460,18 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
         {frozen && <div className="flex gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><LockKeyhole size={18} className="mt-0.5 shrink-0" /><div><p className="font-semibold">This revision is immutable.</p><p className="mt-1 text-blue-700">Create a new revision from the quotation detail page to change content or pricing.</p></div></div>}
         {error && <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><span className="flex gap-2"><AlertCircle size={17} className="mt-0.5 shrink-0" />{error}</span><button type="button" onClick={() => setError('')}><X size={16} /></button></div>}
         {notice && <div role="status" className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 size={17} />{notice}</div>}
+        <SmartAssistPanel
+          quotation={quotation}
+          lead={initialLead}
+          frozen={frozen}
+          persistedId={persistedId}
+          dirty={dirty}
+          onApply={applyAiPatch}
+          onBackendApply={applyAiPatchOnServer}
+          onDraftsApplied={applyAiDrafts}
+          setError={setError}
+          setNotice={setNotice}
+        />
 
         {stepKey === 'customer' && <Panel title="Customer" description="Recipient identity is frozen into each shared revision and controls who can approve it."><div className="grid gap-4 md:grid-cols-2"><Field label="Full name" value={quotation.customerSnapshot?.name || ''} onChange={(event) => setNested('customerSnapshot', 'name', event.target.value)} disabled={frozen} required /><Field label="Email" type="email" value={quotation.customerSnapshot?.email || ''} onChange={(event) => setNested('customerSnapshot', 'email', event.target.value)} disabled={frozen} required /><Field label="Phone" value={quotation.customerSnapshot?.phone || ''} onChange={(event) => setNested('customerSnapshot', 'phone', event.target.value)} disabled={frozen} required /><Field label="City" value={quotation.customerSnapshot?.city || ''} onChange={(event) => setNested('customerSnapshot', 'city', event.target.value)} disabled={frozen} /><Textarea label="Customer notes" value={quotation.customerSnapshot?.notes || ''} onChange={(event) => setNested('customerSnapshot', 'notes', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></Panel>}
 

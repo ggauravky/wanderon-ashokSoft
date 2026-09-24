@@ -25,7 +25,18 @@ export const generateAIItinerary = async ({
   pace = 'Balanced',
   mood = 'Adventure',
   budgetLevel = 'Moderate',
-  customPreferences = ''
+  customPreferences = '',
+  origin = '',
+  interests = [],
+  budgetAmount = null,
+  travelersBreakdown = null,
+  dietary = [],
+  stayPreference = '',
+  transportPreference = '',
+  mobilityConstraints = [],
+  mustInclude = [],
+  avoid = [],
+  plannerContext = {}
 }) => {
   const destMeta = getDestinationBySlug(destination);
   const weather = getDestinationWeather(destination);
@@ -39,7 +50,18 @@ export const generateAIItinerary = async ({
       pace,
       mood,
       budgetLevel,
-      customPreferences
+      customPreferences,
+      origin,
+      interests,
+      budgetAmount,
+      travelersBreakdown,
+      dietary,
+      stayPreference,
+      transportPreference,
+      mobilityConstraints,
+      mustInclude,
+      avoid,
+      plannerContext
     });
 
     if (serverResult && serverResult.days && serverResult.days.length > 0) {
@@ -47,6 +69,7 @@ export const generateAIItinerary = async ({
         ...serverResult,
         daysCount: serverResult.duration || Number(days),
         itineraryDays: serverResult.days,
+        plannerContext: serverResult.plannerContext || plannerContext,
         weather: serverResult.weather || weather
       };
     }
@@ -134,6 +157,7 @@ export const generateAIItinerary = async ({
     mood: mood,
     travelStyle: mood,
     budgetLevel: budgetLevel,
+    plannerContext,
     totalEstimatedCost: totalEstimatedCost,
     currency: 'INR',
     weather: weather,

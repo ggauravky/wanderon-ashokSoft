@@ -634,6 +634,7 @@ const quotationSchema = new mongoose.Schema(
     },
 
     sourceTripId: { type: String, default: null },
+    sourceItineraryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Itinerary', default: null, index: true },
     convertedTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
     bookingCode: { type: String, default: '' },

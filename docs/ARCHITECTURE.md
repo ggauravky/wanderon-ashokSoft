@@ -255,6 +255,19 @@ WanderLuxe provides an intelligent travel planner powered by Google Gemini (`gem
 4. **Feasibility & Media Enrichment**: Generated itineraries are audited by `itineraryFeasibilityEngine.js` and enriched with high-resolution destination galleries via `mediaResolverService.js`.
 5. **Resilient Fallback**: If `GEMINI_API_KEY` is not configured, the planner gracefully synthesizes rich itineraries using the local knowledge base (`travelKnowledge.json`).
 
+### AI Planner to Quotation Smart Builder
+
+The AI Planner persists additive `plannerContext` on saved `Itinerary` records. This context describes the trip only: origin, flexible/exact dates, traveler breakdown, interests, stay/dining/transport preferences, budget intent, mobility notes, must-include experiences, avoid preferences, and custom trip notes. Customer identity remains in `Lead`, `User`, and Quotation `customerSnapshot`; it is not stored as AI itinerary content.
+
+Planner handoff creates a canonical `Lead` with `leadType: trip_enquiry`, `source: ai_planner`, and `sourceItineraryId` pointing at the saved itinerary. The lead links to the AI plan without duplicating the full itinerary. Quotation V2 drafts can also store `sourceItineraryId`.
+
+Quotation Smart Assist uses two layers:
+
+1. Deterministic import maps factual itinerary data into Quotation V2 fields: journey, traveler counts, flexible date notes, day-by-day itinerary strings, approved media links, and review-only stay/activity/transport candidates.
+2. AI text assistance drafts customer-facing copy such as personal notes, inclusions, exclusions, travel requirements, and important information. Staff must preview/apply/save these suggestions.
+
+AI never controls commercial price. The Smart Builder never sets `manualPricing`, supplier costs, payment milestone amounts, discount/markup, GST/TCS, deposit amount, final customer price, booking references, PNRs, vehicle numbers, driver details, or customer identity. Admin pricing, immutable revision snapshots, public sharing, customer approval, and booking conversion continue through the existing Quotation V2 workflow.
+
 ---
 
 ## External Integrations Matrix

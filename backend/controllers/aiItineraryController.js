@@ -14,6 +14,56 @@ import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/m
 import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
 import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
 
+const asText = (value, max = 160) => (typeof value === 'string' ? value.trim().replace(/<[^>]*>?/gm, '').slice(0, max) : '');
+const asList = (value, maxItems = 12, maxLength = 80) => (
+  Array.isArray(value)
+    ? value.map((item) => asText(item, maxLength)).filter(Boolean).slice(0, maxItems)
+    : []
+);
+const asDateOrNull = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+const asNumberOrNull = (value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.min(max, Math.max(min, numeric));
+};
+
+function sanitizePlannerContext(input = {}) {
+  const raw = input.plannerContext && typeof input.plannerContext === 'object' ? input.plannerContext : input;
+  const travelers = raw.travelersBreakdown || raw.travelers || {};
+  return {
+    origin: asText(raw.origin, 100),
+    startDate: asDateOrNull(raw.startDate),
+    endDate: asDateOrNull(raw.endDate),
+    datesFlexible: raw.datesFlexible !== false,
+    flexibleMonth: asText(raw.flexibleMonth, 80),
+    travelersBreakdown: {
+      adults: asNumberOrNull(travelers.adults, { min: 0, max: 30 }) || 0,
+      children: asNumberOrNull(travelers.children, { min: 0, max: 30 }) || 0,
+      infants: asNumberOrNull(travelers.infants, { min: 0, max: 30 }) || 0,
+      seniors: asNumberOrNull(travelers.seniors, { min: 0, max: 30 }) || 0
+    },
+    tripType: asText(raw.tripType, 80),
+    paceRhythm: asText(raw.paceRhythm, 100),
+    acclimatization: asText(raw.acclimatization, 100),
+    interests: asList(raw.interests),
+    stayPreference: asText(raw.stayPreference, 100),
+    roomStyle: asText(raw.roomStyle, 100),
+    dietaryPreference: asText(raw.dietaryPreference, 100),
+    hotelRating: asNumberOrNull(raw.hotelRating, { min: 0, max: 5 }),
+    budgetTier: asText(raw.budgetTier, 80),
+    budgetAmount: asNumberOrNull(raw.budgetAmount, { min: 0, max: 10000000 }),
+    transportPreference: asText(raw.transportPreference || raw.transitPreference || raw.transitMode, 120),
+    mobilityConstraints: asList(raw.mobilityConstraints),
+    mustInclude: asList(raw.mustInclude),
+    avoid: asList(raw.avoid),
+    customPreferences: asText(raw.customPreferences, 1000)
+  };
+}
+
 /**
  * Safely enrich an itinerary with 3-image nature gallery if cover or gallery is missing
  */
@@ -244,6 +294,7 @@ export const generateItineraryController = async (req, res) => {
       mustInclude = [],
       avoid = []
     } = req.body;
+    const plannerContext = sanitizePlannerContext(req.body);
 
     // Strict Input Validation & Threat Defense
     if (!destination || typeof destination !== 'string' || destination.trim().length < 2) {
@@ -326,6 +377,17 @@ export const generateItineraryController = async (req, res) => {
       customPreferences,
       matchedTrip: matchedCatalogTrip
     });
+    structuredContext.plannerContext = {
+      origin,
+      travelersBreakdown: plannerContext.travelersBreakdown,
+      budgetAmount,
+      dietaryPreference: plannerContext.dietaryPreference,
+      stayPreference: plannerContext.stayPreference,
+      transportPreference: plannerContext.transportPreference,
+      mobilityConstraints,
+      mustInclude,
+      avoid
+    };
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
@@ -464,6 +526,7 @@ JSON SCHEMA:
       weather,
       seasonContext: season.name,
       ...sanitizedItinerary,
+      plannerContext,
       healthReport,
       matchedCatalogTrip
     };
@@ -526,6 +589,7 @@ export const saveItineraryController = async (req, res) => {
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
 
     let finalDays = itineraryData.days || itineraryData.itineraryDays || [];
+    const plannerContext = sanitizePlannerContext(itineraryData);
     const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
     if (needsResolution) {
       finalDays = await batchResolveItineraryMedia(finalDays, itineraryData.destination, itineraryData.title);
@@ -558,6 +622,7 @@ export const saveItineraryController = async (req, res) => {
         existingDoc.packingList = itineraryData.packingList || itineraryData.packingSuggestions || existingDoc.packingList;
         existingDoc.localTips = itineraryData.localTips || existingDoc.localTips;
         existingDoc.budgetBreakdown = itineraryData.budgetBreakdown || existingDoc.budgetBreakdown;
+        existingDoc.plannerContext = plannerContext || existingDoc.plannerContext || {};
         if (itineraryData.matchedCatalogTrip || itineraryData.matchedTrip) {
           existingDoc.matchedTrip = itineraryData.matchedCatalogTrip || itineraryData.matchedTrip;
         }
@@ -595,6 +660,7 @@ export const saveItineraryController = async (req, res) => {
       packingList: itineraryData.packingList || itineraryData.packingSuggestions || [],
       localTips: itineraryData.localTips || [],
       budgetBreakdown: itineraryData.budgetBreakdown || {},
+      plannerContext,
       matchedTrip: itineraryData.matchedCatalogTrip || itineraryData.matchedTrip || null,
       source: itineraryData.source || 'gemini-ai',
       isPublic: false
@@ -655,6 +721,7 @@ export const updateItineraryController = async (req, res) => {
     if (updateData.packingList) doc.packingList = updateData.packingList;
     if (updateData.localTips) doc.localTips = updateData.localTips;
     if (updateData.budgetBreakdown) doc.budgetBreakdown = updateData.budgetBreakdown;
+    if (updateData.plannerContext) doc.plannerContext = sanitizePlannerContext(updateData);
     doc.source = 'customized';
 
     await doc.save();

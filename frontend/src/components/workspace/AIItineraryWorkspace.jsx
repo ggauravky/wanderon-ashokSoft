@@ -116,6 +116,36 @@ const AIItineraryWorkspace = ({
     }
   };
 
+  const handleExportForQuotation = () => {
+    const safeItinerary = {
+      ...itinerary,
+      _id: undefined,
+      id: undefined,
+      user: undefined,
+      userEmail: undefined,
+      shareToken: undefined,
+      isPublic: undefined,
+      plannerContext: undefined
+    };
+    const exportPayload = {
+      schema: 'wanderluxe-ai-itinerary',
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      itinerary: safeItinerary,
+      plannerContext: itinerary?.plannerContext || formData?.plannerContext || {}
+    };
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const cleanDestination = String(destination || 'Itinerary').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+    link.href = url;
+    link.download = `WanderLuxe_AI_Plan_${cleanDestination || 'Itinerary'}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   // Copilot Apply & Undo Engine
   const handleApplyCopilotChanges = (actionPayload) => {
     if (!actionPayload) return;
@@ -214,6 +244,15 @@ const AIItineraryWorkspace = ({
           >
             <Share2 size={13} />
             <span>Share</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportForQuotation}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <FileText size={13} />
+            <span>Export for Quotation</span>
           </button>
 
           {/* Download PDF Menu */}

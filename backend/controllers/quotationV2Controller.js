@@ -9,6 +9,11 @@ import QuotationEvent from '../models/QuotationEvent.js';
 import QuotationApprovalVerification from '../models/QuotationApprovalVerification.js';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
+import {
+  applyQuotationAiPatch,
+  buildQuotationAiImportPreview,
+  generateQuotationTextDrafts
+} from '../services/quotationAiService.js';
 import { getJwtSecret } from '../config/environment.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
 import { syncLeadConversionFromBooking } from '../services/leadConversionService.js';
@@ -103,7 +108,7 @@ const editableFields = [
   'leadId', 'customerId', 'customerSnapshot', 'tripRequirements', 'personalNote', 'itinerary',
   'hotelOptions', 'transportOptions', 'activities', 'addOns', 'attachments', 'inclusions',
   'exclusions', 'policies', 'termsAndConditions', 'cancellationPolicy', 'paymentTerms',
-  'presentationSettings', 'validUntil', 'assignedTo', 'assignedToSnapshot'
+  'presentationSettings', 'validUntil', 'assignedTo', 'assignedToSnapshot', 'sourceItineraryId'
 ];
 
 const applyEditableFields = (quotation, input) => {
@@ -182,6 +187,7 @@ export const createQuotationV2 = async (req, res) => {
       quotationNumber: await generateQuotationNumber(),
       version: 1,
       leadId: payload.leadId || null,
+      sourceItineraryId: payload.sourceItineraryId || null,
       customerId: payload.customerId || null,
       assignedTo: payload.assignedTo || userId,
       assignedToSnapshot: payload.assignedToSnapshot || { name: actorName(req.user), email: req.user.email || '', phone: req.user.phone || '' },
@@ -231,6 +237,78 @@ export const createQuotationV2 = async (req, res) => {
   } catch (error) {
     console.error('Create Quotation V2 Error:', error);
     return quotationFailure(res, error, 'Unable to create quotation.');
+  }
+};
+
+export const previewQuotationAiImport = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const preview = await buildQuotationAiImportPreview({
+      request: req.body || {},
+      user: req.user
+    });
+    return res.json({ success: true, ...preview });
+  } catch (error) {
+    console.error('Quotation AI Import Preview Error:', error);
+    return fail(res, error.status || 500, error.message || 'Unable to build AI itinerary import preview.');
+  }
+};
+
+export const applyQuotationAiImport = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res, { edit: true });
+    if (!quotation) return;
+    if (!['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
+      return fail(res, 409, 'This revision is frozen. Create a new revision before importing AI itinerary content.');
+    }
+    const result = applyQuotationAiPatch({
+      quotation: quotation.toObject(),
+      patch: req.body?.patch || {},
+      mergeMode: req.body?.mergeMode || 'FILL_EMPTY_ONLY',
+      selectedSections: req.body?.selectedSections || []
+    });
+    applyEditableFields(quotation, result.quotation);
+    quotation.updatedBy = req.user._id;
+    await quotation.save();
+    await createQuotationEvent({
+      quotationId: quotation._id,
+      type: 'AI_ITINERARY_IMPORTED',
+      actor: req.user,
+      details: {
+        sourceItineraryId: req.body?.source?.itineraryId || quotation.sourceItineraryId || null,
+        sourceType: req.body?.source?.type || '',
+        mergeMode: req.body?.mergeMode || 'FILL_EMPTY_ONLY',
+        sectionsApplied: result.appliedSections
+      }
+    });
+    return res.json({ success: true, quotation, validation: validateQuotationV2(quotation), ...result });
+  } catch (error) {
+    console.error('Quotation AI Import Apply Error:', error);
+    return fail(res, error.status || 500, error.message || 'Unable to apply AI itinerary import.');
+  }
+};
+
+export const draftQuotationAiText = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    if (req.params.id) {
+      const quotation = await loadAuthorized(req, res, { edit: true });
+      if (!quotation) return;
+      if (!['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
+        return fail(res, 409, 'This revision is frozen. Create a new revision before using AI assistance.');
+      }
+    }
+    const drafts = await generateQuotationTextDrafts({
+      quotation: req.body?.quotation || {},
+      itinerary: req.body?.itinerary || null,
+      fields: req.body?.fields || [],
+      user: req.user
+    });
+    return res.json({ success: true, ...drafts });
+  } catch (error) {
+    console.error('Quotation AI Text Draft Error:', error);
+    return fail(res, error.status || 500, error.message || 'Unable to draft quotation text.');
   }
 };
 
