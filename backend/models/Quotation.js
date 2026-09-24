@@ -48,24 +48,24 @@ const hotelOptionSchema = new mongoose.Schema(
     tier: { 
       type: String, 
       enum: ['Standard', 'Deluxe', 'Super Deluxe', 'Luxury', 'Boutique', 'Option A', 'Option B', 'Option C', 'Custom'],
-      default: 'Deluxe' 
+      default: 'Custom'
     },
     label: { type: String, default: '' },
     hotelName: { type: String, required: [true, 'Hotel name is required'] },
     city: { type: String, default: '' },
     location: { type: String, default: '' },
-    category: { type: String, default: 'Deluxe' },
-    roomType: { type: String, default: 'Standard Deluxe' },
+    category: { type: String, default: '' },
+    roomType: { type: String, default: '' },
     rooms: { type: Number, default: 1, min: 1 },
     occupancy: { 
       type: String, 
-      enum: ['Single', 'Double Sharing', 'Triple Sharing', 'Family Suite', 'Quad Sharing'],
-      default: 'Double Sharing' 
+      enum: ['', 'Single', 'Double Sharing', 'Triple Sharing', 'Family Suite', 'Quad Sharing'],
+      default: ''
     },
     mealPlan: { 
       type: String, 
-      enum: ['EP (Room Only)', 'CP (Breakfast)', 'MAP (Breakfast + Dinner)', 'AP (All Meals)'], 
-      default: 'MAP (Breakfast + Dinner)' 
+      enum: ['', 'EP (Room Only)', 'CP (Breakfast)', 'MAP (Breakfast + Dinner)', 'AP (All Meals)'],
+      default: ''
     },
     checkIn: { type: Date },
     checkOut: { type: Date },
@@ -150,7 +150,7 @@ const transportOptionSchema = new mongoose.Schema(
     },
     type: { 
       type: String, 
-      default: 'SUV (Innova/Crysta)' 
+      default: ''
     },
     title: { type: String, default: '' },
     vehicle: { type: String, default: '' },
@@ -202,7 +202,7 @@ const transportOptionSchema = new mongoose.Schema(
     taxRate: { type: Number, default: 0, min: 0 },
     totalCost: { type: Number, default: 0, min: 0 },
     totalPrice: { type: Number, default: 0, min: 0 },
-    inclusions: { type: [String], default: ['Fuel', 'Tolls', 'Driver Allowance', 'State Permits'] },
+    inclusions: { type: [String], default: [] },
     notes: { type: String, default: '' },
     selected: { type: Boolean, default: false },
 
@@ -230,10 +230,10 @@ const activitySchema = new mongoose.Schema(
     unitPrice: { type: Number, default: 0, min: 0 },
     totalCost: { type: Number, default: 0, min: 0 },
     totalPrice: { type: Number, default: 0, min: 0 },
-    isIncluded: { type: Boolean, default: true },
-    isOptional: { type: Boolean, default: false },
+    isIncluded: { type: Boolean, default: false },
+    isOptional: { type: Boolean, default: true },
     attachments: { type: [quotationAttachmentSchema], default: [] },
-    selected: { type: Boolean, default: true }
+    selected: { type: Boolean, default: false }
   },
   { _id: false }
 );
@@ -276,7 +276,7 @@ const itineraryDaySchema = new mongoose.Schema(
     afternoon: { type: String, default: '' },
     evening: { type: String, default: '' },
     stay: { type: String, default: '' },
-    mealsIncluded: { type: [String], default: ['Breakfast'] },
+    mealsIncluded: { type: [String], default: [] },
     transferDetails: { type: String, default: '' },
     activityHighlights: { type: [String], default: [] },
     coverMedia: {
@@ -634,6 +634,15 @@ const quotationSchema = new mongoose.Schema(
     },
 
     sourceTripId: { type: String, default: null },
+    sourceItineraryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Itinerary', default: null, index: true },
+    aiImportProvenance: {
+      sourceType: { type: String, default: '' },
+      sourceTitle: { type: String, default: '' },
+      sourceDestination: { type: String, default: '' },
+      sourceUpdatedAt: { type: Date, default: null },
+      importedAt: { type: Date, default: null },
+      importedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+    },
     convertedTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'Trip', default: null },
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
     bookingCode: { type: String, default: '' },

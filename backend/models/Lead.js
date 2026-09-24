@@ -48,6 +48,12 @@ const leadSchema = new mongoose.Schema(
       default: null,
       index: true
     },
+    sourceItineraryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Itinerary',
+      default: null,
+      index: true
+    },
     tripSlug: {
       type: String,
       default: ''
@@ -217,7 +223,7 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry', 'callback_request', 'expert_callback_modal'],
+      enum: ['trip_page', 'contact_page', 'booking_page', 'custom_inquiry', 'Website Lead Form', 'website_lead_form', 'expert_inquiry', 'callback_request', 'expert_callback_modal', 'ai_planner'],
       default: 'trip_page'
     },
     marketingAttribution: {
@@ -291,5 +297,6 @@ leadSchema.index({ preferredCallDate: 1 });
 leadSchema.index({ 'callOutcomes.loggedBy': 1, 'callOutcomes.loggedAt': -1 });
 leadSchema.index({ 'marketingAttribution.campaignId': 1, createdAt: -1 });
 leadSchema.index({ 'marketingAttribution.firstTouch.source': 1, createdAt: -1 });
+leadSchema.index({ sourceItineraryId: 1, createdAt: -1 });
 
 export default mongoose.model('Lead', leadSchema);

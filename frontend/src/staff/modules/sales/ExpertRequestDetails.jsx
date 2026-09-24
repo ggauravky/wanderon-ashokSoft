@@ -63,9 +63,10 @@ const ExpertRequestDetails = ({ lead, onCreateQuotation, onOpenQuotation, onOpen
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-950"><FileText size={16} className="text-slate-500" aria-hidden="true" /> Quotations</h3>
             <p className="mt-1 text-xs text-slate-500">Commercial proposals linked to this Expert Request.</p>
+            {lead?.sourceItineraryId && <span className="mt-2 inline-block text-xs font-semibold text-emerald-700">AI plan attached</span>}
           </div>
           {!['LOST', 'CONVERTED'].includes(lead?.status) && (
-            <button type="button" onClick={onCreateQuotation} className="flex min-h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"><Plus size={14} aria-hidden="true" /> Create quotation</button>
+            <button type="button" onClick={onCreateQuotation} className="flex min-h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"><Plus size={14} aria-hidden="true" /> {lead?.sourceItineraryId ? 'Create quotation from AI plan' : 'Create quotation'}</button>
           )}
         </div>
         {quotations.length > 0 ? (

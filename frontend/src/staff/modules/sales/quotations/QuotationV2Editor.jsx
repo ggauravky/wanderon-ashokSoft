@@ -2,21 +2,26 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCircle2,
   Copy, Download, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
-  Paperclip, Plus, Save, Send, Trash2, Upload, X
+  Paperclip, Plus, Save, Send, Sparkles, Trash2, Upload, X
 } from 'lucide-react';
 import { useAuth } from '../../../../contexts/AuthContext.jsx';
 import {
   addQuotationAttachmentV2Api,
+  applyQuotationAiImportApi,
   createQuotationV2Api,
   deleteQuotationAttachmentV2Api,
   finalizeQuotationPricingV2Api,
   getBlankQuotationState,
+  getQuotationPolicyDefaultsApi,
+  listImportableItinerariesApi,
+  suggestQuotationAiFieldApi,
   getEmptyActivity,
   getEmptyAddOn,
   getEmptyHotelOption,
   getEmptyItineraryDay,
   getEmptyTransportOption,
   getQuotationByIdApi,
+  previewQuotationAiImportApi,
   requestQuotationPricingV2Api,
   updateQuotationV2Api,
   uploadQuotationDocumentApi
@@ -25,6 +30,7 @@ import MediaLibraryModal from '../../../../components/MediaLibraryModal.jsx';
 import UploadLocationImageModal from '../../../../components/UploadLocationImageModal.jsx';
 import TemplatePickerModal, { TemplateChoiceGrid } from '../../../../quotation-v2/components/TemplatePickerModal.jsx';
 import QuotationPreviewModal from '../../../../quotation-v2/components/QuotationPreviewModal.jsx';
+import AiSuggestionDialog from './AiSuggestionDialog.jsx';
 import { getQuotationTemplate } from '../../../../quotation-v2/templateRegistry.js';
 import { QUOTATION_V2_STEPS, formatQuotationCurrency, quotationPdfFileName, validateQuotationV2Client } from '../../../../quotation-v2/quotationV2.js';
 import {
@@ -37,10 +43,22 @@ const cx = (...values) => values.filter(Boolean).join(' ');
 const inputClass = 'mt-1.5 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:bg-slate-50 disabled:text-slate-500';
 const labelClass = 'block text-sm font-medium text-slate-700';
 const uid = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const smartSections = ['journey', 'itinerary', 'hotels', 'transport', 'activities', 'inclusions', 'terms', 'presentation'];
+const sectionFields = {
+  journey: ['tripRequirements', 'sourceItineraryId'],
+  itinerary: ['itinerary'],
+  hotels: ['hotelOptions'],
+  transport: ['transportOptions'],
+  activities: ['activities'],
+  inclusions: ['inclusions', 'exclusions'],
+  terms: ['policies', 'termsAndConditions', 'cancellationPolicy'],
+  presentation: ['personalNote']
+};
 
-const Field = ({ label, hint, ...props }) => <label className={labelClass}><span>{label}</span>{hint && <span className="ml-1 text-xs font-normal text-slate-400">{hint}</span>}<input {...props} className={cx(inputClass, props.className)} /></label>;
+const AssistActions = ({ label, value, assist, disabled }) => <span className="flex shrink-0 items-center gap-1"><button type="button" title={`Generate ${label}`} aria-label={`Generate ${label}`} disabled={disabled} onClick={(event) => { event.preventDefault(); assist('generate'); }} className="inline-flex h-8 w-8 items-center justify-center rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"><Sparkles size={15} /></button>{value && <select aria-label={`${label} AI action`} disabled={disabled} value="" onChange={(event) => { if (event.target.value) assist(event.target.value); }} className="h-8 max-w-28 rounded border border-slate-200 bg-white px-1 text-xs text-slate-600"><option value="">More</option><option value="improve">Improve</option><option value="shorten">Shorten</option><option value="format">Format</option></select>}</span>;
+const Field = ({ label, hint, assist, ...props }) => <label className={cx(labelClass, props.className)}><span className="flex items-center justify-between gap-2"><span>{label}{hint && <span className="ml-1 text-xs font-normal text-slate-400">{hint}</span>}</span>{assist && <AssistActions label={label} value={props.value} assist={assist} disabled={props.disabled} />}</span><input {...props} className={inputClass} /></label>;
 const Select = ({ label, children, ...props }) => <label className={labelClass}><span>{label}</span><select {...props} className={cx(inputClass, props.className)}>{children}</select></label>;
-const Textarea = ({ label, ...props }) => <label className={labelClass}><span>{label}</span><textarea {...props} className={cx(inputClass, 'min-h-24 py-3', props.className)} /></label>;
+const Textarea = ({ label, assist, ...props }) => <label className={cx(labelClass, props.className)}><span className="flex items-center justify-between gap-2"><span>{label}</span>{assist && <AssistActions label={label} value={props.value} assist={assist} disabled={props.disabled} />}</span><textarea {...props} className={cx(inputClass, 'min-h-24 py-3')} /></label>;
 const Toggle = ({ label, checked, onChange, description }) => <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-0.5 h-4 w-4 accent-emerald-600" /><span><span className="block text-sm font-medium text-slate-800">{label}</span>{description && <span className="mt-0.5 block text-xs text-slate-500">{description}</span>}</span></label>;
 const Panel = ({ title, description, action, children }) => <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-base font-semibold text-slate-950">{title}</h2>{description && <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>}</div>{action}</div><div className="mt-5">{children}</div></section>;
 const IconButton = ({ label, children, ...props }) => <button type="button" aria-label={label} title={label} {...props} className={cx('inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40', props.className)}>{children}</button>;
@@ -59,20 +77,235 @@ const calculateReference = (quotation) => {
   );
 };
 
+const isEmptySmartValue = (value) => value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0) || value === 0;
+const applySmartPatchLocally = (quotation, patch, { mergeMode = 'FILL_EMPTY_ONLY', selectedSections = smartSections, conflictChoices = {} } = {}) => {
+  const next = JSON.parse(JSON.stringify(quotation || {}));
+  const selected = new Set(selectedSections);
+  smartSections.forEach((section) => {
+    if (!selected.has(section)) return;
+    (sectionFields[section] || []).forEach((field) => {
+      if (!Object.prototype.hasOwnProperty.call(patch || {}, field)) return;
+      if (mergeMode === 'REPLACE_SELECTED_SECTIONS') {
+        if (field === 'tripRequirements' || field === 'policies') next[field] = { ...(next[field] || {}), ...patch[field] };
+        else if (['hotelOptions', 'transportOptions', 'activities'].includes(field)) {
+          const idField = field === 'activities' ? 'activityId' : 'optionId';
+          const existing = next[field] || [];
+          const ids = new Set(existing.map((item) => item[idField]));
+          next[field] = [...existing, ...(patch[field] || []).filter((item) => !ids.has(item[idField]))];
+        } else next[field] = patch[field];
+        return;
+      }
+      if (field === 'tripRequirements' || field === 'policies') {
+        const starterJourney = field === 'tripRequirements' && !next.tripRequirements?.title && !next.tripRequirements?.destination;
+        next[field] = { ...(next[field] || {}) };
+        Object.entries(patch[field] || {}).forEach(([key, value]) => {
+          if ((isEmptySmartValue(next[field][key]) || (starterJourney && ['days', 'nights', 'adults', 'children', 'infants', 'totalTravelers', 'duration'].includes(key))) && !isEmptySmartValue(value)) next[field][key] = value;
+        });
+        return;
+      }
+      if (isEmptySmartValue(next[field]) && !isEmptySmartValue(patch[field])) next[field] = patch[field];
+    });
+  });
+  Object.entries(conflictChoices).forEach(([path, choice]) => {
+    if (!['keep', 'use'].includes(choice)) return;
+    const [root, child] = path.split('.');
+    if (['hotelOptions', 'transportOptions', 'activities', 'sourceItineraryId'].includes(root)) return;
+    if (!smartSections.some((section) => selected.has(section) && sectionFields[section]?.includes(root))) return;
+    const from = choice === 'use' ? patch : quotation;
+    const value = child ? from[root]?.[child] : from[root];
+    if (value === undefined) return;
+    if (child) next[root] = { ...(next[root] || {}), [child]: value };
+    else next[root] = value;
+  });
+  return next;
+};
+
+const SmartAssistPanel = ({
+  quotation,
+  lead,
+  initialItineraryId,
+  frozen,
+  persistedId,
+  dirty,
+  onApply,
+  onBackendApply,
+  onUndo,
+  canUndo,
+  setError,
+  setNotice
+}) => {
+  const [sourceType, setSourceType] = useState(initialItineraryId ? 'SAVED_ITINERARY' : lead?.sourceItineraryId || (quotation?.leadId && quotation?.sourceItineraryId) ? 'LEAD_LINKED_ITINERARY' : 'JSON_UPLOAD');
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [planSearch, setPlanSearch] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [shareToken, setShareToken] = useState('');
+  const [jsonText, setJsonText] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [loadingAi, setLoadingAi] = useState(false);
+  const [mergeMode, setMergeMode] = useState('FILL_EMPTY_ONLY');
+  const [selectedSections, setSelectedSections] = useState(['journey', 'itinerary']);
+  const [candidateSelections, setCandidateSelections] = useState({ hotelCandidateIds: [], activityCandidateIds: [], includeTransportCandidate: false });
+  const [conflictChoices, setConflictChoices] = useState({});
+  const [sourceRequest, setSourceRequest] = useState(null);
+  const [ignoredSourceUpdate, setIgnoredSourceUpdate] = useState(false);
+
+  const linkedLeadId = lead?._id || lead?.id || quotation?.leadId?._id || quotation?.leadId;
+  const sourceUpdated = preview?.source?.updatedAt && quotation?.aiImportProvenance?.sourceUpdatedAt
+    && new Date(preview.source.updatedAt) > new Date(quotation.aiImportProvenance.sourceUpdatedAt);
+  const buildRequest = () => {
+    if (sourceType === 'SAVED_ITINERARY') return selectedPlan
+      ? selectedPlan.leadId
+        ? { sourceType: 'LEAD_LINKED_ITINERARY', leadId: selectedPlan.leadId, currentQuotation: quotation }
+        : { sourceType, itineraryId: selectedPlan.itineraryId, currentQuotation: quotation }
+      : { sourceType, itineraryId: initialItineraryId, currentQuotation: quotation };
+    if (sourceType === 'SHARED_ITINERARY') return { sourceType, shareToken: shareToken.trim(), currentQuotation: quotation };
+    if (sourceType === 'LEAD_LINKED_ITINERARY') return { sourceType, leadId: linkedLeadId, currentQuotation: quotation };
+    return { sourceType, itineraryPayload: JSON.parse(jsonText), currentQuotation: quotation };
+  };
+
+  const loadPreview = async () => {
+    setLoadingAi(true); setError(''); setNotice('');
+    try {
+      const data = await previewQuotationAiImportApi(buildRequest());
+      setSourceRequest(buildRequest());
+      setPreview(data);
+      setNotice(`AI itinerary preview ready: ${data.summary?.daysAdded || 0} itinerary days, ${data.summary?.imagesLinked || 0} images, commercial pricing unchanged.`);
+    } catch (err) {
+      setError(err.message || 'Unable to preview AI itinerary import.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!initialItineraryId || frozen) return;
+    let cancelled = false;
+    const request = { sourceType: 'SAVED_ITINERARY', itineraryId: initialItineraryId, currentQuotation: quotation };
+    previewQuotationAiImportApi(request).then((data) => {
+      if (!cancelled) { setPreview(data); setSourceRequest(request); }
+    }).catch((err) => { if (!cancelled) setError(err.message || 'Unable to preview this plan.'); });
+    return () => { cancelled = true; };
+  }, [initialItineraryId]);
+  useEffect(() => {
+    if (initialItineraryId || !linkedLeadId || !(lead?.sourceItineraryId || quotation?.sourceItineraryId) || frozen) return;
+    let cancelled = false;
+    const request = { sourceType: 'LEAD_LINKED_ITINERARY', leadId: linkedLeadId, currentQuotation: quotation };
+    previewQuotationAiImportApi(request).then((data) => {
+      if (!cancelled) { setPreview(data); setSourceRequest(request); }
+    }).catch((err) => { if (!cancelled) setError(err.message || 'Unable to preview the linked AI plan.'); });
+    return () => { cancelled = true; };
+  }, [initialItineraryId, linkedLeadId]);
+
+  const applyPreview = async () => {
+    if (!preview?.deterministicPatch) return;
+    setLoadingAi(true); setError(''); setNotice('');
+    try {
+      if (persistedId && !dirty) {
+        const data = await onBackendApply({
+          source: { type: sourceRequest.sourceType, itineraryId: sourceRequest.itineraryId, leadId: sourceRequest.leadId, shareToken: sourceRequest.shareToken, itineraryPayload: sourceRequest.itineraryPayload },
+          mergeMode,
+          selectedSections,
+          candidateSelections,
+          conflictChoices,
+          expectedSourceUpdatedAt: preview.source.updatedAt
+        });
+        setNotice(`AI itinerary imported: ${data.summary?.daysAdded || preview.summary?.daysAdded || 0} itinerary days ready. Commercial pricing was not changed.`);
+      } else {
+        onApply({ ...preview.deterministicPatch,
+          hotelOptions: (preview.deterministicPatch.hotelOptions || []).filter((item) => candidateSelections.hotelCandidateIds.includes(item.optionId)),
+          activities: (preview.deterministicPatch.activities || []).filter((item) => candidateSelections.activityCandidateIds.includes(item.activityId)),
+          transportOptions: candidateSelections.includeTransportCandidate ? preview.deterministicPatch.transportOptions : []
+        }, { mergeMode, selectedSections, conflictChoices });
+        setNotice(`AI itinerary imported into this draft. Save draft to persist it. Commercial pricing was not changed.`);
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to apply AI itinerary import.');
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  const searchPlans = async () => {
+    setLoadingAi(true);
+    try { setPlans((await listImportableItinerariesApi(planSearch)).itineraries || []); }
+    catch (err) { setError(err.message || 'Unable to search plans.'); }
+    finally { setLoadingAi(false); }
+  };
+
+  const toggleSection = (section) => {
+    setSelectedSections((current) => current.includes(section) ? current.filter((item) => item !== section) : [...current, section]);
+  };
+
+  return (
+    <Panel
+      title="Smart Assist"
+      description="Import structured AI Planner data into this existing Quotation V2 draft. Customer identity and commercial pricing stay protected."
+      action={<span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><Sparkles size={13} />AI plan</span>}
+    >
+      <div className="grid gap-3 lg:grid-cols-[12rem_1fr_auto]">
+        <Select label="Import source" value={sourceType} onChange={(event) => setSourceType(event.target.value)} disabled={frozen || loadingAi}>
+          <option value="LEAD_LINKED_ITINERARY" disabled={!linkedLeadId}>Lead linked plan</option>
+          <option value="SAVED_ITINERARY">Saved plans</option>
+          <option value="SHARED_ITINERARY">Shared plan link</option>
+          <option value="JSON_UPLOAD">Quotation JSON</option>
+        </Select>
+        {sourceType === 'SAVED_ITINERARY' && <div>{initialItineraryId && !selectedPlan && <p className="mt-2 text-xs text-emerald-700">Plan selected from AI Planner</p>}<div className="flex gap-2"><input aria-label="Search saved plans" placeholder="Search title or destination" value={planSearch} onChange={(event) => setPlanSearch(event.target.value)} className={inputClass} /><button type="button" onClick={searchPlans} disabled={loadingAi} className="mt-1.5 rounded border px-3 text-sm">Search</button></div><select aria-label="Saved plan" value={selectedPlan?.itineraryId || ''} onChange={(event) => setSelectedPlan(plans.find((item) => item.itineraryId === event.target.value) || null)} className={inputClass}><option value="">Choose another plan</option>{plans.map((item) => <option key={item.itineraryId} value={item.itineraryId}>{item.title} - {item.destination} - {item.duration} days - {item.travelers} travelers - {new Date(item.updatedAt).toLocaleDateString()} - {item.source}</option>)}</select></div>}
+        {sourceType === 'SHARED_ITINERARY' && <Field label="Share token or WanderLuxe link" value={shareToken} onChange={(event) => setShareToken(event.target.value)} disabled={frozen || loadingAi} />}
+        {sourceType === 'LEAD_LINKED_ITINERARY' && <Field label="Lead plan" value={lead?.sourceItineraryId?.title ? `${lead.sourceItineraryId.title} - ${lead.sourceItineraryId.destination || ''}` : linkedLeadId ? 'Linked AI plan' : 'No linked plan'} disabled />}
+        {sourceType === 'JSON_UPLOAD' && <label className={labelClass}><span>Quotation-ready JSON</span><input type="file" accept="application/json,.json" disabled={frozen || loadingAi} className={inputClass} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1024 * 1024) { setError('JSON file must be 1 MB or smaller.'); return; } file.text().then(setJsonText).catch(() => setError('Unable to read JSON file.')); }} /></label>}
+        <div className="flex items-end"><button type="button" disabled={frozen || loadingAi || (sourceType === 'JSON_UPLOAD' && !jsonText) || (sourceType === 'SAVED_ITINERARY' && !selectedPlan && !initialItineraryId)} onClick={loadPreview} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{loadingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}Preview</button></div>
+      </div>
+      {preview && (
+        <div className="mt-4 space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          {sourceUpdated && !ignoredSourceUpdate && <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"><span>Source AI itinerary changed after this quotation was imported.</span><button type="button" onClick={() => setIgnoredSourceUpdate(true)} className="underline">Ignore</button></div>}
+          <div className="grid gap-3 text-sm md:grid-cols-4">
+            <span><strong>{preview.summary?.daysAdded || 0}</strong> days</span>
+            <span><strong>{preview.summary?.imagesLinked || 0}</strong> images</span>
+            <span><strong>{preview.summary?.staySuggestions || 0}</strong> stays</span>
+            <span><strong>{preview.summary?.activitySuggestions || 0}</strong> activities</span>
+          </div>
+          {preview.conflicts?.length > 0 && <details className="rounded border border-amber-200 bg-white p-3 text-xs"><summary className="cursor-pointer font-semibold text-amber-800">{preview.conflicts.length} existing fields differ. Review choices</summary><div className="mt-3 max-h-56 space-y-3 overflow-y-auto">{preview.conflicts.map((item) => <div key={item.field} className="border-b border-slate-100 pb-2"><p className="font-semibold text-slate-800">{item.field.replaceAll('.', ' ')}</p><p className="mt-1 line-clamp-2 text-slate-600">Current: {typeof item.currentValue === 'string' ? item.currentValue : JSON.stringify(item.currentValue)}</p><p className="line-clamp-2 text-slate-600">Plan: {typeof item.proposedValue === 'string' ? item.proposedValue : JSON.stringify(item.proposedValue)}</p>{!['hotelOptions', 'transportOptions', 'activities', 'sourceItineraryId'].includes(item.field) && <div className="mt-1 flex gap-4"><label><input type="radio" name={`conflict-${item.field}`} checked={(conflictChoices[item.field] || (mergeMode === 'FILL_EMPTY_ONLY' ? 'keep' : 'use')) === 'keep'} onChange={() => setConflictChoices((current) => ({ ...current, [item.field]: 'keep' }))} /> Keep current</label><label><input type="radio" name={`conflict-${item.field}`} checked={(conflictChoices[item.field] || (mergeMode === 'FILL_EMPTY_ONLY' ? 'keep' : 'use')) === 'use'} onChange={() => setConflictChoices((current) => ({ ...current, [item.field]: 'use' }))} /> Use plan</label></div>}</div>)}</div></details>}
+          {preview.warnings?.map((warning) => <p key={warning} className="text-xs text-slate-600">{warning}</p>)}
+          {preview.source?.updatedAt && <p className="text-xs text-slate-600">Source last updated {new Date(preview.source.updatedAt).toLocaleString()}. Preview again if the plan changes.</p>}
+          <div className="grid gap-2 text-xs md:grid-cols-3">{(preview.suggestions?.stayCandidates || []).map((item) => <label key={item.optionId} className="flex gap-2"><input type="checkbox" checked={candidateSelections.hotelCandidateIds.includes(item.optionId)} onChange={(event) => setCandidateSelections((current) => ({ ...current, hotelCandidateIds: event.target.checked ? [...current.hotelCandidateIds, item.optionId] : current.hotelCandidateIds.filter((id) => id !== item.optionId) }))} />{item.hotelName} (unconfirmed)</label>)}{(preview.suggestions?.activityCandidates || []).map((item) => <label key={item.activityId} className="flex gap-2"><input type="checkbox" checked={candidateSelections.activityCandidateIds.includes(item.activityId)} onChange={(event) => setCandidateSelections((current) => ({ ...current, activityCandidateIds: event.target.checked ? [...current.activityCandidateIds, item.activityId] : current.activityCandidateIds.filter((id) => id !== item.activityId) }))} />{item.name} (optional)</label>)}{preview.suggestions?.transportCandidate && <label className="flex gap-2"><input type="checkbox" checked={candidateSelections.includeTransportCandidate} onChange={(event) => setCandidateSelections((current) => ({ ...current, includeTransportCandidate: event.target.checked }))} />Transport candidate (unconfirmed)</label>}</div>
+          <div className="flex flex-wrap gap-2">
+            {smartSections.map((section) => <button key={section} type="button" onClick={() => toggleSection(section)} className={cx('rounded-full border px-3 py-1 text-xs font-semibold capitalize', selectedSections.includes(section) ? 'border-emerald-600 bg-white text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-500')}>{section}</button>)}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={mergeMode} onChange={(event) => setMergeMode(event.target.value)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-semibold">
+              <option value="FILL_EMPTY_ONLY">Fill empty only</option>
+              <option value="REPLACE_SELECTED_SECTIONS">Replace selected sections</option>
+            </select>
+            <button type="button" disabled={frozen || loadingAi} onClick={applyPreview} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white disabled:opacity-40"><CheckCircle2 size={16} />Apply import</button>
+            {canUndo && <button type="button" onClick={onUndo} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700">Undo import</button>}
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+};
+
 const leadDraft = (lead) => {
   const draft = getBlankQuotationState();
   if (!lead) return draft;
   draft.leadId = lead._id || lead.id || null;
+  draft.sourceItineraryId = typeof lead.sourceItineraryId === 'object' ? (lead.sourceItineraryId._id || lead.sourceItineraryId.id) : (lead.sourceItineraryId || null);
   draft.customerSnapshot = { name: lead.name || '', email: lead.email || '', phone: lead.phone || '', city: lead.city || '', notes: lead.message || lead.notes || '' };
   draft.tripRequirements.title = lead.tripTitle || lead.tripTitleSnapshot || (lead.destination ? `${lead.destination} journey` : '');
   draft.tripRequirements.destination = lead.destination || '';
   draft.tripRequirements.adults = Math.max(1, Number(lead.travelersCount) || 1);
-  draft.tripRequirements.totalTravelers = draft.tripRequirements.adults;
+  const travelerFacts = lead.sourceItineraryId?.plannerContext?.travelersBreakdown;
+  if (travelerFacts) {
+    draft.tripRequirements.adults = Math.max(1, Number(travelerFacts.adults || 0) + Number(travelerFacts.seniors || 0));
+    draft.tripRequirements.children = Number(travelerFacts.children || 0);
+    draft.tripRequirements.infants = Number(travelerFacts.infants || 0);
+  }
+  draft.tripRequirements.totalTravelers = draft.tripRequirements.adults + draft.tripRequirements.children + draft.tripRequirements.infants;
   draft.tripRequirements.specialRequests = [lead.selectedBatch ? `Selected batch: ${lead.selectedBatch}` : '', lead.message || ''].filter(Boolean).join('\n');
   return draft;
 };
 
-export default function QuotationV2Editor({ quotationId, initialQuotation, initialLead, onClose, onQuotationSaved }) {
+export default function QuotationV2Editor({ quotationId, initialQuotation, initialLead, initialItineraryId, onClose, onQuotationSaved }) {
   const { user } = useAuth();
   const [quotation, setQuotation] = useState(() => normalizeQuotationAttachmentState(initialQuotation || leadDraft(initialLead)));
   const [activeStep, setActiveStep] = useState(0);
@@ -88,6 +321,10 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
   const [hotelUploadOpen, setHotelUploadOpen] = useState(false);
   const [uploadedHotelAsset, setUploadedHotelAsset] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [suggestion, setSuggestion] = useState(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [importUndo, setImportUndo] = useState(null);
+  const [aiAppliedFields, setAiAppliedFields] = useState([]);
   const isAdmin = ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const persistedId = quotation?._id || quotationId;
   const frozen = Boolean(quotation?.manualPricing?.finalizedAt) || !['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED'].includes(quotation?.status || 'DRAFT');
@@ -107,8 +344,8 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
   }, [dirty]);
 
   const validation = useMemo(() => validateQuotationV2Client({ ...quotation, manualPricing: { ...quotation.manualPricing, componentReference: calculateReference(quotation) } }), [quotation]);
-  const setValue = (key, value) => { setQuotation((current) => ({ ...current, [key]: value })); setDirty(true); setNotice(''); };
-  const setNested = (key, field, value) => { setQuotation((current) => ({ ...current, [key]: { ...(current[key] || {}), [field]: value } })); setDirty(true); setNotice(''); };
+  const setValue = (key, value) => { setQuotation((current) => ({ ...current, [key]: value })); setDirty(true); setNotice(''); setImportUndo(null); };
+  const setNested = (key, field, value) => { setQuotation((current) => ({ ...current, [key]: { ...(current[key] || {}), [field]: value } })); setDirty(true); setNotice(''); setImportUndo(null); };
   const setArrayItem = (key, index, field, value) => setValue(key, quotation[key].map((item, itemIndex) => itemIndex === index ? { ...item, [field]: value } : item));
   const addItem = (key, item) => setValue(key, [...(quotation[key] || []), item]);
   const removeItem = (key, index) => setValue(key, quotation[key].filter((_, itemIndex) => itemIndex !== index));
@@ -143,10 +380,13 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     setSaving(true); setError(''); setNotice('');
     try {
       const currentPayload = payload();
+      currentPayload.aiAppliedFields = aiAppliedFields;
       if (!isAdmin) delete currentPayload.manualPricing;
       const data = persistedId ? await updateQuotationV2Api(persistedId, currentPayload) : await createQuotationV2Api(currentPayload);
       setQuotation(normalizeQuotationAttachmentState(data.quotation));
       setDirty(false);
+      setImportUndo(null);
+      setAiAppliedFields([]);
       setNotice('Draft saved to the quotation record.');
       onQuotationSaved?.(data.quotation);
       return data.quotation;
@@ -176,6 +416,119 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     try { const data = await finalizeQuotationPricingV2Api(id, localPricing); setQuotation(data.quotation); setDirty(false); setNotice(`Version ${data.revision.version} pricing finalized and frozen.`); }
     catch (finalizeError) { setError(finalizeError.message); }
     finally { setSaving(false); }
+  };
+
+  const applyAiPatch = (patch, options) => {
+    setImportUndo({ quotation: JSON.parse(JSON.stringify(quotation)), persisted: false });
+    setQuotation((current) => normalizeQuotationAttachmentState(applySmartPatchLocally(current, patch, options)));
+    setDirty(true);
+  };
+
+  const applyAiPatchOnServer = async (payload) => {
+    const data = await applyQuotationAiImportApi(persistedId, payload);
+    setImportUndo({ quotation: JSON.parse(JSON.stringify(quotation)), persisted: true });
+    setQuotation(normalizeQuotationAttachmentState(data.quotation));
+    setDirty(false);
+    onQuotationSaved?.(data.quotation);
+    return data;
+  };
+
+  const undoAiImport = async () => {
+    if (!importUndo || frozen) return;
+    try {
+      if (importUndo.persisted) {
+        const prior = importUndo.quotation;
+        const restored = await updateQuotationV2Api(persistedId, Object.fromEntries([
+          'sourceItineraryId', 'tripRequirements', 'itinerary', 'hotelOptions', 'transportOptions',
+          'activities', 'inclusions', 'exclusions', 'policies', 'personalNote'
+        ].map((key) => [key, prior[key]])));
+        setQuotation(normalizeQuotationAttachmentState(restored.quotation));
+        setDirty(false);
+      } else {
+        setQuotation(normalizeQuotationAttachmentState(importUndo.quotation));
+        setDirty(true);
+      }
+      setImportUndo(null);
+      setNotice('Import reverted.');
+    } catch (err) { setError(err.message || 'Unable to undo import.'); }
+  };
+
+  const fieldValue = (field, index = 0) => {
+    if (field === 'itinerary.missingDescriptions') return [];
+    if (field === 'customer.notes') return quotation.customerSnapshot?.notes || '';
+    if (field === 'journey.title') return quotation.tripRequirements?.title || '';
+    if (field === 'journey.specialRequests') return quotation.tripRequirements?.specialRequests || '';
+    if (field === 'journey.personalNote') return quotation.personalNote || '';
+    if (field === 'policies.all') return quotation.policies || {};
+    if (field.startsWith('policies.')) return quotation.policies?.[field.split('.')[1]] || '';
+    if (field === 'inclusions' || field === 'exclusions') return quotation[field] || [];
+    const [part, key] = field.split('.');
+    const collection = { itinerary: 'itinerary', hotel: 'hotelOptions', transport: 'transportOptions', activity: 'activities', addon: 'addOns' }[part];
+    return quotation[collection]?.[index]?.[key] || '';
+  };
+  const requestAiField = async (field, index = 0, mode = 'generate') => {
+    if (frozen || aiBusy) return;
+    setAiBusy(true); setError('');
+    try {
+      const response = await suggestQuotationAiFieldApi({ quotation, field, index, mode }, persistedId);
+      if (!response.available) { setError(response.reason || 'AI writing is unavailable.'); return; }
+      setSuggestion({ field, index, current: fieldValue(field, index), suggestion: response.suggestion, label: field.replaceAll('.', ' ') });
+    } catch (err) { setError(err.message || 'Unable to prepare suggestion.'); }
+    finally { setAiBusy(false); }
+  };
+  const applyPolicyDefault = async (key) => {
+    if (frozen) return;
+    try {
+      const { defaults } = await getQuotationPolicyDefaultsApi(quotation);
+      const current = fieldValue(`policies.${key}`);
+      if (!current) setNested('policies', key, defaults[key]);
+      else setSuggestion({ field: `policies.${key}`, current, suggestion: defaults[key], label: key, source: 'default' });
+    } catch (err) { setError(err.message || 'Unable to load policy defaults.'); }
+  };
+  const fillPolicyDefaults = async () => {
+    if (frozen) return;
+    try {
+      const { defaults } = await getQuotationPolicyDefaultsApi(quotation);
+      setQuotation((current) => ({ ...current, policies: Object.fromEntries(Object.keys(defaults).map((key) => [key, current.policies?.[key] || defaults[key]])) }));
+      setDirty(true); setImportUndo(null);
+      setNotice('Empty policy fields filled with safe defaults. Review before sharing.');
+    } catch (err) { setError(err.message || 'Unable to load policy defaults.'); }
+  };
+  const applySuggestion = (action, selected = []) => {
+    if (!suggestion || frozen) return;
+    const merge = (current, proposed) => {
+      if (action === 'replace' || !current || (Array.isArray(current) && !current.length)) return proposed;
+      if (Array.isArray(current)) return [...current, ...proposed.filter((item) => !current.includes(item))];
+      return `${current.trim()}\n${String(proposed).trim()}`;
+    };
+    setQuotation((current) => {
+      const next = { ...current };
+      const { field, index } = suggestion;
+      if (field === 'customer.notes') next.customerSnapshot = { ...current.customerSnapshot, notes: merge(current.customerSnapshot?.notes, suggestion.suggestion) };
+      else if (field === 'itinerary.missingDescriptions') {
+        next.itinerary = (current.itinerary || []).map((day) => {
+          const proposed = suggestion.suggestion.find((item) => Number(item.day) === Number(day.day));
+          return proposed && !day.description ? { ...day, description: proposed.description } : day;
+        });
+      }
+      else if (field === 'journey.title' || field === 'journey.specialRequests') {
+        const key = field === 'journey.title' ? 'title' : 'specialRequests';
+        next.tripRequirements = { ...current.tripRequirements, [key]: merge(current.tripRequirements?.[key], suggestion.suggestion) };
+      } else if (field === 'journey.personalNote') next.personalNote = merge(current.personalNote, suggestion.suggestion);
+      else if (field === 'inclusions' || field === 'exclusions') next[field] = merge(current[field] || [], suggestion.suggestion);
+      else if (field.startsWith('policies.')) {
+        next.policies = { ...current.policies };
+        if (field === 'policies.all') selected.forEach((key) => { next.policies[key] = merge(current.policies?.[key], suggestion.suggestion[key]); });
+        else { const key = field.split('.')[1]; next.policies[key] = merge(current.policies?.[key], suggestion.suggestion); }
+      } else {
+        const [part, key] = field.split('.');
+        const collection = { itinerary: 'itinerary', hotel: 'hotelOptions', transport: 'transportOptions', activity: 'activities', addon: 'addOns' }[part];
+        next[collection] = (current[collection] || []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: merge(item[key], suggestion.suggestion) } : item);
+      }
+      return next;
+    });
+    setAiAppliedFields((fields) => [...new Set([...fields, suggestion.field])]);
+    setDirty(true); setImportUndo(null); setSuggestion(null);
   };
 
   const uploadAttachment = async (file) => {
@@ -253,26 +606,42 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
         {frozen && <div className="flex gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900"><LockKeyhole size={18} className="mt-0.5 shrink-0" /><div><p className="font-semibold">This revision is immutable.</p><p className="mt-1 text-blue-700">Create a new revision from the quotation detail page to change content or pricing.</p></div></div>}
         {error && <div role="alert" className="flex items-start justify-between gap-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><span className="flex gap-2"><AlertCircle size={17} className="mt-0.5 shrink-0" />{error}</span><button type="button" onClick={() => setError('')}><X size={16} /></button></div>}
         {notice && <div role="status" className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 size={17} />{notice}</div>}
+        <div className={stepKey === 'journey' || stepKey === 'itinerary' ? '' : 'hidden'}><SmartAssistPanel
+          quotation={quotation}
+          lead={initialLead}
+          initialItineraryId={initialItineraryId}
+          frozen={frozen}
+          persistedId={persistedId}
+          dirty={dirty}
+          onApply={applyAiPatch}
+          onBackendApply={applyAiPatchOnServer}
+          onUndo={undoAiImport}
+          canUndo={Boolean(importUndo)}
+          setError={setError}
+          setNotice={setNotice}
+        /></div>
 
-        {stepKey === 'customer' && <Panel title="Customer" description="Recipient identity is frozen into each shared revision and controls who can approve it."><div className="grid gap-4 md:grid-cols-2"><Field label="Full name" value={quotation.customerSnapshot?.name || ''} onChange={(event) => setNested('customerSnapshot', 'name', event.target.value)} disabled={frozen} required /><Field label="Email" type="email" value={quotation.customerSnapshot?.email || ''} onChange={(event) => setNested('customerSnapshot', 'email', event.target.value)} disabled={frozen} required /><Field label="Phone" value={quotation.customerSnapshot?.phone || ''} onChange={(event) => setNested('customerSnapshot', 'phone', event.target.value)} disabled={frozen} required /><Field label="City" value={quotation.customerSnapshot?.city || ''} onChange={(event) => setNested('customerSnapshot', 'city', event.target.value)} disabled={frozen} /><Textarea label="Customer notes" value={quotation.customerSnapshot?.notes || ''} onChange={(event) => setNested('customerSnapshot', 'notes', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></Panel>}
+        {stepKey === 'customer' && (initialLead?.sourceItineraryId || initialItineraryId) && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><span>AI plan attached: {initialLead?.sourceItineraryId?.title || 'saved itinerary'}</span><button type="button" onClick={() => setActiveStep(1)} className="rounded bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Review Smart Fill</button></div>}
 
-        {stepKey === 'journey' && <Panel title="Journey brief" description="Define dates, party size, destination, and the tone of the experience."><div className="grid gap-4 md:grid-cols-2"><Field label="Proposal title" value={quotation.tripRequirements?.title || ''} onChange={(event) => setNested('tripRequirements', 'title', event.target.value)} disabled={frozen} /><Field label="Destination" value={quotation.tripRequirements?.destination || ''} onChange={(event) => setNested('tripRequirements', 'destination', event.target.value)} disabled={frozen} /><Field label="Start date" type="date" value={quotation.tripRequirements?.startDate?.slice?.(0, 10) || ''} onChange={(event) => setNested('tripRequirements', 'startDate', event.target.value)} disabled={frozen} /><Field label="End date" type="date" value={quotation.tripRequirements?.endDate?.slice?.(0, 10) || ''} onChange={(event) => setNested('tripRequirements', 'endDate', event.target.value)} disabled={frozen} /><Field label="Duration label" value={quotation.tripRequirements?.duration || ''} onChange={(event) => setNested('tripRequirements', 'duration', event.target.value)} disabled={frozen} /><Select label="Travel style" value={quotation.tripRequirements?.travelStyle || 'Custom'} onChange={(event) => setNested('tripRequirements', 'travelStyle', event.target.value)} disabled={frozen}>{['Adventure', 'Luxury', 'Budget', 'Backpacking', 'Family', 'Honeymoon', 'Custom'].map((value) => <option key={value}>{value}</option>)}</Select><Field label="Adults" type="number" min="1" value={quotation.tripRequirements?.adults ?? 1} onChange={(event) => setNested('tripRequirements', 'adults', Number(event.target.value))} disabled={frozen} /><Field label="Children" type="number" min="0" value={quotation.tripRequirements?.children ?? 0} onChange={(event) => setNested('tripRequirements', 'children', Number(event.target.value))} disabled={frozen} /><Field label="Infants" type="number" min="0" value={quotation.tripRequirements?.infants ?? 0} onChange={(event) => setNested('tripRequirements', 'infants', Number(event.target.value))} disabled={frozen} /><Field label="Budget per person" type="number" min="0" value={quotation.tripRequirements?.budgetPerPerson || ''} onChange={(event) => setNested('tripRequirements', 'budgetPerPerson', Number(event.target.value))} disabled={frozen} /><Textarea label="Special requests" value={quotation.tripRequirements?.specialRequests || ''} onChange={(event) => setNested('tripRequirements', 'specialRequests', event.target.value)} disabled={frozen} className="md:col-span-2" /><Textarea label="Personal note shown near the proposal opening" value={quotation.personalNote || ''} onChange={(event) => setValue('personalNote', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></Panel>}
+        {stepKey === 'customer' && <Panel title="Customer" description="Recipient identity is frozen into each shared revision and controls who can approve it."><div className="grid gap-4 md:grid-cols-2"><Field label="Full name" value={quotation.customerSnapshot?.name || ''} onChange={(event) => setNested('customerSnapshot', 'name', event.target.value)} disabled={frozen} required /><Field label="Email" type="email" value={quotation.customerSnapshot?.email || ''} onChange={(event) => setNested('customerSnapshot', 'email', event.target.value)} disabled={frozen} required /><Field label="Phone" value={quotation.customerSnapshot?.phone || ''} onChange={(event) => setNested('customerSnapshot', 'phone', event.target.value)} disabled={frozen} required /><Field label="City" value={quotation.customerSnapshot?.city || ''} onChange={(event) => setNested('customerSnapshot', 'city', event.target.value)} disabled={frozen} /><Textarea label="Customer notes" assist={(mode) => requestAiField('customer.notes', 0, mode)} value={quotation.customerSnapshot?.notes || ''} onChange={(event) => setNested('customerSnapshot', 'notes', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></Panel>}
 
-        {stepKey === 'itinerary' && <Panel title="Day-by-day itinerary" description="Build a narrative itinerary and select approved media from the shared Media Library." action={<button type="button" disabled={frozen} onClick={() => addItem('itinerary', getEmptyItineraryDay((quotation.itinerary?.length || 0) + 1))} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add day</button>}><div className="space-y-4">{quotation.itinerary?.length ? quotation.itinerary.map((day, index) => <article key={`${day.day}-${index}`} className="rounded-xl border border-slate-200 p-4">{renderItemControls('itinerary', index, quotation.itinerary.length, `Day ${day.day || index + 1}: ${day.title || 'Untitled'}`, day.destination || day.locationName)}<div className="grid gap-4 md:grid-cols-2"><Field label="Title" value={day.title || ''} onChange={(event) => setArrayItem('itinerary', index, 'title', event.target.value)} disabled={frozen} /><Field label="Location" value={day.destination || ''} onChange={(event) => setArrayItem('itinerary', index, 'destination', event.target.value)} disabled={frozen} /><Textarea label="Narrative" value={day.description || ''} onChange={(event) => setArrayItem('itinerary', index, 'description', event.target.value)} disabled={frozen} className="md:col-span-2" /><Field label="Morning" value={day.morning || ''} onChange={(event) => setArrayItem('itinerary', index, 'morning', event.target.value)} disabled={frozen} /><Field label="Afternoon" value={day.afternoon || ''} onChange={(event) => setArrayItem('itinerary', index, 'afternoon', event.target.value)} disabled={frozen} /><Field label="Evening" value={day.evening || ''} onChange={(event) => setArrayItem('itinerary', index, 'evening', event.target.value)} disabled={frozen} /><Field label="Stay" value={day.stay || ''} onChange={(event) => setArrayItem('itinerary', index, 'stay', event.target.value)} disabled={frozen} /><div className="md:col-span-2"><button type="button" disabled={frozen} onClick={() => setMediaTarget({ type: 'itinerary', index })} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"><ImageIcon size={16} />{day.coverMedia?.url ? 'Change approved image' : 'Select approved image'}</button>{day.coverMedia?.url && <img src={day.coverMedia.url} alt={day.coverMedia.altText || ''} className="mt-3 h-36 w-full max-w-md rounded-xl object-cover" />}</div></div></article>) : <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-500">No itinerary days yet.</div>}</div></Panel>}
+        {stepKey === 'journey' && <Panel title="Journey brief" description="Define dates, party size, destination, and the tone of the experience."><div className="grid gap-4 md:grid-cols-2"><Field label="Proposal title" assist={(mode) => requestAiField('journey.title', 0, mode)} value={quotation.tripRequirements?.title || ''} onChange={(event) => setNested('tripRequirements', 'title', event.target.value)} disabled={frozen} /><Field label="Destination" value={quotation.tripRequirements?.destination || ''} onChange={(event) => setNested('tripRequirements', 'destination', event.target.value)} disabled={frozen} /><Field label="Start date" type="date" value={quotation.tripRequirements?.startDate?.slice?.(0, 10) || ''} onChange={(event) => setNested('tripRequirements', 'startDate', event.target.value)} disabled={frozen} /><Field label="End date" type="date" value={quotation.tripRequirements?.endDate?.slice?.(0, 10) || ''} onChange={(event) => setNested('tripRequirements', 'endDate', event.target.value)} disabled={frozen} /><Field label="Duration label" value={quotation.tripRequirements?.duration || ''} onChange={(event) => setNested('tripRequirements', 'duration', event.target.value)} disabled={frozen} /><Select label="Travel style" value={quotation.tripRequirements?.travelStyle || 'Custom'} onChange={(event) => setNested('tripRequirements', 'travelStyle', event.target.value)} disabled={frozen}>{['Adventure', 'Luxury', 'Budget', 'Backpacking', 'Family', 'Honeymoon', 'Custom'].map((value) => <option key={value}>{value}</option>)}</Select><Field label="Adults" type="number" min="1" value={quotation.tripRequirements?.adults ?? 1} onChange={(event) => setNested('tripRequirements', 'adults', Number(event.target.value))} disabled={frozen} /><Field label="Children" type="number" min="0" value={quotation.tripRequirements?.children ?? 0} onChange={(event) => setNested('tripRequirements', 'children', Number(event.target.value))} disabled={frozen} /><Field label="Infants" type="number" min="0" value={quotation.tripRequirements?.infants ?? 0} onChange={(event) => setNested('tripRequirements', 'infants', Number(event.target.value))} disabled={frozen} /><Field label="Budget per person" type="number" min="0" value={quotation.tripRequirements?.budgetPerPerson || ''} onChange={(event) => setNested('tripRequirements', 'budgetPerPerson', Number(event.target.value))} disabled={frozen} /><Textarea label="Special requests" assist={(mode) => requestAiField('journey.specialRequests', 0, mode)} value={quotation.tripRequirements?.specialRequests || ''} onChange={(event) => setNested('tripRequirements', 'specialRequests', event.target.value)} disabled={frozen} className="md:col-span-2" /><Textarea label="Personal note shown near the proposal opening" assist={(mode) => requestAiField('journey.personalNote', 0, mode)} value={quotation.personalNote || ''} onChange={(event) => setValue('personalNote', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></Panel>}
 
-        {stepKey === 'hotels' && <Panel title="Hotels" description="Add selected stays and alternatives. Supplier costs remain internal and never enter public proposal DTOs." action={<button type="button" disabled={frozen} onClick={() => addItem('hotelOptions', { ...getEmptyHotelOption((quotation.hotelOptions?.length || 0) + 1), optionId: uid('hotel') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add hotel</button>}><div className="space-y-4">{quotation.hotelOptions?.map((hotel, index) => <article key={hotel.optionId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('hotelOptions', index, quotation.hotelOptions.length, hotel.hotelName || `Hotel option ${index + 1}`, hotel.city || hotel.location)}<div className="grid gap-4 md:grid-cols-2"><Field label="Hotel name" value={hotel.hotelName || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'hotelName', event.target.value)} disabled={frozen} /><Field label="Option label" value={hotel.label || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'label', event.target.value)} disabled={frozen} /><Field label="City" value={hotel.city || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'city', event.target.value)} disabled={frozen} /><Field label="Room type" value={hotel.roomType || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'roomType', event.target.value)} disabled={frozen} /><Field label="Check-in" type="date" value={hotel.checkIn?.slice?.(0, 10) || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'checkIn', event.target.value)} disabled={frozen} /><Field label="Check-out" type="date" value={hotel.checkOut?.slice?.(0, 10) || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'checkOut', event.target.value)} disabled={frozen} /><Field label="Nights" type="number" min="1" value={hotel.nights || 1} onChange={(event) => setArrayItem('hotelOptions', index, 'nights', Number(event.target.value))} disabled={frozen} /><Field label="Rooms" type="number" min="1" value={hotel.rooms || 1} onChange={(event) => setArrayItem('hotelOptions', index, 'rooms', Number(event.target.value))} disabled={frozen} /><Field label="Internal supplier cost / night" type="number" min="0" value={hotel.costPerNight || 0} onChange={(event) => setArrayItem('hotelOptions', index, 'costPerNight', Number(event.target.value))} disabled={frozen} /><Field label="Reference customer price / night" type="number" min="0" value={hotel.pricePerNight || 0} onChange={(event) => setArrayItem('hotelOptions', index, 'pricePerNight', Number(event.target.value))} disabled={frozen} /><Field label="Image URL" value={hotel.imageUrl || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'imageUrl', event.target.value)} disabled={frozen} className="md:col-span-2" /><Toggle label="Selected option" checked={hotel.selected === true} onChange={(value) => setArrayItem('hotelOptions', index, 'selected', value)} description="Selected options contribute to the internal component reference." /></div></article>)}</div></Panel>}
+        {stepKey === 'itinerary' && <Panel title="Day-by-day itinerary" description="Build a narrative itinerary and select approved media from the shared Media Library." action={<div className="flex flex-wrap gap-2"><button type="button" disabled={frozen || aiBusy || !(quotation.itinerary || []).some((day) => !day.description)} onClick={() => requestAiField('itinerary.missingDescriptions')} className="inline-flex min-h-10 items-center gap-1 rounded border border-emerald-200 px-3 text-xs font-semibold text-emerald-700"><Sparkles size={14} />Draft missing descriptions</button><button type="button" disabled={frozen} onClick={() => addItem('itinerary', getEmptyItineraryDay((quotation.itinerary?.length || 0) + 1))} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add day</button></div>}><div className="space-y-4">{quotation.itinerary?.length ? quotation.itinerary.map((day, index) => <article key={`${day.day}-${index}`} className="rounded-xl border border-slate-200 p-4">{renderItemControls('itinerary', index, quotation.itinerary.length, `Day ${day.day || index + 1}: ${day.title || 'Untitled'}`, day.destination || day.locationName)}<div className="grid gap-4 md:grid-cols-2"><Field label="Title" assist={(mode) => requestAiField('itinerary.title', index, mode)} value={day.title || ''} onChange={(event) => setArrayItem('itinerary', index, 'title', event.target.value)} disabled={frozen} /><Field label="Location" value={day.destination || ''} onChange={(event) => setArrayItem('itinerary', index, 'destination', event.target.value)} disabled={frozen} /><Textarea label="Narrative" assist={(mode) => requestAiField('itinerary.description', index, mode)} value={day.description || ''} onChange={(event) => setArrayItem('itinerary', index, 'description', event.target.value)} disabled={frozen} className="md:col-span-2" /><Field label="Morning" assist={(mode) => requestAiField('itinerary.morning', index, mode)} value={day.morning || ''} onChange={(event) => setArrayItem('itinerary', index, 'morning', event.target.value)} disabled={frozen} /><Field label="Afternoon" assist={(mode) => requestAiField('itinerary.afternoon', index, mode)} value={day.afternoon || ''} onChange={(event) => setArrayItem('itinerary', index, 'afternoon', event.target.value)} disabled={frozen} /><Field label="Evening" assist={(mode) => requestAiField('itinerary.evening', index, mode)} value={day.evening || ''} onChange={(event) => setArrayItem('itinerary', index, 'evening', event.target.value)} disabled={frozen} /><Field label="Stay" value={day.stay || ''} onChange={(event) => setArrayItem('itinerary', index, 'stay', event.target.value)} disabled={frozen} /><Field label="Meals included (confirmed)" value={(day.mealsIncluded || []).join(', ')} onChange={(event) => setArrayItem('itinerary', index, 'mealsIncluded', event.target.value.split(',').map((item) => item.trim()).filter(Boolean))} disabled={frozen} /><Textarea label="Transfer details" assist={(mode) => requestAiField('itinerary.transferDetails', index, mode)} value={day.transferDetails || ''} onChange={(event) => setArrayItem('itinerary', index, 'transferDetails', event.target.value)} disabled={frozen} className="md:col-span-2" /><div className="md:col-span-2"><button type="button" disabled={frozen} onClick={() => setMediaTarget({ type: 'itinerary', index })} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700"><ImageIcon size={16} />{day.coverMedia?.url ? 'Change approved image' : 'Select approved image'}</button>{day.coverMedia?.url && <img src={day.coverMedia.url} alt={day.coverMedia.altText || ''} className="mt-3 h-36 w-full max-w-md rounded-xl object-cover" />}</div></div></article>) : <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center text-sm text-slate-500">No itinerary days yet.</div>}</div></Panel>}
 
-        {stepKey === 'transport' && <Panel title="Transportation" description="Flights, trains, road transfers, ferries, and other journey segments can live in one normalized list." action={<button type="button" disabled={frozen} onClick={() => addItem('transportOptions', { ...getEmptyTransportOption((quotation.transportOptions?.length || 0) + 1), optionId: uid('transport') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add segment</button>}><div className="space-y-4">{quotation.transportOptions?.map((item, index) => <article key={item.optionId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('transportOptions', index, quotation.transportOptions.length, item.title || item.vehicle || `Transport ${index + 1}`, `${item.pickup || item.route?.from || 'Origin'} → ${item.drop || item.route?.to || 'Destination'}`)}<div className="grid gap-4 md:grid-cols-2"><Select label="Mode" value={item.mode || 'OTHER'} onChange={(event) => setArrayItem('transportOptions', index, 'mode', event.target.value)} disabled={frozen}>{['FLIGHT', 'TRAIN', 'BUS', 'CAB', 'PRIVATE_CAR', 'SUV', 'TEMPO_TRAVELLER', 'COACH', 'BIKE', 'FERRY', 'TRANSFER', 'OTHER'].map((value) => <option key={value}>{value}</option>)}</Select><Field label="Title / vehicle" value={item.title || item.vehicle || ''} onChange={(event) => setArrayItem('transportOptions', index, 'title', event.target.value)} disabled={frozen} /><Field label="Pickup" value={item.pickup || ''} onChange={(event) => setArrayItem('transportOptions', index, 'pickup', event.target.value)} disabled={frozen} /><Field label="Drop" value={item.drop || ''} onChange={(event) => setArrayItem('transportOptions', index, 'drop', event.target.value)} disabled={frozen} /><Field label="Internal supplier cost" type="number" min="0" value={item.unitCost || 0} onChange={(event) => setArrayItem('transportOptions', index, 'unitCost', Number(event.target.value))} disabled={frozen} /><Field label="Reference customer price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('transportOptions', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Field label="Quantity" type="number" min="1" value={item.quantity || 1} onChange={(event) => setArrayItem('transportOptions', index, 'quantity', Number(event.target.value))} disabled={frozen} /><Toggle label="Selected segment" checked={item.selected !== false} onChange={(value) => setArrayItem('transportOptions', index, 'selected', value)} /></div></article>)}</div></Panel>}
+        {stepKey === 'hotels' && <Panel title="Hotels" description="Add selected stays and alternatives. Supplier costs remain internal and never enter public proposal DTOs." action={<button type="button" disabled={frozen} onClick={() => addItem('hotelOptions', { ...getEmptyHotelOption((quotation.hotelOptions?.length || 0) + 1), optionId: uid('hotel') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add hotel</button>}><div className="space-y-4">{quotation.hotelOptions?.map((hotel, index) => <article key={hotel.optionId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('hotelOptions', index, quotation.hotelOptions.length, hotel.hotelName || `Hotel option ${index + 1}`, hotel.city || hotel.location)}<div className="grid gap-4 md:grid-cols-2"><Field label="Hotel name" value={hotel.hotelName || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'hotelName', event.target.value)} disabled={frozen} /><Field label="Option label" assist={(mode) => requestAiField('hotel.label', index, mode)} value={hotel.label || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'label', event.target.value)} disabled={frozen} /><Field label="City" value={hotel.city || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'city', event.target.value)} disabled={frozen} /><Field label="Room type" value={hotel.roomType || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'roomType', event.target.value)} disabled={frozen} /><Select label="Occupancy" value={hotel.occupancy || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'occupancy', event.target.value)} disabled={frozen}>{['', 'Single', 'Double Sharing', 'Triple Sharing', 'Family Suite', 'Quad Sharing'].map((value) => <option key={value} value={value}>{value || 'Unconfirmed'}</option>)}</Select><Select label="Meal plan" value={hotel.mealPlan || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'mealPlan', event.target.value)} disabled={frozen}>{['', 'EP (Room Only)', 'CP (Breakfast)', 'MAP (Breakfast + Dinner)', 'AP (All Meals)'].map((value) => <option key={value} value={value}>{value || 'Unconfirmed'}</option>)}</Select><Field label="Check-in" type="date" value={hotel.checkIn?.slice?.(0, 10) || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'checkIn', event.target.value)} disabled={frozen} /><Field label="Check-out" type="date" value={hotel.checkOut?.slice?.(0, 10) || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'checkOut', event.target.value)} disabled={frozen} /><Field label="Nights" type="number" min="1" value={hotel.nights || 1} onChange={(event) => setArrayItem('hotelOptions', index, 'nights', Number(event.target.value))} disabled={frozen} /><Field label="Rooms" type="number" min="1" value={hotel.rooms || 1} onChange={(event) => setArrayItem('hotelOptions', index, 'rooms', Number(event.target.value))} disabled={frozen} /><Field label="Internal supplier cost / night" type="number" min="0" value={hotel.costPerNight || 0} onChange={(event) => setArrayItem('hotelOptions', index, 'costPerNight', Number(event.target.value))} disabled={frozen} /><Field label="Reference customer price / night" type="number" min="0" value={hotel.pricePerNight || 0} onChange={(event) => setArrayItem('hotelOptions', index, 'pricePerNight', Number(event.target.value))} disabled={frozen} /><Textarea label="Hotel notes" assist={(mode) => requestAiField('hotel.notes', index, mode)} value={hotel.notes || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'notes', event.target.value)} disabled={frozen} /><Field label="Image URL" value={hotel.imageUrl || ''} onChange={(event) => setArrayItem('hotelOptions', index, 'imageUrl', event.target.value)} disabled={frozen} className="md:col-span-2" /><Toggle label="Selected option" checked={hotel.selected === true} onChange={(value) => setArrayItem('hotelOptions', index, 'selected', value)} description="Selected options contribute to the internal component reference." /></div></article>)}</div></Panel>}
 
-        {stepKey === 'activities' && <><Panel title="Activities" description="Curated experiences attached to specific journey days." action={<button type="button" disabled={frozen} onClick={() => addItem('activities', { ...getEmptyActivity((quotation.activities?.length || 0) + 1), activityId: uid('activity') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add activity</button>}><div className="space-y-4">{quotation.activities?.map((item, index) => <article key={item.activityId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('activities', index, quotation.activities.length, item.name || `Activity ${index + 1}`, item.location)}<div className="grid gap-4 md:grid-cols-2"><Field label="Name" value={item.name || ''} onChange={(event) => setArrayItem('activities', index, 'name', event.target.value)} disabled={frozen} /><Field label="Day" type="number" min="1" value={item.dayNumber || 1} onChange={(event) => setArrayItem('activities', index, 'dayNumber', Number(event.target.value))} disabled={frozen} /><Field label="Location" value={item.location || ''} onChange={(event) => setArrayItem('activities', index, 'location', event.target.value)} disabled={frozen} /><Field label="Reference price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('activities', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Textarea label="Description" value={item.description || ''} onChange={(event) => setArrayItem('activities', index, 'description', event.target.value)} disabled={frozen} className="md:col-span-2" /></div></article>)}</div></Panel><Panel title="Optional add-ons" description="Add-ons are included in the reference only when selected." action={<button type="button" disabled={frozen} onClick={() => addItem('addOns', { ...getEmptyAddOn((quotation.addOns?.length || 0) + 1), addonId: uid('addon') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"><Plus size={15} />Add add-on</button>}><div className="space-y-4">{quotation.addOns?.map((item, index) => <article key={item.addonId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('addOns', index, quotation.addOns.length, item.name || `Add-on ${index + 1}`, item.category)}<div className="grid gap-4 md:grid-cols-2"><Field label="Name" value={item.name || ''} onChange={(event) => setArrayItem('addOns', index, 'name', event.target.value)} disabled={frozen} /><Field label="Category" value={item.category || 'General'} onChange={(event) => setArrayItem('addOns', index, 'category', event.target.value)} disabled={frozen} /><Field label="Reference price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('addOns', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Toggle label="Selected" checked={item.selected === true} onChange={(value) => setArrayItem('addOns', index, 'selected', value)} /></div></article>)}</div></Panel></>}
+        {stepKey === 'transport' && <Panel title="Transportation" description="Flights, trains, road transfers, ferries, and other journey segments can live in one normalized list." action={<button type="button" disabled={frozen} onClick={() => addItem('transportOptions', { ...getEmptyTransportOption((quotation.transportOptions?.length || 0) + 1), optionId: uid('transport') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add segment</button>}><div className="space-y-4">{quotation.transportOptions?.map((item, index) => <article key={item.optionId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('transportOptions', index, quotation.transportOptions.length, item.title || item.vehicle || `Transport ${index + 1}`, `${item.pickup || item.route?.from || 'Origin'} → ${item.drop || item.route?.to || 'Destination'}`)}<div className="grid gap-4 md:grid-cols-2"><Select label="Mode" value={item.mode || 'OTHER'} onChange={(event) => setArrayItem('transportOptions', index, 'mode', event.target.value)} disabled={frozen}>{['FLIGHT', 'TRAIN', 'BUS', 'CAB', 'PRIVATE_CAR', 'SUV', 'TEMPO_TRAVELLER', 'COACH', 'BIKE', 'FERRY', 'TRANSFER', 'OTHER'].map((value) => <option key={value}>{value}</option>)}</Select><Field label="Title / vehicle" assist={(mode) => requestAiField('transport.title', index, mode)} value={item.title || item.vehicle || ''} onChange={(event) => setArrayItem('transportOptions', index, 'title', event.target.value)} disabled={frozen} /><Field label="Pickup" value={item.pickup || ''} onChange={(event) => setArrayItem('transportOptions', index, 'pickup', event.target.value)} disabled={frozen} /><Field label="Drop" value={item.drop || ''} onChange={(event) => setArrayItem('transportOptions', index, 'drop', event.target.value)} disabled={frozen} /><Field label="Provider (internal)" value={item.provider || ''} onChange={(event) => setArrayItem('transportOptions', index, 'provider', event.target.value)} disabled={frozen} /><Field label="Internal supplier cost" type="number" min="0" value={item.unitCost || 0} onChange={(event) => setArrayItem('transportOptions', index, 'unitCost', Number(event.target.value))} disabled={frozen} /><Field label="Reference customer price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('transportOptions', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Field label="Quantity" type="number" min="1" value={item.quantity || 1} onChange={(event) => setArrayItem('transportOptions', index, 'quantity', Number(event.target.value))} disabled={frozen} /><Textarea label="Transport notes" assist={(mode) => requestAiField('transport.notes', index, mode)} value={item.notes || ''} onChange={(event) => setArrayItem('transportOptions', index, 'notes', event.target.value)} disabled={frozen} /><Toggle label="Selected segment" checked={item.selected === true} onChange={(value) => setArrayItem('transportOptions', index, 'selected', value)} /></div></article>)}</div></Panel>}
+
+        {stepKey === 'activities' && <><Panel title="Activities" description="Curated experiences attached to specific journey days." action={<button type="button" disabled={frozen} onClick={() => addItem('activities', { ...getEmptyActivity((quotation.activities?.length || 0) + 1), activityId: uid('activity') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"><Plus size={15} />Add activity</button>}><div className="space-y-4">{quotation.activities?.map((item, index) => <article key={item.activityId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('activities', index, quotation.activities.length, item.name || `Activity ${index + 1}`, item.location)}<div className="grid gap-4 md:grid-cols-2"><Field label="Name" value={item.name || ''} onChange={(event) => setArrayItem('activities', index, 'name', event.target.value)} disabled={frozen} /><Field label="Day" type="number" min="1" value={item.dayNumber || 1} onChange={(event) => setArrayItem('activities', index, 'dayNumber', Number(event.target.value))} disabled={frozen} /><Field label="Location" value={item.location || ''} onChange={(event) => setArrayItem('activities', index, 'location', event.target.value)} disabled={frozen} /><Field label="Reference price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('activities', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Textarea label="Description" assist={(mode) => requestAiField('activity.description', index, mode)} value={item.description || ''} onChange={(event) => setArrayItem('activities', index, 'description', event.target.value)} disabled={frozen} className="md:col-span-2" /><Toggle label="Add activity to proposal" checked={item.selected === true} onChange={(value) => setArrayItem('activities', index, 'selected', value)} /><Toggle label="Commercially included" checked={item.isIncluded === true} onChange={(value) => setArrayItem('activities', index, 'isIncluded', value)} /></div></article>)}</div></Panel><Panel title="Optional add-ons" description="Add-ons are included in the reference only when selected." action={<button type="button" disabled={frozen} onClick={() => addItem('addOns', { ...getEmptyAddOn((quotation.addOns?.length || 0) + 1), addonId: uid('addon') })} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"><Plus size={15} />Add add-on</button>}><div className="space-y-4">{quotation.addOns?.map((item, index) => <article key={item.addonId || index} className="rounded-xl border border-slate-200 p-4">{renderItemControls('addOns', index, quotation.addOns.length, item.name || `Add-on ${index + 1}`, item.category)}<div className="grid gap-4 md:grid-cols-2"><Field label="Name" value={item.name || ''} onChange={(event) => setArrayItem('addOns', index, 'name', event.target.value)} disabled={frozen} /><Field label="Category" value={item.category || 'General'} onChange={(event) => setArrayItem('addOns', index, 'category', event.target.value)} disabled={frozen} /><Field label="Reference price" type="number" min="0" value={item.unitPrice || 0} onChange={(event) => setArrayItem('addOns', index, 'unitPrice', Number(event.target.value))} disabled={frozen} /><Textarea label="Description" assist={(mode) => requestAiField('addon.description', index, mode)} value={item.description || ''} onChange={(event) => setArrayItem('addOns', index, 'description', event.target.value)} disabled={frozen} /><Toggle label="Selected" checked={item.selected === true} onChange={(value) => setArrayItem('addOns', index, 'selected', value)} /></div></article>)}</div></Panel></>}
 
         {stepKey === 'attachments' && <Panel title="Attachments and travel documents" description="All uploads begin internal-only. Customer visibility is explicit and enforced again by the public DTO." action={<label className={cx('inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white', (!persistedId || frozen || uploading) && 'pointer-events-none opacity-40')}><Upload size={15} />{uploading ? 'Uploading…' : 'Upload document'}<input type="file" className="sr-only" accept=".pdf,.jpg,.jpeg,.png,.webp" onChange={(event) => event.target.files?.[0] && uploadAttachment(event.target.files[0])} /></label>}><div className="space-y-3">{quotation.attachments?.length ? quotation.attachments.map((item, index) => <article key={item.id || index} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 gap-3"><Paperclip size={18} className="mt-0.5 shrink-0 text-emerald-600" /><div className="min-w-0"><p className="truncate font-medium text-slate-900">{item.fileName || item.title}</p><p className="mt-1 text-xs text-slate-500">{item.mimeType} · {Math.ceil((item.size || 0) / 1024)} KB</p></div></div><IconButton label="Remove document" disabled={frozen || uploading} onClick={() => removeAttachment(item.id)}><Trash2 size={15} /></IconButton></div><div className="mt-4 grid gap-3 md:grid-cols-3"><Field label="Customer-facing title" value={item.title || ''} onChange={(event) => setArrayItem('attachments', index, 'title', event.target.value)} disabled={frozen} /><Select label="Category" value={item.category || 'GENERAL'} onChange={(event) => setArrayItem('attachments', index, 'category', event.target.value)} disabled={frozen}>{QUOTATION_ATTACHMENT_CATEGORIES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select><Select label="Visibility" value={item.visibility || 'INTERNAL_ONLY'} onChange={(event) => setArrayItem('attachments', index, 'visibility', event.target.value)} disabled={frozen}>{QUOTATION_ATTACHMENT_VISIBILITIES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div></article>) : <div className="rounded-xl border border-dashed border-slate-300 py-12 text-center"><FileUp size={24} className="mx-auto text-slate-300" /><p className="mt-2 text-sm text-slate-500">No documents uploaded.</p></div>}<p className="text-xs text-slate-500">PDF, JPG, PNG, or WEBP · maximum 15 MB per file.</p></div></Panel>}
 
-        {stepKey === 'inclusions' && <div className="grid gap-5 lg:grid-cols-2"><Panel title="Inclusions" description="One item per line."><LinesEditor value={quotation.inclusions} onChange={(value) => setValue('inclusions', value)} placeholder="Airport transfers&#10;Daily breakfast" /></Panel><Panel title="Exclusions" description="One item per line."><LinesEditor value={quotation.exclusions} onChange={(value) => setValue('exclusions', value)} placeholder="Flights to origin city&#10;Personal expenses" /></Panel></div>}
+        {stepKey === 'inclusions' && <div className="grid gap-5 lg:grid-cols-2"><Panel title="Inclusions" description="Only selected, confirmed services appear in generated inclusions." action={<button type="button" disabled={frozen || aiBusy} onClick={() => requestAiField('inclusions')} className="inline-flex min-h-9 items-center gap-1 rounded border border-emerald-200 px-3 text-xs font-semibold text-emerald-700"><Sparkles size={14} />Generate from quotation</button>}><LinesEditor value={quotation.inclusions} onChange={(value) => setValue('inclusions', value)} placeholder="One confirmed service per line" /></Panel><Panel title="Exclusions" description="One item per line." action={<button type="button" disabled={frozen || aiBusy} onClick={() => requestAiField('exclusions')} className="inline-flex min-h-9 items-center gap-1 rounded border border-emerald-200 px-3 text-xs font-semibold text-emerald-700"><Sparkles size={14} />Generate safe exclusions</button>}><LinesEditor value={quotation.exclusions} onChange={(value) => setValue('exclusions', value)} placeholder="One exclusion per line" /></Panel></div>}
 
         {stepKey === 'pricing' && <Panel title="Manual commercial pricing" description="Component arithmetic is a reference only. The customer price is entered and finalized manually by Admin or Super Admin."><div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-blue-700">Component reference</p><p className="mt-1 text-2xl font-semibold text-blue-950">{formatQuotationCurrency(calculateReference(quotation), quotation.manualPricing?.currency || 'INR')}</p><p className="mt-1 text-xs text-blue-700">This is not the final customer price and is never auto-finalized.</p></div>{isAdmin ? <div className="mt-5 grid gap-4 md:grid-cols-2"><Field label="Final customer price" type="number" min="0" value={quotation.manualPricing?.finalCustomerPrice || ''} onChange={(event) => setNested('manualPricing', 'finalCustomerPrice', Number(event.target.value))} disabled={frozen} /><Field label="Deposit amount" type="number" min="0" value={quotation.manualPricing?.depositAmount || ''} onChange={(event) => setNested('manualPricing', 'depositAmount', Number(event.target.value))} disabled={frozen} /><div className="md:col-span-2"><Textarea label="Commercial notes" value={quotation.manualPricing?.priceNotes || ''} onChange={(event) => setNested('manualPricing', 'priceNotes', event.target.value)} disabled={frozen} /></div><div className="md:col-span-2"><div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-slate-900">Payment schedule</h3><button type="button" disabled={frozen} onClick={() => setNested('manualPricing', 'paymentSchedule', [...(quotation.manualPricing?.paymentSchedule || []), { label: '', amount: 0, dueDate: '', notes: '' }])} className="text-sm font-semibold text-emerald-700">+ Add milestone</button></div><div className="space-y-3">{quotation.manualPricing?.paymentSchedule?.map((item, index) => <div key={index} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_10rem_10rem_auto]"><input aria-label="Milestone label" className={inputClass} value={item.label || ''} onChange={(event) => { const schedule = [...quotation.manualPricing.paymentSchedule]; schedule[index] = { ...item, label: event.target.value }; setNested('manualPricing', 'paymentSchedule', schedule); }} placeholder="Deposit" /><input aria-label="Milestone amount" className={inputClass} type="number" min="0" value={item.amount || ''} onChange={(event) => { const schedule = [...quotation.manualPricing.paymentSchedule]; schedule[index] = { ...item, amount: Number(event.target.value) }; setNested('manualPricing', 'paymentSchedule', schedule); }} /><input aria-label="Milestone due date" className={inputClass} type="date" value={item.dueDate?.slice?.(0, 10) || ''} onChange={(event) => { const schedule = [...quotation.manualPricing.paymentSchedule]; schedule[index] = { ...item, dueDate: event.target.value }; setNested('manualPricing', 'paymentSchedule', schedule); }} /><IconButton label="Remove milestone" onClick={() => setNested('manualPricing', 'paymentSchedule', quotation.manualPricing.paymentSchedule.filter((_, itemIndex) => itemIndex !== index))}><Trash2 size={15} /></IconButton></div>)}</div></div><div className="md:col-span-2"><button type="button" disabled={saving || frozen} onClick={finalizePricing} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-40"><LockKeyhole size={16} />Finalize price and freeze revision</button></div></div> : <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-5"><div className="flex gap-3"><LockKeyhole size={19} className="shrink-0 text-amber-700" /><div><h3 className="font-semibold text-amber-950">Final pricing is Admin-controlled</h3><p className="mt-1 text-sm text-amber-800">Sales can complete proposal content and request commercial review, but cannot enter or finalize the customer price.</p><button type="button" disabled={saving || frozen} onClick={requestPricing} className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg bg-amber-800 px-4 text-sm font-semibold text-white"><Send size={15} />Request pricing</button></div></div></div>}</Panel>}
 
-        {stepKey === 'terms' && <Panel title="Terms and policy copy" description="Use explicit client-approved language. No legal or cancellation copy is invented by the system."><div className="grid gap-4 md:grid-cols-2"><Textarea label="Payment terms" value={quotation.policies?.paymentTerms || ''} onChange={(event) => setNested('policies', 'paymentTerms', event.target.value)} disabled={frozen} /><Textarea label="Cancellation policy" value={quotation.policies?.cancellationPolicy || ''} onChange={(event) => setNested('policies', 'cancellationPolicy', event.target.value)} disabled={frozen} /><Textarea label="Refund notes" value={quotation.policies?.refundNotes || ''} onChange={(event) => setNested('policies', 'refundNotes', event.target.value)} disabled={frozen} /><Textarea label="Travel requirements" value={quotation.policies?.travelRequirements || ''} onChange={(event) => setNested('policies', 'travelRequirements', event.target.value)} disabled={frozen} /><Textarea label="Important information" value={quotation.policies?.importantInformation || ''} onChange={(event) => setNested('policies', 'importantInformation', event.target.value)} disabled={frozen} /><Textarea label="Terms and conditions" value={quotation.policies?.termsAndConditions || ''} onChange={(event) => setNested('policies', 'termsAndConditions', event.target.value)} disabled={frozen} /><Field label="Quotation valid until" type="date" value={quotation.validUntil?.slice?.(0, 10) || ''} onChange={(event) => setValue('validUntil', event.target.value)} disabled={frozen} /></div></Panel>}
+        {stepKey === 'terms' && <Panel title="Terms and policy copy" description="Review policy language before sharing." action={<div className="flex flex-wrap gap-2"><button type="button" disabled={frozen} onClick={fillPolicyDefaults} className="min-h-9 rounded border border-slate-300 px-3 text-xs font-semibold">Fill Safe Defaults</button><button type="button" disabled={frozen || aiBusy} onClick={() => requestAiField('policies.all')} className="inline-flex min-h-9 items-center gap-1 rounded border border-emerald-300 px-3 text-xs font-semibold text-emerald-700"><Sparkles size={14} />Generate All with AI</button></div>}><div className="grid gap-4 md:grid-cols-2"><Select label="Payment mode" value={quotation.paymentTerms?.paymentMode || 'PARTIAL'} onChange={(event) => setNested('paymentTerms', 'paymentMode', event.target.value)} disabled={frozen}><option value="PARTIAL">Deposit and balance</option><option value="FULL">Full payment</option></Select><Field label="Deposit percent" type="number" min="0" max="100" value={quotation.paymentTerms?.depositPercent ?? ''} onChange={(event) => setNested('paymentTerms', 'depositPercent', Number(event.target.value))} disabled={frozen} /><Field label="Balance due days before departure" type="number" min="0" value={quotation.paymentTerms?.balanceDueDays ?? ''} onChange={(event) => setNested('paymentTerms', 'balanceDueDays', Number(event.target.value))} disabled={frozen} />{[['paymentTerms', 'Payment terms'], ['cancellationPolicy', 'Cancellation policy'], ['refundNotes', 'Refund notes'], ['travelRequirements', 'Travel requirements'], ['importantInformation', 'Important information'], ['termsAndConditions', 'Terms and conditions']].map(([key, label]) => <div key={key} className="min-w-0"><div className="flex justify-end"><button type="button" disabled={frozen} onClick={() => applyPolicyDefault(key)} className="min-h-8 rounded border border-slate-200 px-2 text-xs font-semibold text-slate-600">Default</button></div><Textarea label={label} assist={() => requestAiField(`policies.${key}`)} value={quotation.policies?.[key] || ''} onChange={(event) => setNested('policies', key, event.target.value)} disabled={frozen} /></div>)}<Field label="Quotation valid until" type="date" value={quotation.validUntil?.slice?.(0, 10) || ''} onChange={(event) => setValue('validUntil', event.target.value)} disabled={frozen} /></div></Panel>}
 
         {stepKey === 'presentation' && <Panel title="Presentation" description="Choose a default customer experience. Previewing another style never changes the saved revision."><TemplateChoiceGrid quotation={previewQuotation} selectedKey={quotation.presentationSettings?.template || 'journey'} onSelect={(key) => { if (!frozen) setNested('presentationSettings', 'template', key); }} onPreview={openTemplatePreview} /><div className="mt-5 grid gap-3 md:grid-cols-2">{[['showComponentPrices', 'Show component prices'], ['showPaymentSchedule', 'Show payment schedule'], ['showAttachments', 'Show visible attachments'], ['showAdvisor', 'Show advisor'], ['showTerms', 'Show terms'], ['showItineraryGallery', 'Show itinerary gallery']].map(([field, label]) => <Toggle key={field} label={label} checked={quotation.presentationSettings?.[field] !== false} onChange={(value) => setNested('presentationSettings', field, value)} />)}</div></Panel>}
 
@@ -293,6 +662,7 @@ export default function QuotationV2Editor({ quotationId, initialQuotation, initi
     }} initialDestination={quotation.tripRequirements?.destination || ''} initialLocationName={quotation.hotelOptions?.[mediaTarget?.index]?.hotelName || ''} initialCity={quotation.hotelOptions?.[mediaTarget?.index]?.city || ''} />
 
     <TemplatePickerModal open={previewPickerOpen} quotation={previewQuotation} selectedKey={quotation.presentationSettings?.template || 'journey'} onSelect={(key) => { if (!frozen) setNested('presentationSettings', 'template', key); }} onClose={() => setPreviewPickerOpen(false)} onPreview={openTemplatePreview} mode="preview" />
+    {suggestion && <AiSuggestionDialog proposal={suggestion} onApply={applySuggestion} onClose={() => setSuggestion(null)} />}
     <QuotationPreviewModal open={Boolean(previewTemplate)} quotation={previewQuotation} initialTemplateKey={previewTemplate} onClose={() => setPreviewTemplate(null)} onBack={() => { setPreviewTemplate(null); setPreviewPickerOpen(true); }} onDownload={downloadPreview} busy={Boolean(pdfProgress)} />
     {pdfProgress && <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[110] flex items-center gap-3 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-2xl"><Download size={17} />{pdfProgress.message || (pdfProgress.total ? `Building PDF page ${Math.min(pdfProgress.current, pdfProgress.total)} of ${pdfProgress.total}` : 'Preparing PDF pages')}</div>}
   </div>;

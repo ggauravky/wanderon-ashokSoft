@@ -37,6 +37,12 @@ import {
   requestQuotationPricing,
   requestQuotationVerification,
   revokeQuotationShare,
+  applyQuotationAiImport,
+  draftQuotationAiText,
+  previewQuotationAiImport,
+  getImportableAiItineraries,
+  getQuotationPolicyDefaults,
+  suggestQuotationAiField,
   trackPublicQuotationEvent,
   updateQuotationV2,
   verifyQuotationRecipient
@@ -65,6 +71,11 @@ router.use(protect);
 
 router.post('/calculate-preview', requireRoles('super_admin', 'admin', 'sales'), calculateQuotationPricingPreview);
 router.post('/v2', requireRoles('super_admin', 'admin', 'sales'), createQuotationV2);
+router.post('/v2/ai/import-preview', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-import-preview', limit: 60, windowMs: 3600000 }), previewQuotationAiImport);
+router.get('/v2/ai/importable-itineraries', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-itinerary-list', limit: 120, windowMs: 3600000 }), getImportableAiItineraries);
+router.post('/v2/ai/policy-defaults', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-policy-defaults', limit: 120, windowMs: 3600000 }), getQuotationPolicyDefaults);
+router.post('/v2/ai/field-suggest', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-field-suggest', limit: 30, windowMs: 3600000 }), suggestQuotationAiField);
+router.post('/v2/ai/draft-text', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-quotation-draft', limit: 30, windowMs: 3600000 }), draftQuotationAiText);
 
 router.route('/')
   .get(requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotations)
@@ -77,6 +88,9 @@ router.route('/:id')
 
 // Quotation V2 content, commercial controls, immutable revisions, and sharing.
 router.patch('/:id/v2', requireRoles('super_admin', 'admin', 'sales'), updateQuotationV2);
+router.post('/:id/v2/ai/import-apply', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-import-apply', limit: 60, windowMs: 3600000 }), applyQuotationAiImport);
+router.post('/:id/v2/ai/draft-text', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-quotation-draft', limit: 30, windowMs: 3600000 }), draftQuotationAiText);
+router.post('/:id/v2/ai/field-suggest', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-field-suggest', limit: 30, windowMs: 3600000 }), suggestQuotationAiField);
 router.post('/:id/v2/request-pricing', requireRoles('super_admin', 'admin', 'sales'), requestQuotationPricing);
 router.post('/:id/v2/finalize-pricing', requireRoles('super_admin', 'admin'), finalizeQuotationPricing);
 router.post('/:id/v2/revisions', requireRoles('super_admin', 'admin', 'sales'), createQuotationRevisionV2);

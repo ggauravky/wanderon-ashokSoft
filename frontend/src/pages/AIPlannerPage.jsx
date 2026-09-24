@@ -23,6 +23,35 @@ import AIItineraryWorkspace from '../components/workspace/AIItineraryWorkspace';
 import { generateAIItinerary, extractTripInfoFromPrompt } from '../utils/aiPlannerEngine';
 import { getAIItineraryByIdApi } from '../services/api.js';
 
+const buildPlannerContext = (data = {}) => ({
+  origin: data.origin || '',
+  startDate: data.startDate || '',
+  endDate: data.endDate || '',
+  datesFlexible: data.datesFlexible !== false,
+  flexibleMonth: data.flexibleMonth || '',
+  travelersBreakdown: {
+    adults: Number(data.travelers?.adults || 0),
+    children: Number(data.travelers?.children || 0),
+    infants: Number(data.travelers?.infants || 0),
+    seniors: Number(data.travelers?.seniors || 0)
+  },
+  tripType: data.tripType || '',
+  paceRhythm: data.paceRhythm || '',
+  acclimatization: data.acclimatization || '',
+  interests: Array.isArray(data.interests) ? data.interests : [],
+  stayPreference: data.stayPreference || '',
+  roomStyle: data.roomStyle || '',
+  dietaryPreference: data.dietaryPreference || '',
+  hotelRating: data.hotelRating || null,
+  budgetTier: data.budgetTier || '',
+  budgetAmount: data.budgetAmount || null,
+  transportPreference: data.transportPreference || data.transitMode || '',
+  mobilityConstraints: Array.isArray(data.mobilityConstraints) ? data.mobilityConstraints : [],
+  mustInclude: Array.isArray(data.mustInclude) ? data.mustInclude : [],
+  avoid: Array.isArray(data.avoid) ? data.avoid : [],
+  customPreferences: data.customPreferences || ''
+});
+
 const AIPlannerPage = () => {
   const { planId } = useParams();
   const [searchParams] = useSearchParams();
@@ -66,8 +95,9 @@ const AIPlannerPage = () => {
         budgetAmount: parsed.budgetAmount || 45000,
         budgetLevel: parsed.budgetLevel || 'Moderate',
         customPreferences: urlPrompt,
-        fullName: 'Tenzin Sharma',
-        whatsappNumber: '98160 12345'
+        fullName: '',
+        email: '',
+        whatsappNumber: ''
       };
     }
     return {
@@ -92,8 +122,9 @@ const AIPlannerPage = () => {
       budgetAmount: 45000,
       budgetLevel: 'Moderate',
       customPreferences: '',
-      fullName: 'Tenzin Sharma',
-      whatsappNumber: '98160 12345'
+      fullName: '',
+      email: '',
+      whatsappNumber: ''
     };
   });
 
@@ -213,18 +244,29 @@ const AIPlannerPage = () => {
                              (dataToUse.travelers?.seniors || 0);
 
       const result = await generateAIItinerary({
+        origin: dataToUse.origin || '',
         destination: dataToUse.destination,
         days: dataToUse.duration || 7,
         duration: dataToUse.duration || 7,
         travelers: totalTravelers,
+        travelersBreakdown: dataToUse.travelers || {},
         pace: dataToUse.pace || 'Balanced',
         mood: dataToUse.tripType || 'Adventure',
         budgetLevel: dataToUse.budgetLevel || 'Moderate',
-        customPreferences: dataToUse.customPreferences || ''
+        budgetAmount: dataToUse.budgetAmount || null,
+        interests: dataToUse.interests || [],
+        dietary: dataToUse.dietaryPreference ? [dataToUse.dietaryPreference] : [],
+        stayPreference: dataToUse.stayPreference || '',
+        transportPreference: dataToUse.transportPreference || dataToUse.transitMode || '',
+        mobilityConstraints: dataToUse.mobilityConstraints || [],
+        mustInclude: dataToUse.mustInclude || [],
+        avoid: dataToUse.avoid || [],
+        customPreferences: dataToUse.customPreferences || '',
+        plannerContext: buildPlannerContext(dataToUse)
       });
 
       if (result) {
-        setItinerary(result);
+        setItinerary({ ...result, plannerContext: result.plannerContext || buildPlannerContext(dataToUse) });
         setWorkspaceTab(targetTab);
         setViewState('WORKSPACE');
         setActiveHeaderTab(targetTab === 'story' ? 'Story' : 'Overview');
@@ -388,6 +430,9 @@ const AIPlannerPage = () => {
                 formData={formData}
                 updateFormData={updateFormData}
                 destination={formData.destination}
+                itinerary={itinerary}
+                plannerContext={buildPlannerContext(formData)}
+                onItinerarySaved={setItinerary}
                 onTransmitSuccess={() => setViewState('SUCCESS_DISPATCH')}
               />
             ) : (

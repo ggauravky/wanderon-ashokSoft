@@ -13,6 +13,8 @@ import ShareItineraryModal from '../ShareItineraryModal';
 import AIItineraryDocument from '../AIItineraryDocument';
 import { exportElementToPdf } from '../../utils/pdfGenerator';
 import { saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
+import { useNavigate } from 'react-router-dom';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -56,6 +58,9 @@ const AIItineraryWorkspace = ({
   }, [controlledActiveTab]);
 
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isQuotationStaff = ['sales', 'admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfTemplate, setPdfTemplate] = useState('classic');
@@ -113,6 +118,59 @@ const AIItineraryWorkspace = ({
       console.warn('PDF export error:', err.message);
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const handleExportForQuotation = () => {
+    const safeItinerary = {
+      ...itinerary,
+      _id: undefined,
+      id: undefined,
+      user: undefined,
+      userEmail: undefined,
+      shareToken: undefined,
+      isPublic: undefined,
+      plannerContext: undefined
+    };
+    const exportPayload = {
+      schema: 'wanderluxe-ai-itinerary',
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      itinerary: safeItinerary,
+      plannerContext: itinerary?.plannerContext || formData?.plannerContext || {}
+    };
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const cleanDestination = String(destination || 'Itinerary').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+    link.href = url;
+    link.download = `WanderLuxe_AI_Plan_${cleanDestination || 'Itinerary'}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCreateQuotation = async () => {
+    setSaveStatus('saving');
+    try {
+      const payload = { ...itinerary, days: itinerary?.days || itinerary?.itineraryDays || [] };
+      let saved;
+      if (itinerary?._id) {
+        try { saved = await updateAIItineraryApi(itinerary._id, payload); }
+        catch {
+          delete payload._id;
+          delete payload.id;
+          saved = await saveAIItineraryApi(payload);
+        }
+      } else saved = await saveAIItineraryApi(payload);
+      const id = saved?._id || saved?.id;
+      if (!id) throw new Error('Saved plan has no identifier.');
+      onUpdateItinerary?.({ ...itinerary, ...saved, _id: id });
+      navigate(`/staff/sales/quotations/new?itineraryId=${encodeURIComponent(id)}`);
+    } catch (err) {
+      console.warn('Unable to create quotation from plan:', err.message);
+      setSaveStatus('idle');
     }
   };
 
@@ -215,6 +273,17 @@ const AIItineraryWorkspace = ({
             <Share2 size={13} />
             <span>Share</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleExportForQuotation}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <FileText size={13} />
+            <span>Export for Quotation</span>
+          </button>
+
+          {isQuotationStaff && <button type="button" onClick={handleCreateQuotation} disabled={saveStatus === 'saving'} className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white disabled:opacity-50"><FileText size={13} />Create quotation from this plan</button>}
 
           {/* Download PDF Menu */}
           <div className="relative">

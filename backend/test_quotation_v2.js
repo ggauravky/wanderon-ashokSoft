@@ -77,6 +77,23 @@ test('public revision DTO strips internal supplier fields and internal attachmen
   assert.equal('driverDetails' in dto.transportOptions[0], false);
 });
 
+test('public revision excludes unselected AI candidates and normalizes legacy policy once', () => {
+  const quotation = baseQuotation();
+  const snapshot = { ...quotation,
+    hotelOptions: [{ optionId: 'ai_hotel_1', hotelName: 'Unconfirmed', selected: false }, ...quotation.hotelOptions],
+    transportOptions: [{ optionId: 'ai_transport_candidate', title: 'Unconfirmed', selected: false }, ...quotation.transportOptions],
+    activities: [{ activityId: 'ai_act_1_morning_1', name: 'Unconfirmed', selected: false }, ...quotation.activities],
+    policies: { termsAndConditions: '' }, termsAndConditions: ['Legacy terms']
+  };
+  const dto = buildPublicRevisionDto({ quotation, revision: { _id: 'revision-1', version: 1, status: 'SHARED', snapshot, approval: {} },
+    share: { _id: 'share-1', templateKey: 'journey', allowAttachments: false, allowPdfDownload: false, expiresAt: new Date(Date.now() + 86_400_000) } });
+  assert.equal(dto.hotelOptions.length, 1);
+  assert.equal(dto.transportOptions.length, 1);
+  assert.equal(dto.activities.length, 1);
+  assert.equal(dto.policies.termsAndConditions, 'Legacy terms');
+  assert.deepEqual(dto.termsAndConditions, []);
+});
+
 test('public revision DTO always uses the immutable share template', () => {
   const quotation = baseQuotation();
   const snapshot = { ...quotation, presentationSettings: { ...quotation.presentationSettings, template: 'journey' } };

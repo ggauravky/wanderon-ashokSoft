@@ -50,6 +50,35 @@ const daySchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+const plannerContextSchema = new mongoose.Schema({
+  origin: { type: String, default: '' },
+  startDate: { type: Date, default: null },
+  endDate: { type: Date, default: null },
+  datesFlexible: { type: Boolean, default: true },
+  flexibleMonth: { type: String, default: '' },
+  travelersBreakdown: {
+    adults: { type: Number, default: 0, min: 0 },
+    children: { type: Number, default: 0, min: 0 },
+    infants: { type: Number, default: 0, min: 0 },
+    seniors: { type: Number, default: 0, min: 0 }
+  },
+  tripType: { type: String, default: '' },
+  paceRhythm: { type: String, default: '' },
+  acclimatization: { type: String, default: '' },
+  interests: { type: [String], default: [] },
+  stayPreference: { type: String, default: '' },
+  roomStyle: { type: String, default: '' },
+  dietaryPreference: { type: String, default: '' },
+  hotelRating: { type: Number, default: null, min: 0, max: 5 },
+  budgetTier: { type: String, default: '' },
+  budgetAmount: { type: Number, default: null, min: 0 },
+  transportPreference: { type: String, default: '' },
+  mobilityConstraints: { type: [String], default: [] },
+  mustInclude: { type: [String], default: [] },
+  avoid: { type: [String], default: [] },
+  customPreferences: { type: String, default: '' }
+}, { _id: false });
+
 const itinerarySchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -143,6 +172,10 @@ const itinerarySchema = new mongoose.Schema({
     transport: { type: String, default: '' },
     activities: { type: String, default: '' },
     estimatedTotal: { type: String, default: '' }
+  },
+  plannerContext: {
+    type: plannerContextSchema,
+    default: () => ({})
   },
   matchedTrip: {
     id: { type: mongoose.Schema.Types.Mixed },

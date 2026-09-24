@@ -6,7 +6,7 @@ const PlannerStepSuccessDispatch = ({ formData, onReset, onViewOverview, destina
   const [copied, setCopied] = useState(false);
   const duration = formData.duration || 7;
   const profile = getExpeditionProfile(destination, duration);
-  const dispatchId = formData.referenceId || formData.dispatchId || `WLX-EXP-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+  const dispatchId = formData.referenceId || formData.dispatchId || 'Pending confirmation';
   const phoneNumber = formData.whatsappNumber || '98160 12345';
   const travelerName = formData.fullName || 'Explorer';
 

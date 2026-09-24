@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Lead, { generateLeadReferenceId } from '../models/Lead.js';
+import Itinerary from '../models/Itinerary.js';
 import User from '../models/User.js';
 import FollowUp from '../models/FollowUp.js';
 import { resolveCustomerUserObjectId, isValidMongoObjectId, toObjectIdOrNull } from '../utils/mongoId.js';
@@ -7,6 +8,8 @@ import { sendErrorResponse } from '../utils/httpResponse.js';
 import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js';
 import { recordStaffActivity } from '../services/staffActivityService.js';
 import { hasMeaningfulAttribution, resolveLeadAttribution } from '../services/marketingAttributionService.js';
+import { canStaffAccessLead } from '../services/leadAccessService.js';
+import { verifyItineraryHandoffToken } from '../services/itineraryHandoffService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
@@ -44,6 +47,8 @@ export const createLead = async (req, res) => {
       topics,
       message,
       source,
+      sourceItineraryId,
+      sourceItineraryHandoffToken,
       marketingAttribution
     } = req.body;
 
@@ -71,7 +76,8 @@ export const createLead = async (req, res) => {
     }
 
     const formattedPhone = cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`;
-    const determinedLeadType = leadType || (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
+    const allowedLeadTypes = ['general', 'trip_enquiry', 'callback_request'];
+    const determinedLeadType = allowedLeadTypes.includes(leadType) ? leadType : (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
     const allowedSources = [
       'trip_page',
       'contact_page',
@@ -81,7 +87,8 @@ export const createLead = async (req, res) => {
       'website_lead_form',
       'expert_inquiry',
       'callback_request',
-      'expert_callback_modal'
+      'expert_callback_modal',
+      'ai_planner'
     ];
     const determinedSource = (source && allowedSources.includes(source))
       ? source
@@ -91,6 +98,16 @@ export const createLead = async (req, res) => {
 
     // Securely resolve authenticated customer user ObjectId (Staff roles or synthetic IDs resolve to null)
     const authUserId = await resolveCustomerUserObjectId(req.user);
+    let validSourceItineraryId = null;
+    if (sourceItineraryId) {
+      if (!mongoose.Types.ObjectId.isValid(sourceItineraryId)) return res.status(400).json({ message: 'Invalid linked AI itinerary.' });
+      const sourceItinerary = await Itinerary.findById(sourceItineraryId).select('_id user').lean();
+      if (!sourceItinerary) return res.status(400).json({ message: 'Linked AI itinerary was not found. Please save the plan and try again.' });
+      const ownedByAccount = authUserId && sourceItinerary.user && String(sourceItinerary.user) === String(authUserId);
+      const guestProof = !sourceItinerary.user && verifyItineraryHandoffToken(sourceItineraryHandoffToken, sourceItinerary._id);
+      if (!ownedByAccount && !guestProof) return res.status(403).json({ message: 'This AI itinerary cannot be linked to your request. Save it again and retry.' });
+      validSourceItineraryId = sourceItinerary._id;
+    }
 
     // Calculate priority based on group size and intent
     const parsedPax = Number(travelersCount) || 1;
@@ -129,6 +146,10 @@ export const createLead = async (req, res) => {
     }
     const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
     if (existingLead) {
+      if (validSourceItineraryId && determinedSource === 'ai_planner') {
+        existingLead.sourceItineraryId = validSourceItineraryId;
+        await existingLead.save();
+      }
       if (resolvedAttribution && !hasMeaningfulAttribution(existingLead.marketingAttribution)) {
         existingLead.marketingAttribution = resolvedAttribution;
         await existingLead.save();
@@ -151,7 +172,6 @@ export const createLead = async (req, res) => {
     } else if (!tripRef && tripId && isValidMongoObjectId(tripId)) {
       validTripRef = toObjectIdOrNull(tripId);
     }
-
     const leadPayload = {
       referenceId,
       name: name.trim(),
@@ -161,6 +181,7 @@ export const createLead = async (req, res) => {
       priority: calculatedPriority,
       tripId: tripId ? String(tripId) : '',
       tripRef: validTripRef,
+      sourceItineraryId: validSourceItineraryId,
       tripSlug: tripSlug ? String(tripSlug).trim() : '',
       tripTitle: tripTitle ? String(tripTitle).trim() : '',
       tripTitleSnapshot: tripTitle ? String(tripTitle).trim() : '',
@@ -276,11 +297,15 @@ export const getLeads = async (req, res) => {
     tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
     // RBAC Scoping for Sales:
-    // Sales strictly operates on the Shared Sales Queue for Travel Expert Requests (leadType = 'callback_request').
-    // Server-authoritative: Sales is forced to callback_request regardless of query parameters.
-    // All Sales employees see ALL callback_request leads with NO ownership or assignedToUser restriction.
+    // Sales operates on shared Travel Expert Requests plus AI Planner trip enquiries.
+    // Server-authoritative: Sales cannot broaden into unrelated marketing/general leads.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      andConditions.push({ leadType: 'callback_request' });
+      andConditions.push({
+        $or: [
+          { leadType: 'callback_request' },
+          { leadType: 'trip_enquiry', source: 'ai_planner' }
+        ]
+      });
     } else {
       // Non-sales roles (Admin/Operations) can filter by leadType if provided
       if (leadType && leadType !== 'all') {
@@ -409,6 +434,7 @@ export const getLeads = async (req, res) => {
       const candidates = await Lead.find(filter)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
         .populate('quotations', 'quotationNumber status pricing createdAt')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .lean();
@@ -446,6 +472,7 @@ export const getLeads = async (req, res) => {
         .limit(pageSize)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
         .populate('quotations', 'quotationNumber status pricing createdAt')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .lean();
@@ -504,6 +531,7 @@ export const getLeadById = async (req, res) => {
       lead = await Lead.findById(id)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location image')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
         .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .populate('userId', 'name email phone avatar');
@@ -512,6 +540,7 @@ export const getLeadById = async (req, res) => {
       lead = await Lead.findOne({ referenceId: id })
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location image')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
         .populate('quotations', 'quotationNumber status pricing createdAt bookingCode')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .populate('userId', 'name email phone avatar');
@@ -522,10 +551,10 @@ export const getLeadById = async (req, res) => {
     }
 
     // Role check:
-    // For callback_request (Expert Requests), all sales specialists operate on a shared queue with full access.
-    // Non-callback lead types remain restricted from unauthorized sales access.
+    // For callback requests and AI Planner enquiries, all sales specialists operate on a shared queue.
+    // Other lead types remain restricted from unauthorized sales access.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      if (lead.leadType !== 'callback_request') {
+      if (!canStaffAccessLead(lead, req.user)) {
         return res.status(403).json({ message: 'Access denied: Sales portal is restricted to Travel Expert Requests.' });
       }
     }

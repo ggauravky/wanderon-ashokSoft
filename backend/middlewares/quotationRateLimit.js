@@ -4,7 +4,8 @@ export const quotationRateLimit = ({ action, limit = 8, windowMs = 10 * 60 * 100
   const now = Date.now();
   const email = String(req.body?.email || '').trim().toLowerCase();
   const token = String(req.params?.token || '').slice(0, 16);
-  const key = `${action}:${req.ip || req.socket?.remoteAddress || 'unknown'}:${token}:${email}`;
+  const actor = String(req.user?._id || req.user?.id || req.ip || req.socket?.remoteAddress || 'unknown');
+  const key = `${action}:${actor}:${token}:${email}`;
   if (buckets.size > 2000) {
     for (const [storedKey, value] of buckets) if (value.resetAt <= now) buckets.delete(storedKey);
   }
