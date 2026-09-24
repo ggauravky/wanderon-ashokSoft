@@ -92,7 +92,7 @@ export const AuthProvider = ({ children }) => {
     const data = await loginApi({ email: cleanEmail, password });
     const currentUser = await establishSession(data);
     const returnedRole = (currentUser.role || '').toLowerCase();
-    const allowedStaffRoles = ['super_admin', 'admin', 'sales', 'marketing'];
+    const allowedStaffRoles = ['super_admin', 'admin', 'operations', 'sales', 'marketing'];
 
     if (!allowedStaffRoles.includes(returnedRole)) {
       clearSession();

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Headphones, Megaphone, Shield } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Headphones, Megaphone, Shield, Compass } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const STAFF_ROLES = ['super_admin', 'admin', 'sales', 'marketing'];
+const STAFF_ROLES = ['super_admin', 'admin', 'operations', 'sales', 'marketing'];
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -66,7 +66,7 @@ const AdminLogin = () => {
               WanderLuxe Staff Portal
             </h2>
             <p className="text-white/70 text-sm leading-relaxed font-medium mb-6">
-              One secure gateway for WanderLuxe Administration, Sales, and Marketing teams. Your role determines the workspaces available after sign-in.
+              One secure gateway for WanderLuxe Administration, Operations, Sales, and Marketing teams. Your role determines the workspaces available after sign-in.
             </p>
 
             <div className="space-y-2.5 text-xs text-white/80 font-semibold">
@@ -75,6 +75,9 @@ const AdminLogin = () => {
               </div>
               <div className="flex items-center gap-2 text-teal-300">
                 <Headphones size={14} /> Travel Expert Sales Consultation Desk
+              </div>
+              <div className="flex items-center gap-2 text-cyan-300">
+                <Compass size={14} /> Live Departure Operations Control
               </div>
               <div className="flex items-center gap-2 text-emerald-200">
                 <Megaphone size={14} /> Marketing Campaign Workspace
@@ -100,7 +103,7 @@ const AdminLogin = () => {
               Staff Authentication
             </span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-brand-navy">Staff Sign In</h1>
-            <p className="text-gray-500 text-xs mt-1">Administration, Sales, and Marketing access</p>
+            <p className="text-gray-500 text-xs mt-1">Administration, Operations, Sales, and Marketing access</p>
           </div>
 
           {error && (

@@ -21,6 +21,7 @@ import followUpRoutes from './routes/followUpRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
+import operationsRoutes from './routes/operationsRoutes.js';
 import { razorpayWebhookHandler } from './controllers/webhookController.js';
 import { getAllowedOrigins, validateRuntimeConfig } from './config/environment.js';
 
@@ -109,6 +110,7 @@ app.use('/api/follow-ups', followUpRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/sales', salesRoutes);
 app.use('/api/media', mediaRoutes);
+app.use('/api/operations', operationsRoutes);
 
 
 // Public Sitemap & Robots.txt Direct Access

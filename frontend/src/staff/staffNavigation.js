@@ -1,6 +1,7 @@
 export const STAFF_NAVIGATION_SECTIONS = Object.freeze({
   overview: Object.freeze({ id: 'overview', label: null }),
   administration: Object.freeze({ id: 'administration', label: 'Administration' }),
+  operations: Object.freeze({ id: 'operations', label: 'Operations' }),
   sales: Object.freeze({ id: 'sales', label: 'Sales' }),
   marketing: Object.freeze({ id: 'marketing', label: 'Marketing' })
 });
@@ -12,7 +13,7 @@ export const STAFF_MODULES = Object.freeze([
     path: '/staff',
     icon: 'overview',
     cardLabel: 'Overview',
-    roles: Object.freeze(['super_admin', 'admin', 'sales', 'marketing']),
+    roles: Object.freeze(['super_admin', 'admin', 'operations', 'sales', 'marketing']),
     section: 'overview',
     description: 'Your role-aware Staff Control Center home.',
     exact: true
@@ -116,6 +117,37 @@ export const STAFF_MODULES = Object.freeze([
     roles: Object.freeze(['super_admin', 'admin']),
     section: 'administration',
     description: 'Manage checkout coupon codes and validity rules.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'operations',
+    label: 'Operations Overview',
+    cardLabel: 'Operations',
+    path: '/staff/operations',
+    icon: 'operations',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Monitor confirmed departures, readiness signals, travelers and operational attention.',
+    exact: true
+  }),
+  Object.freeze({
+    id: 'operations_trips',
+    label: 'Trip Execution',
+    path: '/staff/operations/trips',
+    icon: 'operations_trips',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Configure and confirm the real services required for each operational departure.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'operations_vendors',
+    label: 'Vendors',
+    path: '/staff/operations/vendors',
+    icon: 'operations_vendors',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Maintain the reusable Hotel, Transport, Driver, Activity and Guide directory.',
     navigationOnly: true
   }),
   Object.freeze({

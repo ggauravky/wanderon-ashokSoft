@@ -167,7 +167,7 @@ The application defines 7 explicit user roles:
 | `admin` | Staff | Full administrative control: trips, bookings, team analytics, media library. |
 | `sales` | Staff | Sales portal: leads, expert inquiries, quotation builder, and customer bookings. |
 | `marketing` | Staff | Marketing workspace: campaigns, banners, and lead acquisition analytics. |
-| `operations` | Staff (Backend) | Operations role in User schema/auth; **no frontend UI is exposed** in the current build. |
+| `operations` | Staff | Operations Control Center for confirmed departure monitoring, trip execution, service confirmation, coordinators, and the Vendor directory. |
 | `user` | Customer | Standard traveler account for browsing, booking, and profile history. |
 | `influencer` | Creator | Affiliate / creator account for promo codes, referral tracking, and earnings. |
 
@@ -184,13 +184,17 @@ The staff portal is accessed at `/staff/*` and is organized around `StaffShell`:
 ```text
 /staff/
 ├── admin/          # Admin Overview, Analytics, Trips, Bookings, Media Library, Users
+├── operations/     # Live dashboard, Trip Execution, and Vendor directory
 ├── sales/          # Shared Sales Queue, Expert Requests, Quotations, Bookings
 └── marketing/      # Marketing Overview, Campaign Management, Banners, Analytics
 ```
 
 - **Navigation Authority**: `frontend/src/staff/staffNavigation.js` defines all modules, sub-routes, and permissions.
 - **Access Guard**: `frontend/src/staff/staffAccess.js` determines which navigation items are visible and guards routes against unauthorized access based on role capabilities.
-- **Operations Role Reality**: The `operations` role exists in the backend database schema for future expansion, but the current UI explicitly returns an empty navigation menu for it (`getVisibleStaffModules('operations') === []`).
+- **Operations Phase 1 read model**: `/staff/operations` derives operational departure membership, timing, traveler load, payment state, and evidence-backed attention from authoritative `Booking` and `Trip` records. Catalog bookings sharing one Trip batch are grouped; custom quotation bookings remain separate. Dashboard GET requests do not create execution records.
+- **Operations Phase 2 execution layer**: `/staff/operations/trips` materializes one `OperationalTrip` only when authorized Staff selects **Open Execution**. The existing Phase 1 `operationKey` is the unique identity, while current Booking membership continues to be resolved from the live read model. `OperationalService` records hold factual Hotel, Transport, Activity, and Guide execution state; `Vendor` is the reusable supplier directory. Required-service confirmation state derives `NOT_CONFIGURED`, `IN_PROGRESS`, or `READY` rather than accepting a manual readiness toggle.
+- **Custom quotation handoff**: The first materialization seeds services from the immutable `Booking.quotationSnapshot` with unique service keys and `$setOnInsert`; repeated ensures cannot duplicate services or overwrite operator edits. Provider names are retained only as source context and are never matched automatically to a Vendor.
+- **Operations security boundary**: Operations APIs and internal documents are limited to `operations`, `admin`, and `super_admin`. Source handoff DTOs remove supplier costs, margins, tokens, and other commercial/security internals. Phase 3 tasks/incidents and Phase 4 expenses/settlements/reports remain deferred.
 
 ---
 

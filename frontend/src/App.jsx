@@ -67,6 +67,12 @@ const PayoutsWorkspace = lazy(() => import('./staff/modules/admin/payouts/Payout
 const PayoutDetail = lazy(() => import('./staff/modules/admin/payouts/PayoutDetail'));
 const DiscountsWorkspace = lazy(() => import('./staff/modules/admin/discounts/DiscountsWorkspace'));
 const TeamAnalyticsWorkspace = lazy(() => import('./staff/modules/admin/teamAnalytics/TeamAnalyticsWorkspace'));
+const OperationsOverview = lazy(() => import('./staff/modules/operations/OperationsOverview'));
+const OperationsTripsWorkspace = lazy(() => import('./staff/modules/operations/trips/OperationsTripsWorkspace'));
+const OperationsTripDetail = lazy(() => import('./staff/modules/operations/trips/OperationsTripDetail'));
+const VendorsWorkspace = lazy(() => import('./staff/modules/operations/vendors/VendorsWorkspace'));
+const VendorEditor = lazy(() => import('./staff/modules/operations/vendors/VendorEditor'));
+const VendorDetail = lazy(() => import('./staff/modules/operations/vendors/VendorDetail'));
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -103,11 +109,18 @@ function App() {
 
           {/* Canonical unified Staff Control Center */}
           <Route path="/staff" element={
-            <RoleProtectedRoute allowedRoles={['super_admin', 'admin', 'sales', 'marketing']}>
+            <RoleProtectedRoute allowedRoles={['super_admin', 'admin', 'operations', 'sales', 'marketing']}>
               <StaffShell />
             </RoleProtectedRoute>
           }>
             <Route index element={<StaffOverview />} />
+            <Route path="operations" element={<StaffModuleRoute moduleId="operations"><OperationsOverview /></StaffModuleRoute>} />
+            <Route path="operations/trips" element={<StaffModuleRoute moduleId="operations_trips"><OperationsTripsWorkspace /></StaffModuleRoute>} />
+            <Route path="operations/trips/:id" element={<StaffModuleRoute moduleId="operations_trips"><OperationsTripDetail /></StaffModuleRoute>} />
+            <Route path="operations/vendors" element={<StaffModuleRoute moduleId="operations_vendors"><VendorsWorkspace /></StaffModuleRoute>} />
+            <Route path="operations/vendors/new" element={<StaffModuleRoute moduleId="operations_vendors"><VendorEditor /></StaffModuleRoute>} />
+            <Route path="operations/vendors/:id" element={<StaffModuleRoute moduleId="operations_vendors"><VendorDetail /></StaffModuleRoute>} />
+            <Route path="operations/vendors/:id/edit" element={<StaffModuleRoute moduleId="operations_vendors"><VendorEditor /></StaffModuleRoute>} />
             <Route path="admin" element={
               <StaffModuleRoute moduleId="admin">
                 <AdminWorkspace />

@@ -1317,6 +1317,55 @@ export async function getSalesDashboardApi() {
   return data;
 }
 
+const operationsQuery = (params = {}) => {
+  const query = toQueryString(params);
+  return query ? `?${query}` : '';
+};
+
+const operationsRequest = async (path, options = {}) => {
+  const response = await request(`${API_BASE_URL}/operations${path}`, {
+    ...options,
+    headers: getHeaders()
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Operations request failed.');
+  return data;
+};
+
+export const getOperationsDashboardApi = () => operationsRequest('/dashboard');
+export const getOperationsTripsApi = (params = {}) => operationsRequest(`/trips${operationsQuery(params)}`);
+export const ensureOperationalTripApi = (operationKey) => operationsRequest('/trips/ensure', { method: 'POST', body: JSON.stringify({ operationKey }) });
+export const getOperationalTripApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}`);
+export const updateOperationalTripApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const getOperationsCoordinatorsApi = (search = '') => operationsRequest(`/coordinators${operationsQuery({ search })}`);
+export const createOperationalServiceApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services`, { method: 'POST', body: JSON.stringify(payload) });
+export const updateOperationalServiceApi = (operationId, serviceId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const assignOperationalVendorApi = (operationId, serviceId, vendorId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}/assign-vendor`, { method: 'POST', body: JSON.stringify({ vendorId }) });
+export const assignOperationalDriverApi = (operationId, serviceId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}/assign-driver`, { method: 'POST', body: JSON.stringify(payload) });
+export const confirmOperationalServiceApi = (operationId, serviceId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}/confirm`, { method: 'POST', body: JSON.stringify(payload) });
+export const declineOperationalServiceApi = (operationId, serviceId, reason) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}/decline`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const cancelOperationalServiceApi = (operationId, serviceId, reason = '') => operationsRequest(`/trips/${encodeURIComponent(operationId)}/services/${encodeURIComponent(serviceId)}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const getOperationsVendorsApi = (params = {}) => operationsRequest(`/vendors${operationsQuery(params)}`);
+export const getOperationsVendorApi = (vendorId) => operationsRequest(`/vendors/${encodeURIComponent(vendorId)}`);
+export const createOperationsVendorApi = (payload) => operationsRequest('/vendors', { method: 'POST', body: JSON.stringify(payload) });
+export const updateOperationsVendorApi = (vendorId, payload) => operationsRequest(`/vendors/${encodeURIComponent(vendorId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const updateOperationsVendorStatusApi = (vendorId, status) => operationsRequest(`/vendors/${encodeURIComponent(vendorId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+
+export async function uploadOperationsDocumentApi(file, metadata = {}) {
+  const formData = new FormData();
+  formData.append('document', file);
+  Object.entries(metadata).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== '') formData.append(key, value); });
+  const token = localStorage.getItem('wanderluxe_token');
+  const response = await request(`${API_BASE_URL}/operations/documents/upload`, {
+    method: 'POST',
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Unable to upload the Operations document.');
+  return data;
+}
+
 // ================================================================
 // MARKETING API HELPERS
 // ================================================================

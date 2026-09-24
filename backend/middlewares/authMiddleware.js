@@ -80,6 +80,12 @@ export const ACTION_PERMISSIONS = Object.freeze({
   'marketing:view_dashboard': ['super_admin', 'admin', 'marketing'],
   'marketing:view_lead_analytics': ['super_admin', 'admin', 'marketing'],
   'sales:view_dashboard': ['super_admin', 'admin', 'sales'],
+  'operations:view_dashboard': ['super_admin', 'admin', 'operations'],
+  'operations:view_trips': ['super_admin', 'admin', 'operations'],
+  'operations:manage_trips': ['super_admin', 'admin', 'operations'],
+  'operations:view_vendors': ['super_admin', 'admin', 'operations'],
+  'operations:manage_vendors': ['super_admin', 'admin', 'operations'],
+  'operations:manage_services': ['super_admin', 'admin', 'operations'],
   'reports:view': ['super_admin', 'admin'],
   'users:manage_roles': ['super_admin', 'admin']
 });

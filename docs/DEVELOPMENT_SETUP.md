@@ -374,7 +374,7 @@ WanderLuxe implements a resilient **fail-closed** architecture:
 
 ## Staff Account Provisioning
 
-To access staff dashboards (Admin, Sales, Marketing), you need a user record with an authorized staff role. The backend provides an automated provisioning script:
+To access staff dashboards (Admin, Operations, Sales, Marketing), you need a user record with an authorized staff role. The backend provides an automated provisioning script:
 
 ```bash
 # Terminal 1 (inside backend/)
@@ -401,6 +401,7 @@ npm run staff:create
 **Supported Staff Roles:**
 - `super_admin`: Complete access to all administrative and business tools.
 - `admin`: Full administration access (destinations, bookings, team analytics, media).
+- `operations`: Read-only Operations dashboard for confirmed departure handoffs and readiness signals.
 - `sales`: Sales portal, expert inquiries, quotation builder, and customer bookings.
 - `marketing`: Campaigns, promotional banners, and lead acquisition analytics.
 
