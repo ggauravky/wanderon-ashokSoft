@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCircle2,
   Copy, Download, Eye, FileUp, GripVertical, Image as ImageIcon, Loader2, LockKeyhole,
@@ -177,6 +177,13 @@ const SmartAssistPanel = ({
     return { sourceType, itineraryPayload: sourceType === 'PASTED_ITINERARY' ? jsonText : parseStructuredItineraryText(jsonText), currentQuotation: quotation };
   };
 
+  const searchPlans = useCallback(async () => {
+    setLoadingAi(true);
+    try { setPlans((await listImportableItinerariesApi(planSearch)).itineraries || []); }
+    catch (err) { setError(err.message || 'Unable to search plans.'); }
+    finally { setLoadingAi(false); }
+  }, [planSearch, setError]);
+
   useEffect(() => {
     getQuotationAiStatusApi().then(setAiStatus).catch(() => setAiStatus({ configured: false, providerReachable: false }));
   }, []);
@@ -189,7 +196,7 @@ const SmartAssistPanel = ({
     if (sourceType !== 'SAVED_ITINERARY' || initialItineraryId) return undefined;
     const timer = window.setTimeout(() => { searchPlans(); }, 350);
     return () => window.clearTimeout(timer);
-  }, [planSearch, sourceType]);
+  }, [initialItineraryId, searchPlans, sourceType]);
 
   const loadPreview = async () => {
     setLoadingAi(true); setError(''); setNotice('');
@@ -257,13 +264,6 @@ const SmartAssistPanel = ({
     } finally {
       setLoadingAi(false);
     }
-  };
-
-  const searchPlans = async () => {
-    setLoadingAi(true);
-    try { setPlans((await listImportableItinerariesApi(planSearch)).itineraries || []); }
-    catch (err) { setError(err.message || 'Unable to search plans.'); }
-    finally { setLoadingAi(false); }
   };
 
   const toggleSection = (section) => {
@@ -341,7 +341,7 @@ const SmartAssistPanel = ({
         {sourceType === 'SHARED_ITINERARY' && <Field label="Share token or WanderLuxe link" value={shareToken} onChange={(event) => setShareToken(event.target.value)} disabled={frozen || loadingAi} />}
         {sourceType === 'LEAD_LINKED_ITINERARY' && <Field label="Lead plan" value={lead?.sourceItineraryId?.title ? `${lead.sourceItineraryId.title} - ${lead.sourceItineraryId.destination || ''}` : linkedLeadId ? 'Linked AI plan' : 'No linked plan'} disabled />}
         {sourceType === 'JSON_UPLOAD' && <label className={labelClass}><span>Quotation-ready JSON</span><input type="file" accept="application/json,.json" disabled={frozen || loadingAi} className={inputClass} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (file.size > 1024 * 1024) { setError('JSON file must be 1 MB or smaller.'); return; } file.text().then(setJsonText).catch(() => setError('Unable to read JSON file.')); }} /></label>}
-        {['PASTED_ITINERARY', 'DEMO_SAMPLE'].includes(sourceType) && <label className={labelClass}><span className="flex items-center justify-between gap-2"><span>{sourceType === 'DEMO_SAMPLE' ? 'Demo itinerary JSON' : 'Paste structured itinerary JSON'}</span>{sourceType === 'PASTED_ITINERARY' && <button type="button" onClick={pasteFromClipboard} className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">Paste from Clipboard</button>}</span><textarea rows={5} value={jsonText} onChange={(event) => setJsonText(event.target.value)} placeholder="Paste a WanderLuxe quotation-ready itinerary" className={`${inputClass} py-2 font-mono text-xs`} /></label>}
+        {['PASTED_ITINERARY', 'DEMO_SAMPLE'].includes(sourceType) && <label className={labelClass}><span className="flex items-center justify-between gap-2"><span>{sourceType === 'DEMO_SAMPLE' ? 'Demo itinerary JSON' : 'Paste structured itinerary JSON'}</span>{sourceType === 'PASTED_ITINERARY' && <button type="button" aria-label="Paste from Clipboard" onClick={pasteFromClipboard} className="rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">Paste from Clipboard</button>}</span><textarea rows={5} value={jsonText} onChange={(event) => setJsonText(event.target.value)} placeholder="Paste a WanderLuxe quotation-ready itinerary" className={`${inputClass} py-2 font-mono text-xs`} /></label>}
         <div className="flex items-end gap-2"><button type="button" disabled={frozen || loadingAi || (['JSON_UPLOAD', 'PASTED_ITINERARY', 'DEMO_SAMPLE'].includes(sourceType) && !jsonText) || (sourceType === 'SAVED_ITINERARY' && !selectedPlan && !initialItineraryId)} onClick={loadPreview} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-40">{loadingAi ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}Preview</button></div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">{quotationDemoEnabled && <><button type="button" onClick={loadSample} disabled={frozen || loadingAi} className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Load JSON sample</button><button type="button" onClick={loadPasteSample} disabled={frozen || loadingAi} className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Load Paste sample</button><button type="button" onClick={downloadSample} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700">Download sample JSON</button></>}<button type="button" onClick={generateMissingCopy} disabled={frozen || loadingAi || !aiStatus?.configured} className="min-h-9 rounded-lg border border-emerald-200 px-3 text-xs font-semibold text-emerald-700 disabled:opacity-40">Generate missing copy</button></div>

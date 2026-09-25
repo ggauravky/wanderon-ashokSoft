@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Sparkles, Save, Share2, Download, ArrowLeft, Sliders, 
-  MapPin, Check, BookmarkCheck, FileText, ChevronDown, Copy
+  Save, Share2, Download, Sliders, Check, BookmarkCheck, FileText, ChevronDown, Copy
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import WorkspaceOverviewTab from './WorkspaceOverviewTab';
 import WorkspaceStoryTab from './WorkspaceStoryTab';
 import WorkspaceItineraryTab from './WorkspaceItineraryTab';
@@ -56,7 +54,7 @@ const AIItineraryWorkspace = ({
     if (controlledActiveTab && controlledActiveTab !== internalActiveTab) {
       setInternalActiveTab(controlledActiveTab);
     }
-  }, [controlledActiveTab]);
+  }, [controlledActiveTab, internalActiveTab]);
 
   const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const { user } = useAuth();
@@ -392,7 +390,7 @@ const AIItineraryWorkspace = ({
           <WorkspaceBudgetTab
             itinerary={itinerary}
             userTargetBudget={userTargetBudget}
-            onTriggerCopilot={(prompt) => {
+            onTriggerCopilot={(_prompt) => {
               handleTabClick('itinerary');
               handleApplyCopilotChanges({
                 patch: {
