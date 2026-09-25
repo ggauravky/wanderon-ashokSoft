@@ -2,7 +2,7 @@
 
 ## Configuration
 
-Set backend-only `GEMINI_API_KEY`, `GEMINI_MODEL`, and optionally `QUOTATION_AI_MODEL`. Do not copy secret values into the frontend. On Render, update the variables and redeploy or restart the backend. Verify with:
+Set backend-only `GEMINI_API_KEY`, `GEMINI_MODEL`, and optionally `QUOTATION_AI_MODEL` / `QUOTATION_AI_FALLBACK_MODEL`. Do not copy secret values into the frontend. On Render, update the variables and redeploy or restart the backend. Verify with:
 
 ```text
 cd backend

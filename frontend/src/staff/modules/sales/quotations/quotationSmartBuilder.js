@@ -37,7 +37,7 @@ export const quotationAiPrerequisite = (quotation = {}, field, index = 0) => {
           : field.startsWith('itinerary.') ? quotation.itinerary?.[index] : null;
   if (field === 'journey.title' || field === 'journey.personalNote') return quotation.tripRequirements?.destination ? '' : 'Add the destination first.';
   if (field.startsWith('hotel.')) return item?.hotelName || item?.label ? '' : 'Add the hotel name first.';
-  if (field.startsWith('transport.')) return item?.title || item?.mode || item?.type || item?.from || item?.to ? '' : 'Add a transport title, mode, or route first.';
+  if (field.startsWith('transport.')) return item?.title || item?.vehicle || item?.mode || item?.type || item?.pickup || item?.drop || item?.route?.from || item?.route?.to ? '' : 'Add a transport title, mode, or route first.';
   if (field.startsWith('activity.')) return item?.name ? '' : 'Add the activity name first.';
   if (field.startsWith('addon.')) return item?.name ? '' : 'Add the add-on name first.';
   if (field.startsWith('itinerary.') && field !== 'itinerary.missingDescriptions') return item?.title || item?.destination || item?.locationName || item?.morning || item?.afternoon || item?.evening ? '' : 'Add a day title, location, or activity first.';

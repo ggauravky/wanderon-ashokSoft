@@ -116,7 +116,8 @@ Configure these in **Render Dashboard -> Environment**:
 | `RAZORPAY_WEBHOOK_SECRET` | **Yes** | Live Webhook signing secret |
 | `GEMINI_API_KEY` | Optional | Secret server-side key for AI Planner and quotation copy generation |
 | `GEMINI_MODEL` | Optional | Central primary Gemini model (currently `gemini-3.8-flash`) |
-| `QUOTATION_AI_MODEL` | Optional | Quotation-only model override; blank inherits `GEMINI_MODEL` |
+| `QUOTATION_AI_MODEL` | Optional | Quotation-only primary model (default `gemini-3.1-flash-lite`) |
+| `QUOTATION_AI_FALLBACK_MODEL` | Optional | Quotation-only fallback model (default `gemini-3.5-flash-lite`) |
 | `CLOUDINARY_CLOUD_NAME` | **Yes** | Production Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | **Yes** | Cloudinary API Key |
 | `CLOUDINARY_API_SECRET` | **Yes** | Cloudinary API Secret |

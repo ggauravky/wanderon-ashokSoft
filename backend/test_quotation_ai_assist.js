@@ -6,10 +6,17 @@ import {
   detectConflicts,
   parseSharedItineraryToken,
   normalizeImportedItineraryPayload,
-  sanitizeAiQuotationPatch
+  sanitizeAiQuotationPatch,
+  generateQuotationTextDrafts
 } from './services/quotationAiService.js';
 import { buildQuotationPolicyDefaults, normalizeQuotationPolicies } from './config/quotationPolicyPresets.js';
-import { buildFactualInclusions, buildFieldContext, generateQuotationFieldSuggestion } from './services/quotationFieldAiService.js';
+import {
+  buildFactualInclusions,
+  buildFieldContext,
+  generateQuotationFieldSuggestion,
+  maxOutputTokensForQuotationField
+} from './services/quotationFieldAiService.js';
+import { buildSafeInclusionCandidates, buildQuotationFieldFallback } from './config/quotationCopyPresets.js';
 import { signItineraryHandoffToken, verifyItineraryHandoffToken } from './services/itineraryHandoffService.js';
 import { canStaffAccessLead } from './services/leadAccessService.js';
 import { quotationRateLimit } from './middlewares/quotationRateLimit.js';
@@ -213,6 +220,179 @@ test('field context excludes identity and financial data; inclusions require sel
   assert(lines.some((line) => line.includes('Selected Stay')));
   assert(lines.every((line) => !/Candidate Stay|Walk|car|breakfast|dinner/i.test(line)));
   assert.deepEqual((await generateQuotationFieldSuggestion({ quotation, field: 'inclusions' })).suggestion, lines);
+});
+
+test('inclusion generator returns factual selected services with no AI call', async () => {
+  const quotation = {
+    hotelOptions: [{ hotelName: 'Pine Retreat', city: 'Manali', mealPlan: 'CP', selected: true }],
+    transportOptions: [{ title: 'Private SUV', pickup: 'Delhi', drop: 'Manali', selected: true }],
+    activities: [{ name: 'Village walk', selected: true, isIncluded: true }],
+    addOns: [{ name: 'Airport assistance', selected: true }]
+  };
+  const result = await generateQuotationFieldSuggestion({
+    quotation,
+    field: 'inclusions',
+    client: { models: { generateContent: async () => { throw new Error('AI must not be called'); } } }
+  });
+  assert.equal(result.provider, 'deterministic');
+  assert.equal(result.source, 'quotation');
+  assert.equal(result.suggestion.length, 4);
+  assert.match(result.suggestion.join('\n'), /Pine Retreat|Private SUV|Village walk|Airport assistance/);
+});
+
+test('factual inclusions omit unknown meals and every non-included activity state', () => {
+  const lines = buildFactualInclusions({
+    hotelOptions: [
+      { hotelName: 'No Meal Stay', selected: true, mealPlan: '' },
+      { hotelName: 'Unselected Breakfast Stay', selected: false, mealPlan: 'Breakfast' }
+    ],
+    activities: [
+      { name: 'Unselected included activity', selected: false, isIncluded: true },
+      { name: 'Selected optional activity', selected: true, isIncluded: false },
+      { name: 'Selected included activity', selected: true, isIncluded: true }
+    ]
+  });
+  assert.deepEqual(lines, [
+    'Accommodation at No Meal Stay',
+    'Included activity: Selected included activity'
+  ]);
+});
+
+test('inclusion generator offers safe context candidates when options exist but none are selected', async () => {
+  const quotation = {
+    hotelOptions: [{ hotelName: 'Review Stay', selected: false }],
+    transportOptions: [{ mode: 'CAB', selected: false }],
+    activities: [{ name: 'Review activity', selected: false, isIncluded: true }]
+  };
+  assert.equal(buildSafeInclusionCandidates(quotation).length, 3);
+  const result = await generateQuotationFieldSuggestion({ quotation, field: 'inclusions' });
+  assert.equal(result.available, true);
+  assert.equal(result.provider, 'deterministic');
+  assert.equal(result.suggestion.length, 3);
+  assert.doesNotMatch(result.suggestion.join('\n'), /Review Stay|Review activity/);
+});
+
+test('inclusion generator reports a true empty state instead of opening a blank dialog', async () => {
+  const result = await generateQuotationFieldSuggestion({ quotation: {}, field: 'inclusions' });
+  assert.equal(result.available, false);
+  assert.equal(result.code, 'NO_CONFIRMED_INCLUSIONS');
+  assert.match(result.reason, /No confirmed services/i);
+  assert.equal(Object.hasOwn(result, 'suggestion'), false);
+});
+
+test('exclusions and bulk missing-copy defaults are deterministic and token free', async () => {
+  const quotation = {
+    customerSnapshot: { name: 'Asha Rao' },
+    tripRequirements: { destination: 'Kashmir', duration: '5D/4N' },
+    itinerary: [{ day: 1, title: 'Srinagar arrival', destination: 'Srinagar', description: '', morning: 'Airport pickup' }],
+    exclusions: [], policies: {}
+  };
+  const exclusions = await generateQuotationFieldSuggestion({ quotation, field: 'exclusions' });
+  assert.equal(exclusions.provider, 'deterministic');
+  assert.equal(exclusions.suggestion.length, 2);
+  const bulk = await generateQuotationTextDrafts({
+    quotation,
+    fields: ['personalNote', 'journeyTitle', 'dayDescriptions', 'exclusions', 'policies']
+  });
+  assert.equal(bulk.provider, 'deterministic');
+  assert.equal(bulk.model, null);
+  assert.equal(bulk.available, true);
+  assert.match(bulk.drafts.journeyTitle, /Kashmir/);
+  assert.equal(bulk.drafts.dayDescriptions.length, 1);
+  assert.ok(bulk.drafts.policies.paymentTerms);
+});
+
+test('field context and output limits stay field specific', () => {
+  const quotation = {
+    customerSnapshot: { name: 'Private Name', email: 'private@example.com' },
+    tripRequirements: { destination: 'Goa', duration: '4D/3N', budgetPerPerson: 999999 },
+    hotelOptions: [{ hotelName: 'Sea View', notes: 'Current note', costPerNight: 99999 }],
+    manualPricing: { finalCustomerPrice: 123456 }
+  };
+  const context = buildFieldContext(quotation, 'hotel.notes', 0);
+  const serialized = JSON.stringify(context);
+  assert.match(serialized, /Sea View|Current note/);
+  assert.doesNotMatch(serialized, /Private Name|private@example.com|999999|123456/);
+  assert.equal(maxOutputTokensForQuotationField('journey.title'), 80);
+  assert.equal(maxOutputTokensForQuotationField('hotel.notes'), 150);
+  assert.equal(maxOutputTokensForQuotationField('itinerary.missingDescriptions', { missingDays: [{}, {}, {}] }), 660);
+});
+
+test('quota and provider outages return deterministic field fallback copy', async () => {
+  const quotation = {
+    customerSnapshot: { name: 'Asha Rao' },
+    tripRequirements: { destination: 'Goa', duration: '4D/3N' },
+    personalNote: 'Please review this Goa journey.'
+  };
+  for (const error of [
+    Object.assign(new Error('quota exhausted'), { status: 429 }),
+    Object.assign(new Error('provider unavailable'), { status: 503 }),
+    Object.assign(new Error('model not found for generateContent'), { status: 404 })
+  ]) {
+    const result = await generateQuotationFieldSuggestion({
+      quotation,
+      field: 'journey.personalNote',
+      mode: 'improve',
+      client: { models: { generateContent: async () => { throw error; } } }
+    });
+    assert.equal(result.available, true);
+    assert.equal(result.provider, 'fallback');
+    assert.equal(result.fallback, true);
+    assert.match(result.suggestion, /Goa/);
+    assert.match(result.warning, /safe starter/i);
+  }
+});
+
+test('missing Gemini configuration still returns fallback title, day, and policy copy', async () => {
+  const keys = ['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  keys.forEach((key) => delete process.env[key]);
+  try {
+    const quotation = {
+      tripRequirements: { destination: 'Sikkim', duration: '5D/4N' },
+      itinerary: [{ day: 1, title: 'Gangtok arrival', morning: 'Hotel transfer', description: 'Existing copy' }],
+      paymentTerms: { paymentMode: 'PARTIAL', depositPercent: 15, balanceDueDays: 7 },
+      policies: { paymentTerms: 'Pay a 15% deposit; the balance is due 7 days before departure.' }
+    };
+    const title = await generateQuotationFieldSuggestion({ quotation, field: 'journey.title', mode: 'generate' });
+    const day = await generateQuotationFieldSuggestion({ quotation, field: 'itinerary.description', index: 0, mode: 'improve' });
+    const policy = await generateQuotationFieldSuggestion({ quotation, field: 'policies.all', mode: 'improve' });
+    assert.equal(title.provider, 'deterministic');
+    assert.equal(day.provider, 'fallback');
+    assert.equal(day.code, 'AI_NOT_CONFIGURED');
+    assert.equal(policy.provider, 'fallback');
+    assert.match(policy.suggestion.paymentTerms, /15%/);
+    assert.match(policy.suggestion.paymentTerms, /7 days/);
+  } finally {
+    Object.entries(previous).forEach(([key, value]) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    });
+  }
+});
+
+test('overlong model output is bounded to the field character limit', async () => {
+  const quotation = { hotelOptions: [{ hotelName: 'Bounded Stay', notes: 'Please improve this note.' }] };
+  const result = await generateQuotationFieldSuggestion({
+    quotation,
+    field: 'hotel.notes',
+    index: 0,
+    mode: 'improve',
+    client: { models: { generateContent: async () => ({ text: JSON.stringify({ suggestion: 'word '.repeat(2_000) }) }) } }
+  });
+  assert.equal(result.provider, 'gemini');
+  assert.ok(result.suggestion.length <= 750);
+});
+
+test('fallback copy stays factual and does not manufacture unavailable fields', () => {
+  const quotation = {
+    tripRequirements: { destination: 'Ladakh', duration: '6D/5N' },
+    itinerary: [{ day: 1, title: 'Arrival', destination: 'Leh', morning: 'Hotel transfer' }]
+  };
+  assert.match(buildQuotationFieldFallback({ quotation, field: 'journey.title' }), /Ladakh/);
+  const day = buildQuotationFieldFallback({ quotation, field: 'itinerary.description', index: 0 });
+  assert.match(day, /Hotel transfer/);
+  assert.doesNotMatch(day, /price|confirmed availability|driver/i);
 });
 
 test('guest handoff proof is bound to itinerary and expires', () => {

@@ -88,7 +88,8 @@ File location: `backend/.env` (derived from `backend/.env.example`)
 | :--- | :---: | :---: | :---: | :--- | :--- |
 | `GEMINI_API_KEY` | Feature | Optional | **Secret** | _(secret)_ | Server-side Google Gemini key. Never expose it through a `VITE_` variable. Structured quotation import and safe defaults remain available when omitted. |
 | `GEMINI_MODEL` | Feature | Optional | No | `gemini-3.8-flash` | Central primary model for planner and AI writing. |
-| `QUOTATION_AI_MODEL` | Feature | Optional | No | _(blank)_ | Optional quotation-only model override; inherits `GEMINI_MODEL` when blank. |
+| `QUOTATION_AI_MODEL` | Feature | Optional | No | `gemini-3.1-flash-lite` | Low-cost quotation-only primary model. The general AI Planner continues to use `GEMINI_MODEL`. |
+| `QUOTATION_AI_FALLBACK_MODEL` | Feature | Optional | No | `gemini-3.5-flash-lite` | Quotation-only fallback used for retryable model/provider failures. |
 | `DEMO_QUOTATION_STAFF_EMAIL` | Development | Optional | No | `staff@example.com` | Existing active Admin, Super Admin, or Sales account used by the idempotent local demo seed. The seed refuses production. |
 
 ### 6. Cloudinary Media Storage
@@ -169,7 +170,8 @@ RAZORPAY_WEBHOOK_SECRET=
 # Feature: Gemini AI (Optional)
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-3.8-flash
-QUOTATION_AI_MODEL=
+QUOTATION_AI_MODEL=gemini-3.1-flash-lite
+QUOTATION_AI_FALLBACK_MODEL=gemini-3.5-flash-lite
 DEMO_QUOTATION_STAFF_EMAIL=
 
 # Feature: Cloudinary (Optional in dev - falls back to ./uploads)

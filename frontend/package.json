@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "test:staff-foundation": "node --test src/staff/staffAccess.test.js",
     "test:quotation-smart-builder": "node --test src/staff/modules/sales/quotations/quotationSmartBuilder.test.js",
+    "test:quotation-ai-ui": "node --test src/staff/modules/sales/quotations/aiAssistUi.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

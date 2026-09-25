@@ -1,9 +1,12 @@
 import crypto from 'node:crypto';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_GEMINI_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+export const DEFAULT_QUOTATION_GEMINI_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_QUOTATION_GEMINI_FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 const DEFAULT_TIMEOUT_MS = 25_000;
+const QUOTATION_TIMEOUT_MS = 15_000;
 
 const SAFE_MESSAGES = {
   AI_NOT_CONFIGURED: 'AI writing is not configured. Safe defaults and structured import remain available.',
@@ -17,11 +20,10 @@ const SAFE_MESSAGES = {
   AI_CONTEXT_INSUFFICIENT: 'Add the required confirmed facts before asking AI to write this field.'
 };
 
-let latestHealth = {
-  providerReachable: null,
-  lastCheckedAt: null,
-  model: null,
-  code: null
+const emptyHealth = () => ({ providerReachable: null, lastCheckedAt: null, model: null, code: null });
+const latestHealthByPurpose = {
+  general: emptyHealth(),
+  quotation: emptyHealth()
 };
 
 const configuredApiKey = () => String(
@@ -49,15 +51,23 @@ export class GeminiServiceError extends Error {
 export const getGeminiModelConfig = ({ purpose = 'general' } = {}) => {
   const generalModel = String(process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL).trim();
   const primaryModel = purpose === 'quotation'
-    ? String(process.env.QUOTATION_AI_MODEL || generalModel).trim()
+    ? String(process.env.QUOTATION_AI_MODEL || DEFAULT_QUOTATION_GEMINI_MODEL).trim()
     : generalModel;
-  const candidates = [...new Set([primaryModel, DEFAULT_GEMINI_FALLBACK_MODEL].filter(Boolean))];
+  const fallbackModel = purpose === 'quotation'
+    ? String(process.env.QUOTATION_AI_FALLBACK_MODEL || DEFAULT_QUOTATION_GEMINI_FALLBACK_MODEL).trim()
+    : String(process.env.GEMINI_FALLBACK_MODEL || DEFAULT_GEMINI_FALLBACK_MODEL).trim();
+  const candidates = [...new Set([primaryModel, fallbackModel].filter(Boolean))];
   return {
     configured: Boolean(configuredApiKey()),
     primaryModel,
-    fallbackModel: candidates[1] || null,
+    fallbackModel: candidates.find((model) => model !== primaryModel) || null,
     candidates
   };
+};
+
+export const getThinkingConfig = ({ purpose = 'general', model = '' } = {}) => {
+  if (purpose !== 'quotation' || !/^gemini-3(?:\.|$)/i.test(String(model))) return null;
+  return { thinkingLevel: ThinkingLevel.MINIMAL, includeThoughts: false };
 };
 
 export const classifyGeminiError = (error, { model = null, referenceId = crypto.randomUUID() } = {}) => {
@@ -101,7 +111,7 @@ export const classifyGeminiError = (error, { model = null, referenceId = crypto.
   });
 };
 
-const logResult = ({ action, model, result, latencyMs, code, referenceId }) => {
+const logResult = ({ action, model, result, latencyMs, code, referenceId, usage }) => {
   const parts = [
     '[QuotationAI]',
     `action=${String(action || 'generation').replace(/\s+/g, '_')}`,
@@ -109,6 +119,9 @@ const logResult = ({ action, model, result, latencyMs, code, referenceId }) => {
     `result=${result}`,
     `latency=${latencyMs}ms`
   ];
+  if (Number.isFinite(usage?.promptTokenCount)) parts.push(`inputTokens=${usage.promptTokenCount}`);
+  if (Number.isFinite(usage?.candidatesTokenCount)) parts.push(`outputTokens=${usage.candidatesTokenCount}`);
+  if (Number.isFinite(usage?.totalTokenCount)) parts.push(`totalTokens=${usage.totalTokenCount}`);
   if (code) parts.push(`code=${code}`);
   if (referenceId) parts.push(`referenceId=${referenceId}`);
   const message = parts.join(' ');
@@ -147,7 +160,8 @@ export async function generateStructuredJson({
   purpose = 'general',
   temperature = 0.25,
   maxOutputTokens = 8_192,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutMs,
+  systemInstruction,
   client = null
 }) {
   const referenceId = crypto.randomUUID();
@@ -164,37 +178,46 @@ export async function generateStructuredJson({
   for (const [index, model] of config.candidates.entries()) {
     const startedAt = Date.now();
     try {
+      const thinkingConfig = getThinkingConfig({ purpose, model });
       const response = await ai.models.generateContent({
         model,
         contents,
         config: {
+          ...(systemInstruction ? { systemInstruction } : {}),
+          ...(thinkingConfig ? { thinkingConfig } : {}),
           temperature,
           maxOutputTokens,
           responseMimeType: 'application/json',
           responseJsonSchema,
-          httpOptions: { timeout: timeoutMs, retryOptions: { attempts: 1 } }
+          httpOptions: { timeout: timeoutMs ?? (purpose === 'quotation' ? QUOTATION_TIMEOUT_MS : DEFAULT_TIMEOUT_MS), retryOptions: { attempts: 1 } }
         }
       });
       const data = parseJsonResponse(response, { model, referenceId });
-      latestHealth = {
+      const usage = {
+        promptTokenCount: Number(response?.usageMetadata?.promptTokenCount),
+        candidatesTokenCount: Number(response?.usageMetadata?.candidatesTokenCount),
+        totalTokenCount: Number(response?.usageMetadata?.totalTokenCount)
+      };
+      latestHealthByPurpose[purpose] = {
         providerReachable: true,
         lastCheckedAt: new Date().toISOString(),
         model: response?.modelVersion || model,
         code: null
       };
-      logResult({ action, model, result: 'success', latencyMs: Date.now() - startedAt, referenceId });
+      logResult({ action, model, result: 'success', latencyMs: Date.now() - startedAt, referenceId, usage });
       return {
         data,
         provider: 'gemini',
         model: response?.modelVersion || model,
         requestedModel: model,
         latencyMs: Date.now() - startedAt,
-        referenceId
+        referenceId,
+        usage
       };
     } catch (error) {
       const classified = classifyGeminiError(error, { model, referenceId });
       lastError = classified;
-      latestHealth = {
+      latestHealthByPurpose[purpose] = {
         providerReachable: false,
         lastCheckedAt: new Date().toISOString(),
         model,
@@ -217,11 +240,12 @@ export async function generateStructuredJson({
 
 export const getGeminiStatus = ({ purpose = 'quotation' } = {}) => {
   const config = getGeminiModelConfig({ purpose });
+  const health = latestHealthByPurpose[purpose] || emptyHealth();
   return {
     configured: config.configured,
-    model: latestHealth.model || config.primaryModel,
-    providerReachable: config.configured ? latestHealth.providerReachable : false,
-    lastCheckedAt: latestHealth.lastCheckedAt
+    model: health.model || config.primaryModel,
+    providerReachable: config.configured ? health.providerReachable : false,
+    lastCheckedAt: health.lastCheckedAt
   };
 };
 
