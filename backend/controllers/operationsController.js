@@ -6,6 +6,10 @@ import OperationalService from '../models/OperationalService.js';
 import OperationalTask from '../models/OperationalTask.js';
 import OperationalIncident from '../models/OperationalIncident.js';
 import OperationalCommunication from '../models/OperationalCommunication.js';
+import OperationalCost from '../models/OperationalCost.js';
+import OperationalSettlement from '../models/OperationalSettlement.js';
+import OperationalFeedback from '../models/OperationalFeedback.js';
+import OperationalTripClosure from '../models/OperationalTripClosure.js';
 import Vendor from '../models/Vendor.js';
 import User from '../models/User.js';
 import { OPERATIONS_DOCUMENT_TYPES } from '../models/schemas/operationsDocumentSchema.js';
@@ -34,6 +38,8 @@ import { uploadDocument } from '../utils/cloudinaryService.js';
 import { enrichGroupsWithCoordination } from '../services/operationsCoordinationService.js';
 import { deriveTaskDueState, summarizeTasks } from '../services/operationsTaskService.js';
 import { summarizeIncidents } from '../services/operationsIncidentService.js';
+import { deriveClosureReadiness } from '../services/operationsClosureService.js';
+import { summarizeOperationalFinancials } from '../services/operationsFinanceService.js';
 
 const isDbConnected = () => mongoose.connection?.readyState === 1;
 const fail = (res, status, message, code) => res.status(status).json({ success: false, message, ...(code ? { code } : {}) });
@@ -92,20 +98,22 @@ const loadExecutionView = async (operationId) => {
   const group = resolveOperationalGroup(readModel, operationalTrip.operationKey);
   if (!group) throw new OperationsDomainError(409, 'The source Booking is no longer an eligible Operations handoff.', 'SOURCE_HANDOFF_UNAVAILABLE');
   const bookings = bookingsForOperationalGroup(readModel, group);
-  const [services, tasks, incidents, communicationSummary] = await Promise.all([
+  const [services, tasks, incidents, communicationSummary, closure] = await Promise.all([
     OperationalService.find({ operationalTripId: operationalTrip._id }).sort({ serviceType: 1, createdAt: 1 }).lean(),
     OperationalTask.find({ operationalTripId: operationalTrip._id }).select('status priority dueAt assignedTo').lean(),
     OperationalIncident.find({ operationalTripId: operationalTrip._id }).select('status severity escalation resolvedAt').lean(),
     OperationalCommunication.aggregate([
       { $match: { operationalTripId: operationalTrip._id } },
       { $group: { _id: null, count: { $sum: 1 }, latestAt: { $max: '$occurredAt' } } }
-    ])
+    ]),
+    OperationalTripClosure.findOne({ operationalTripId: operationalTrip._id }).select('closureStatus closedAt closedBy').populate('closedBy', 'name role').lean()
   ]);
   return {
     ...executionView({ operationalTrip, group, bookings, services, readModel }),
     taskSummary: summarizeTasks(tasks),
     incidentSummary: summarizeIncidents(incidents),
-    communicationSummary: communicationSummary[0] ? { count: communicationSummary[0].count, latestAt: communicationSummary[0].latestAt } : { count: 0, latestAt: null }
+    communicationSummary: communicationSummary[0] ? { count: communicationSummary[0].count, latestAt: communicationSummary[0].latestAt } : { count: 0, latestAt: null },
+    closure: closure || { closureStatus: 'OPEN' }
   };
 };
 
@@ -120,19 +128,43 @@ export const getOperationsDashboard = async (req, res) => {
       Vendor.countDocuments({ status: 'ACTIVE' })
     ]);
     const operationIds = operationalTrips.map((trip) => trip._id);
-    const [services, tasks, incidents] = operationIds.length ? await Promise.all([
+    const [services, tasks, incidents, costs, settlements, feedback, closures] = operationIds.length ? await Promise.all([
       OperationalService.find({ operationalTripId: { $in: operationIds } }).lean(),
       OperationalTask.find({ operationalTripId: { $in: operationIds } }).populate('assignedTo', 'name role').lean(),
-      OperationalIncident.find({ operationalTripId: { $in: operationIds } }).populate('assignedTo', 'name role').lean()
-    ]) : [[], [], []];
+      OperationalIncident.find({ operationalTripId: { $in: operationIds } }).populate('assignedTo', 'name role').lean(),
+      OperationalCost.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalSettlement.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalFeedback.find({ operationalTripId: { $in: operationIds } }).lean(),
+      OperationalTripClosure.find({ operationalTripId: { $in: operationIds } }).lean()
+    ]) : [[], [], [], [], [], [], []];
     const base = summarizeOperationsDashboard(readModel.bookings, readModel.tripLookups, { now: readModel.now, awaitingHandoff });
     const executionEnriched = enrichOperationalGroups(readModel.groups, operationalTrips, services);
-    const enriched = enrichGroupsWithCoordination(executionEnriched, tasks, incidents, readModel.now);
+    const coordinated = enrichGroupsWithCoordination(executionEnriched, tasks, incidents, readModel.now);
+    const tripByKey = new Map(operationalTrips.map((trip) => [trip.operationKey, trip]));
+    const closureByTrip = new Map(closures.map((closure) => [String(closure.operationalTripId), closure]));
+    const forTrip = (items, trip) => items.filter((item) => String(item.operationalTripId) === String(trip?._id));
+    const enriched = coordinated.map((group) => {
+      const trip = tripByKey.get(group.operationKey);
+      if (!trip) return group;
+      const closureReadiness = deriveClosureReadiness({
+        group, closure: closureByTrip.get(String(trip._id)), services: forTrip(services, trip), tasks: forTrip(tasks, trip),
+        incidents: forTrip(incidents, trip), costs: forTrip(costs, trip), settlements: forTrip(settlements, trip),
+        feedback: forTrip(feedback, trip), bookings: bookingsForOperationalGroup(readModel, group), now: readModel.now
+      });
+      const financialReasons = [];
+      if (closureReadiness.financialSummary.draftCostCount) financialReasons.push({ code: 'UNFINALIZED_OPERATIONAL_COST', label: 'Operational costs remain in Draft', severity: 'MEDIUM', count: closureReadiness.financialSummary.draftCostCount });
+      if (closureReadiness.financialSummary.overdueVendorAmount > 0) financialReasons.push({ code: 'VENDOR_SETTLEMENT_OVERDUE', label: 'Vendor settlement is overdue', severity: 'MEDIUM' });
+      else if (closureReadiness.financialSummary.vendorOutstanding > 0) financialReasons.push({ code: 'OUTSTANDING_VENDOR_SETTLEMENT', label: 'Vendor settlement remains outstanding', severity: 'MEDIUM' });
+      if (group.operationalPhase === 'COMPLETED' && closureReadiness.status === 'NOT_READY') financialReasons.push({ code: 'TRIP_CLOSURE_BLOCKED', label: 'Completed journey has closure blockers', severity: 'MEDIUM', count: closureReadiness.blockers.length });
+      const reasons = [...(group.attention?.reasons || []), ...financialReasons];
+      return { ...group, closureReadiness, attention: { required: reasons.length > 0, severity: reasons.some((item) => item.severity === 'HIGH') ? 'HIGH' : reasons.length ? 'MEDIUM' : 'NONE', reasons } };
+    });
     const byKey = new Map(enriched.map((group) => [group.operationKey, group]));
     const section = (groups) => groups.map((group) => byKey.get(group.operationKey) || group);
     const attention = enriched
       .filter((group) => group.attention.required)
       .sort((left, right) => (right.attention.severity === 'HIGH') - (left.attention.severity === 'HIGH') || String(left.startDate).localeCompare(String(right.startDate)));
+    const operationsFinancials = summarizeOperationalFinancials({ bookings: readModel.bookings, costs, settlements, now: readModel.now });
     return res.json({
       ...base,
       summary: {
@@ -142,7 +174,11 @@ export const getOperationsDashboard = async (req, res) => {
         openTasks: tasks.filter((task) => !['COMPLETED', 'CANCELLED'].includes(task.status)).length,
         overdueTasks: tasks.filter((task) => deriveTaskDueState(task, readModel.now) === 'OVERDUE').length,
         openIncidents: incidents.filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status)).length,
-        criticalIncidents: incidents.filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status) && incident.severity === 'CRITICAL').length
+        criticalIncidents: incidents.filter((incident) => ['OPEN', 'IN_PROGRESS'].includes(incident.status) && incident.severity === 'CRITICAL').length,
+        tripsReadyForClosure: enriched.filter((group) => group.closureReadiness?.status === 'READY').length,
+        outstandingVendorBalance: operationsFinancials.vendorOutstanding,
+        overdueVendorSettlements: operationsFinancials.overdueVendorAmount,
+        unfinalizedCosts: operationsFinancials.draftCostCount
       },
       urgentTasks: tasks
         .filter((task) => !['COMPLETED', 'CANCELLED'].includes(task.status) && (

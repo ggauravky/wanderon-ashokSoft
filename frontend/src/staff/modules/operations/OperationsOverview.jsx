@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertOctagon, AlertTriangle, Building2, CalendarClock, CheckCircle2, Clock3, Compass, Info, ListChecks, RefreshCw, Route, Siren, UserRoundCheck, UsersRound } from 'lucide-react';
+import { Activity, AlertOctagon, AlertTriangle, Building2, CalendarClock, CheckCircle2, Clock3, Compass, Info, IndianRupee, ListChecks, RefreshCw, Route, Siren, UserRoundCheck, UsersRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getOperationsDashboardApi } from '../../../services/api.js';
 import OperationsMetricCard from './components/OperationsMetricCard.jsx';
 import OperationsAttentionList from './components/OperationsAttentionList.jsx';
 import OperationsDepartureTable from './components/OperationsDepartureTable.jsx';
 import OperationsStatusBadge from './components/OperationsStatusBadge.jsx';
-import { formatOperationsDate } from './helpers/operationsFormatters.js';
+import { formatOperationsDate, formatOperationsMoney } from './helpers/operationsFormatters.js';
 
 const DashboardSkeleton = () => <div className="space-y-5" aria-label="Loading Operations dashboard"><div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-white"/><div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white"/>)}</div><div className="h-56 animate-pulse rounded-xl border border-slate-200 bg-white"/></div>;
 
@@ -56,6 +56,13 @@ export default function OperationsOverview() {
     </div>
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <OperationsMetricCard label="Ready for Closure" value={summary.tripsReadyForClosure} detail="All hard closure checks clear" icon={CheckCircle2} tone="emerald"/>
+      <OperationsMetricCard label="Vendor Outstanding" value={formatOperationsMoney(summary.outstandingVendorBalance)} detail="Finalized cost balance" icon={IndianRupee} tone="rose"/>
+      <OperationsMetricCard label="Overdue Vendor Balance" value={formatOperationsMoney(summary.overdueVendorSettlements)} detail="Due date passed" icon={AlertTriangle} tone="amber"/>
+      <OperationsMetricCard label="Unfinalized Costs" value={summary.unfinalizedCosts} detail="Draft records block closure" icon={IndianRupee} tone="amber"/>
+    </div>
+
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <OperationsMetricCard label="Open Tasks" value={summary.openTasks} detail="Human coordination work" icon={ListChecks} tone="slate"/>
       <OperationsMetricCard label="Overdue Tasks" value={summary.overdueTasks} detail="Closed tasks excluded" icon={Clock3} tone="rose"/>
       <OperationsMetricCard label="Open Incidents" value={summary.openIncidents} detail="Open and in progress" icon={Siren} tone="amber"/>
@@ -73,6 +80,6 @@ export default function OperationsOverview() {
       <Section eyebrow="Travel window ended" title="Recently Completed"><OperationsDepartureTable departures={dashboard.recentlyCompleted} emptyMessage="No completed operational departures yet."/></Section>
     </>}
 
-    <div className="flex items-start gap-2 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500"><UsersRound className="mt-0.5 shrink-0" size={15}/><p>Departure membership remains a live read model from Booking and Trip. Service readiness, team tasks, factual customer updates, and Incident lifecycles remain separate truths. Expenses, settlements, profitability, feedback, and trip closure are intentionally deferred.</p></div>
+    <div className="flex items-start gap-2 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500"><UsersRound className="mt-0.5 shrink-0" size={15}/><p>Departure membership remains a live read model from Booking and Trip. Service readiness, coordination, operational costs, Vendor settlements, customer feedback, and formal closure remain separate audited truths.</p></div>
   </div>;
 }

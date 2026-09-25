@@ -29,11 +29,35 @@ import {
 } from '../controllers/operationsIncidentController.js';
 import { checkPermission, protect } from '../middlewares/authMiddleware.js';
 import { handleMulterError, uploadSingleDocument } from '../middlewares/uploadMiddleware.js';
+import {
+  createOperationalCost, finalizeOperationalCost, getOperationalCost, getOperationalFinancialSummary,
+  listOperationalCosts, updateOperationalCost, voidOperationalCost
+} from '../controllers/operationsCostController.js';
+import { createCostSettlement, listCostSettlements, listOperationalSettlements, voidOperationalSettlement } from '../controllers/operationsSettlementController.js';
+import { createOperationalFeedback, listOperationalFeedback, updateOperationalFeedback } from '../controllers/operationsFeedbackController.js';
+import { closeOperationalTrip, getOperationalClosure, reopenOperationalTrip } from '../controllers/operationsClosureController.js';
+import { getOperationsReportOverview } from '../controllers/operationsReportController.js';
+import { assertOperationalTripOpen } from '../services/operationsClosureService.js';
 
 const router = express.Router();
 router.use(protect);
 
+const requireOpenTrip = async (req, res, next) => {
+  try { await assertOperationalTripOpen(req.params.operationId); return next(); }
+  catch (error) { return res.status(error.status || 500).json({ message: error.message || 'Unable to verify Trip Closure state.', ...(error.code ? { code: error.code } : {}) }); }
+};
+
 router.get('/dashboard', checkPermission('operations:view_dashboard'), getOperationsDashboard);
+router.get('/reports/overview', checkPermission('operations:view_reports'), getOperationsReportOverview);
+router.get('/settlements', checkPermission('operations:view_settlements'), listOperationalSettlements);
+router.get('/costs/:costId', checkPermission('operations:view_costs'), getOperationalCost);
+router.patch('/costs/:costId', checkPermission('operations:manage_costs'), updateOperationalCost);
+router.post('/costs/:costId/finalize', checkPermission('operations:manage_costs'), finalizeOperationalCost);
+router.post('/costs/:costId/void', checkPermission('operations:manage_costs'), voidOperationalCost);
+router.get('/costs/:costId/settlements', checkPermission('operations:view_settlements'), listCostSettlements);
+router.post('/costs/:costId/settlements', checkPermission('operations:manage_settlements'), createCostSettlement);
+router.post('/settlements/:settlementId/void', checkPermission('operations:manage_settlements'), voidOperationalSettlement);
+router.patch('/feedback/:feedbackId', checkPermission('operations:manage_feedback'), updateOperationalFeedback);
 router.get('/coordinators', checkPermission('operations:view_trips'), getOperationsCoordinators);
 router.post('/documents/upload', checkPermission('operations:manage_services'), uploadSingleDocument, uploadOperationsDocument);
 
@@ -58,28 +82,37 @@ router.patch('/vendors/:vendorId/status', checkPermission('operations:manage_ven
 router.get('/trips', checkPermission('operations:view_trips'), listOperationalTrips);
 router.post('/trips/ensure', checkPermission('operations:manage_trips'), ensureOperationalTripController);
 router.get('/trips/:operationId', checkPermission('operations:view_trips'), getOperationalTrip);
-router.patch('/trips/:operationId', checkPermission('operations:manage_trips'), updateOperationalTrip);
-router.post('/trips/:operationId/checklist/initialize', checkPermission('operations:manage_tasks'), initializeOperationalChecklist);
+router.patch('/trips/:operationId', checkPermission('operations:manage_trips'), requireOpenTrip, updateOperationalTrip);
+router.post('/trips/:operationId/checklist/initialize', checkPermission('operations:manage_tasks'), requireOpenTrip, initializeOperationalChecklist);
 router.get('/trips/:operationId/tasks', checkPermission('operations:view_tasks'), listOperationalTripTasks);
-router.post('/trips/:operationId/tasks', checkPermission('operations:manage_tasks'), createOperationalTask);
-router.patch('/trips/:operationId/tasks/:taskId', checkPermission('operations:manage_tasks'), updateOperationalTask);
-router.post('/trips/:operationId/tasks/:taskId/start', checkPermission('operations:manage_tasks'), startTask);
-router.post('/trips/:operationId/tasks/:taskId/block', checkPermission('operations:manage_tasks'), blockTask);
-router.post('/trips/:operationId/tasks/:taskId/complete', checkPermission('operations:manage_tasks'), completeTask);
-router.post('/trips/:operationId/tasks/:taskId/reopen', checkPermission('operations:manage_tasks'), reopenTask);
-router.post('/trips/:operationId/tasks/:taskId/cancel', checkPermission('operations:manage_tasks'), cancelTask);
+router.post('/trips/:operationId/tasks', checkPermission('operations:manage_tasks'), requireOpenTrip, createOperationalTask);
+router.patch('/trips/:operationId/tasks/:taskId', checkPermission('operations:manage_tasks'), requireOpenTrip, updateOperationalTask);
+router.post('/trips/:operationId/tasks/:taskId/start', checkPermission('operations:manage_tasks'), requireOpenTrip, startTask);
+router.post('/trips/:operationId/tasks/:taskId/block', checkPermission('operations:manage_tasks'), requireOpenTrip, blockTask);
+router.post('/trips/:operationId/tasks/:taskId/complete', checkPermission('operations:manage_tasks'), requireOpenTrip, completeTask);
+router.post('/trips/:operationId/tasks/:taskId/reopen', checkPermission('operations:manage_tasks'), requireOpenTrip, reopenTask);
+router.post('/trips/:operationId/tasks/:taskId/cancel', checkPermission('operations:manage_tasks'), requireOpenTrip, cancelTask);
 router.get('/trips/:operationId/communications', checkPermission('operations:view_communications'), listOperationalCommunications);
-router.post('/trips/:operationId/communications', checkPermission('operations:manage_communications'), createOperationalCommunication);
+router.post('/trips/:operationId/communications', checkPermission('operations:manage_communications'), requireOpenTrip, createOperationalCommunication);
 router.get('/trips/:operationId/incidents', checkPermission('operations:view_incidents'), listOperationalTripIncidents);
-router.post('/trips/:operationId/incidents', checkPermission('operations:manage_incidents'), createOperationalIncident);
+router.post('/trips/:operationId/incidents', checkPermission('operations:manage_incidents'), requireOpenTrip, createOperationalIncident);
 router.get('/trips/:operationId/services', checkPermission('operations:view_trips'), listOperationalServices);
-router.post('/trips/:operationId/services', checkPermission('operations:manage_services'), createOperationalService);
-router.patch('/trips/:operationId/services/:serviceId', checkPermission('operations:manage_services'), updateOperationalService);
-router.post('/trips/:operationId/services/:serviceId/assign-vendor', checkPermission('operations:manage_services'), assignServiceVendor);
-router.post('/trips/:operationId/services/:serviceId/assign-driver', checkPermission('operations:manage_services'), assignTransportDriver);
-router.post('/trips/:operationId/services/:serviceId/confirm', checkPermission('operations:manage_services'), confirmOperationalService);
-router.post('/trips/:operationId/services/:serviceId/decline', checkPermission('operations:manage_services'), declineOperationalService);
-router.post('/trips/:operationId/services/:serviceId/cancel', checkPermission('operations:manage_services'), cancelOperationalService);
+router.post('/trips/:operationId/services', checkPermission('operations:manage_services'), requireOpenTrip, createOperationalService);
+router.patch('/trips/:operationId/services/:serviceId', checkPermission('operations:manage_services'), requireOpenTrip, updateOperationalService);
+router.post('/trips/:operationId/services/:serviceId/assign-vendor', checkPermission('operations:manage_services'), requireOpenTrip, assignServiceVendor);
+router.post('/trips/:operationId/services/:serviceId/assign-driver', checkPermission('operations:manage_services'), requireOpenTrip, assignTransportDriver);
+router.post('/trips/:operationId/services/:serviceId/confirm', checkPermission('operations:manage_services'), requireOpenTrip, confirmOperationalService);
+router.post('/trips/:operationId/services/:serviceId/decline', checkPermission('operations:manage_services'), requireOpenTrip, declineOperationalService);
+router.post('/trips/:operationId/services/:serviceId/cancel', checkPermission('operations:manage_services'), requireOpenTrip, cancelOperationalService);
+
+router.get('/trips/:operationId/costs', checkPermission('operations:view_costs'), listOperationalCosts);
+router.post('/trips/:operationId/costs', checkPermission('operations:manage_costs'), requireOpenTrip, createOperationalCost);
+router.get('/trips/:operationId/financial-summary', checkPermission('operations:view_costs'), getOperationalFinancialSummary);
+router.get('/trips/:operationId/feedback', checkPermission('operations:view_feedback'), listOperationalFeedback);
+router.post('/trips/:operationId/feedback', checkPermission('operations:manage_feedback'), requireOpenTrip, createOperationalFeedback);
+router.get('/trips/:operationId/closure', checkPermission('operations:view_closure'), getOperationalClosure);
+router.post('/trips/:operationId/closure/close', checkPermission('operations:close_trip'), requireOpenTrip, closeOperationalTrip);
+router.post('/trips/:operationId/closure/reopen', checkPermission('operations:reopen_trip'), reopenOperationalTrip);
 
 router.use(handleMulterError);
 

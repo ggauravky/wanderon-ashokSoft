@@ -76,6 +76,8 @@ const OperationalIncidentDetail = lazy(() => import('./staff/modules/operations/
 const VendorsWorkspace = lazy(() => import('./staff/modules/operations/vendors/VendorsWorkspace'));
 const VendorEditor = lazy(() => import('./staff/modules/operations/vendors/VendorEditor'));
 const VendorDetail = lazy(() => import('./staff/modules/operations/vendors/VendorDetail'));
+const OperationsSettlementsWorkspace = lazy(() => import('./staff/modules/operations/settlements/OperationsSettlementsWorkspace'));
+const OperationsReportsWorkspace = lazy(() => import('./staff/modules/operations/reports/OperationsReportsWorkspace'));
 
 const LegacyQuotationRedirect = ({ edit = false }) => {
   const { id, quoteId } = useParams();
@@ -127,6 +129,8 @@ function App() {
             <Route path="operations/vendors/new" element={<StaffModuleRoute moduleId="operations_vendors"><VendorEditor /></StaffModuleRoute>} />
             <Route path="operations/vendors/:id" element={<StaffModuleRoute moduleId="operations_vendors"><VendorDetail /></StaffModuleRoute>} />
             <Route path="operations/vendors/:id/edit" element={<StaffModuleRoute moduleId="operations_vendors"><VendorEditor /></StaffModuleRoute>} />
+            <Route path="operations/settlements" element={<StaffModuleRoute moduleId="operations_settlements"><OperationsSettlementsWorkspace /></StaffModuleRoute>} />
+            <Route path="operations/reports" element={<StaffModuleRoute moduleId="operations_reports"><OperationsReportsWorkspace /></StaffModuleRoute>} />
             <Route path="admin" element={
               <StaffModuleRoute moduleId="admin">
                 <AdminWorkspace />

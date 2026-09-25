@@ -27,7 +27,14 @@ const PHASE_TONES = {
   ACKNOWLEDGED: 'border-amber-200 bg-amber-50 text-amber-800',
   NONE: 'border-slate-200 bg-slate-50 text-slate-500',
   OUTBOUND: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  INBOUND: 'border-sky-200 bg-sky-50 text-sky-700'
+  INBOUND: 'border-sky-200 bg-sky-50 text-sky-700',
+  DRAFT: 'border-amber-200 bg-amber-50 text-amber-800',
+  FINALIZED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  VOID: 'border-slate-300 bg-slate-100 text-slate-600',
+  UNPAID: 'border-rose-200 bg-rose-50 text-rose-700',
+  PARTIALLY_PAID: 'border-amber-200 bg-amber-50 text-amber-800',
+  PAID: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  NOT_READY: 'border-amber-200 bg-amber-50 text-amber-800'
 };
 
 export default function OperationsStatusBadge({ value }) {

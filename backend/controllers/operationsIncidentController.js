@@ -10,6 +10,7 @@ import {
   validateIncidentScopeRelations
 } from '../services/operationsIncidentService.js';
 import { OperationsDomainError } from '../services/operationsExecutionService.js';
+import { assertOperationalTripOpen } from '../services/operationsClosureService.js';
 import { ensureOperationsDatabase, handleOperationsError, operationsActor, operationsFailure, sameInstant } from './operationsControllerUtils.js';
 
 const populateIncident = (query) => query
@@ -124,6 +125,7 @@ export const updateOperationalIncident = async (req, res) => {
   try {
     if (!ensureOperationsDatabase(res)) return;
     const incident = await getIncident(req.params.incidentId);
+    await assertOperationalTripOpen(incident.operationalTripId);
     if (req.body.updatedAt && !sameInstant(req.body.updatedAt, incident.updatedAt)) return operationsFailure(res, 409, 'This Incident changed while you were editing it. Refresh and try again.');
     if (Object.hasOwn(req.body, 'status') || Object.hasOwn(req.body, 'escalation')) return operationsFailure(res, 400, 'Incident lifecycle state can only be changed through explicit actions.');
     const actor = operationsActor(req); const previousDocumentCount = incident.documents.length;
@@ -147,7 +149,7 @@ export const updateOperationalIncident = async (req, res) => {
 export const assignOperationalIncident = async (req, res) => {
   try {
     if (!ensureOperationsDatabase(res)) return;
-    const incident = await getIncident(req.params.incidentId); const assignee = await validateOperationsStaff(req.body.assignedTo);
+    const incident = await getIncident(req.params.incidentId); await assertOperationalTripOpen(incident.operationalTripId); const assignee = await validateOperationsStaff(req.body.assignedTo);
     if (String(incident.assignedTo || '') === String(assignee?._id || '')) return res.json({ success: true, data: incident, idempotent: true });
     const actor = operationsActor(req); incident.assignedTo = assignee?._id || null; incident.updatedBy = actor.id;
     incident.history.push({ action: 'ASSIGNED', fromStatus: incident.status, toStatus: incident.status, note: `Assigned to ${assignee?.name || 'Unassigned'}`, actorId: actor.id, actorName: actor.name, at: new Date() });
@@ -158,7 +160,7 @@ export const assignOperationalIncident = async (req, res) => {
 const transition = (apply, fallback) => async (req, res) => {
   try {
     if (!ensureOperationsDatabase(res)) return;
-    const incident = await getIncident(req.params.incidentId); const changed = apply(incident, req.body || {}, operationsActor(req));
+    const incident = await getIncident(req.params.incidentId); await assertOperationalTripOpen(incident.operationalTripId); const changed = apply(incident, req.body || {}, operationsActor(req));
     if (changed) { incident.updatedBy = req.user._id; await incident.save(); }
     await incident.populate('assignedTo', 'name role isActive'); return res.json({ success: true, data: incident, idempotent: !changed });
   } catch (error) { return handleOperationsError(res, error, fallback); }

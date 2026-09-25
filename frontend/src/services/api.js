@@ -1374,6 +1374,22 @@ export const acknowledgeOperationalIncidentApi = (incidentId) => operationsReque
 export const resolveOperationalIncidentApi = (incidentId, resolutionSummary) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/resolve`, { method: 'POST', body: JSON.stringify({ resolutionSummary }) });
 export const closeOperationalIncidentApi = (incidentId) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/close`, { method: 'POST' });
 export const reopenOperationalIncidentApi = (incidentId, reason) => operationsRequest(`/incidents/${encodeURIComponent(incidentId)}/reopen`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const getOperationalCostsApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/costs`);
+export const createOperationalCostApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/costs`, { method: 'POST', body: JSON.stringify(payload) });
+export const updateOperationalCostApi = (costId, payload) => operationsRequest(`/costs/${encodeURIComponent(costId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const finalizeOperationalCostApi = (costId) => operationsRequest(`/costs/${encodeURIComponent(costId)}/finalize`, { method: 'POST' });
+export const voidOperationalCostApi = (costId, reason) => operationsRequest(`/costs/${encodeURIComponent(costId)}/void`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const recordOperationalSettlementApi = (costId, payload) => operationsRequest(`/costs/${encodeURIComponent(costId)}/settlements`, { method: 'POST', body: JSON.stringify(payload) });
+export const voidOperationalSettlementApi = (settlementId, reason) => operationsRequest(`/settlements/${encodeURIComponent(settlementId)}/void`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const getOperationalFinancialSummaryApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/financial-summary`);
+export const getOperationsSettlementsApi = (params = {}) => operationsRequest(`/settlements${operationsQuery(params)}`);
+export const getOperationalFeedbackApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/feedback`);
+export const saveOperationalFeedbackApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/feedback`, { method: 'POST', body: JSON.stringify(payload) });
+export const updateOperationalFeedbackApi = (feedbackId, payload) => operationsRequest(`/feedback/${encodeURIComponent(feedbackId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+export const getOperationalClosureApi = (operationId) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/closure`);
+export const closeOperationalTripApi = (operationId, payload) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/closure/close`, { method: 'POST', body: JSON.stringify(payload) });
+export const reopenOperationalTripApi = (operationId, reason) => operationsRequest(`/trips/${encodeURIComponent(operationId)}/closure/reopen`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const getOperationsReportsApi = (params = {}) => operationsRequest(`/reports/overview${operationsQuery(params)}`);
 
 export async function uploadOperationsDocumentApi(file, metadata = {}) {
   const formData = new FormData();

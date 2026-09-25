@@ -171,6 +171,26 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
+    id: 'operations_settlements',
+    label: 'Costs & Settlements',
+    path: '/staff/operations/settlements',
+    icon: 'operations_settlements',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Review finalized operational costs and factual Vendor settlement records.',
+    navigationOnly: true
+  }),
+  Object.freeze({
+    id: 'operations_reports',
+    label: 'Reports',
+    path: '/staff/operations/reports',
+    icon: 'operations_reports',
+    roles: Object.freeze(['super_admin', 'admin', 'operations']),
+    section: 'operations',
+    description: 'Review factual execution, Vendor settlement, issue and customer-outcome data.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'sales',
     label: 'Sales Overview',
     cardLabel: 'Sales',

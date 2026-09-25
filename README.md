@@ -29,7 +29,7 @@ React 19 SPA (Vite 8) ──────[ Local Proxy: /api ]──────�
 - **Frontend**: React 19 SPA built with Vite 8 and Tailwind CSS, featuring luxury visual aesthetics, role-based staff views, and client-side PDF document generation.
 - **Backend**: Node.js 22 LTS REST API server built with Express 4 and Mongoose 8, featuring strict RBAC, idempotent trip execution materialization, cryptographic signature validation, and resilient fail-closed database connectivity.
 - **Persistence**: MongoDB Atlas with additive schema versioning and compound indexes.
-- **Operations**: Phase 1 supplies the live Booking/Trip departure read model; Phase 2 persists service execution and Vendors; Phase 3 persists human tasks, factual customer communication history, and auditable Incident lifecycles without changing service-readiness semantics.
+- **Operations**: Phase 1 supplies the live Booking/Trip departure read model; Phase 2 persists service execution and Vendors; Phase 3 persists tasks, factual customer communication history, and auditable Incident lifecycles; Phase 4 adds separate operational cost and Vendor-settlement records, customer feedback, formal closure/reopen controls, and factual Operations reports.
 
 ---
 

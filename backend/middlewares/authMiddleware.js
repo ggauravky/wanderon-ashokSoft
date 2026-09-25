@@ -92,6 +92,16 @@ export const ACTION_PERMISSIONS = Object.freeze({
   'operations:manage_communications': ['super_admin', 'admin', 'operations'],
   'operations:view_incidents': ['super_admin', 'admin', 'operations'],
   'operations:manage_incidents': ['super_admin', 'admin', 'operations'],
+  'operations:view_costs': ['super_admin', 'admin', 'operations'],
+  'operations:manage_costs': ['super_admin', 'admin', 'operations'],
+  'operations:view_settlements': ['super_admin', 'admin', 'operations'],
+  'operations:manage_settlements': ['super_admin', 'admin', 'operations'],
+  'operations:view_feedback': ['super_admin', 'admin', 'operations'],
+  'operations:manage_feedback': ['super_admin', 'admin', 'operations'],
+  'operations:view_closure': ['super_admin', 'admin', 'operations'],
+  'operations:close_trip': ['super_admin', 'admin', 'operations'],
+  'operations:reopen_trip': ['super_admin', 'admin'],
+  'operations:view_reports': ['super_admin', 'admin', 'operations'],
   'reports:view': ['super_admin', 'admin'],
   'users:manage_roles': ['super_admin', 'admin']
 });

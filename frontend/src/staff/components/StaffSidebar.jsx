@@ -20,7 +20,9 @@ import {
   ClipboardList,
   Handshake,
   ListChecks,
-  Siren
+  Siren,
+  IndianRupee,
+  ChartNoAxesCombined
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -41,6 +43,8 @@ const ICONS = {
   operations_tasks: ListChecks,
   operations_issues: Siren,
   operations_vendors: Handshake,
+  operations_settlements: IndianRupee,
+  operations_reports: ChartNoAxesCombined,
   sales: Headphones,
   expert_requests: PhoneCall,
   quotations: FileText,
