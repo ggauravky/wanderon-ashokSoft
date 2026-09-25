@@ -2,7 +2,7 @@
 
 > High-performance luxury travel and expedition management platform.
 
-WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, an Operations execution, coordination, Incident, and Vendor workspace, and an AI-driven itinerary planner powered by Google Gemini.
+WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, an Operations execution, coordination, Incident, and Vendor workspace, and an AI-driven itinerary planner powered by Google Gemini. Successful AI plans are persisted as first-class Itinerary records and can become deduplicated Sales enquiries in the dedicated AI Planner Leads workspace.
 
 Quotation Smart Builder accepts saved, lead-linked, shared, uploaded, or pasted AI itineraries through one factual import pipeline. Optional Gemini copy generation is centralized on the current `@google/genai` SDK; run `cd backend && npm run test:gemini` to validate deployed provider configuration.
 
@@ -30,6 +30,7 @@ React 19 SPA (Vite 8) ──────[ Local Proxy: /api ]──────�
 - **Backend**: Node.js 22 LTS REST API server built with Express 4 and Mongoose 8, featuring strict RBAC, idempotent trip execution materialization, cryptographic signature validation, and resilient fail-closed database connectivity.
 - **Persistence**: MongoDB Atlas with additive schema versioning and compound indexes.
 - **Operations**: Phase 1 supplies the live Booking/Trip departure read model; Phase 2 persists service execution and Vendors; Phase 3 persists tasks, factual customer communication history, and auditable Incident lifecycles; Phase 4 adds separate operational cost and Vendor-settlement records, customer feedback, formal closure/reopen controls, and factual Operations reports.
+- **AI Planner Sales bridge**: Generation auto-persists the complete plan, applies temporary TTL retention and purpose-bound edit/handoff authorization for guests, links one canonical Lead through `sourceItineraryId`, and gives Sales a full planning dossier before the existing Quotation V2 handoff.
 
 ---
 
@@ -147,6 +148,7 @@ npm run preview                # Preview production build locally
 npm run dev                    # Start Express with native watcher (--watch)
 npm start                      # Production server start
 npm run test:quotation-v2      # Run Quotation V2 engine unit tests
+npm run test:ai-planner-sales-phase1 # Verify persisted-plan, queue, token, TTL, dossier, and Lead-idempotency contracts
 npm run test:payment-reliability # Run Razorpay HMAC crypto & math tests
 npm run test:razorpay          # Run Razorpay test mode connectivity check
 npm run payment:inspect -- <id># Inspect booking payment state (read-only diagnostic)

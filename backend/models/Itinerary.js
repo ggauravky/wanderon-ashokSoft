@@ -79,6 +79,15 @@ const plannerContextSchema = new mongoose.Schema({
   customPreferences: { type: String, default: '' }
 }, { _id: false });
 
+const healthCheckSchema = new mongoose.Schema({
+  id: { type: String, default: '' },
+  code: { type: String, default: '' },
+  name: { type: String, default: '' },
+  status: { type: String, default: '' },
+  severity: { type: String, default: '' },
+  message: { type: String, default: '' }
+}, { _id: false });
+
 const itinerarySchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -142,6 +151,10 @@ const itinerarySchema = new mongoose.Schema({
     condition: { type: String, default: '' },
     seasonTag: { type: String, default: '' }
   },
+  seasonContext: {
+    type: String,
+    default: ''
+  },
   bestTimeToVisit: {
     type: String,
     default: ''
@@ -177,6 +190,16 @@ const itinerarySchema = new mongoose.Schema({
     type: plannerContextSchema,
     default: () => ({})
   },
+  healthReport: {
+    isFeasible: { type: Boolean, default: true },
+    feasibilityScore: { type: Number, default: null, min: 0, max: 100 },
+    checks: { type: [healthCheckSchema], default: [] },
+    modificationsApplied: { type: [String], default: [] }
+  },
+  media: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
   matchedTrip: {
     id: { type: mongoose.Schema.Types.Mixed },
     title: { type: String },
@@ -197,6 +220,33 @@ const itinerarySchema = new mongoose.Schema({
     type: String,
     enum: ['gemini-ai', 'template-engine', 'customized'],
     default: 'gemini-ai'
+  },
+  lifecycleStatus: {
+    type: String,
+    enum: ['GENERATED', 'LEAD_LINKED', 'QUOTATION_LINKED', 'BOOKED', 'ARCHIVED'],
+    default: 'GENERATED',
+    index: true
+  },
+  version: {
+    type: Number,
+    default: 1,
+    min: 1
+  },
+  generatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  lastEditedAt: {
+    type: Date,
+    default: null
+  },
+  leadLinkedAt: {
+    type: Date,
+    default: null
+  },
+  retentionExpiresAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
@@ -205,6 +255,8 @@ const itinerarySchema = new mongoose.Schema({
 // Indexes for fast lookup
 itinerarySchema.index({ user: 1, createdAt: -1 });
 itinerarySchema.index({ userEmail: 1 });
+itinerarySchema.index({ retentionExpiresAt: 1 }, { expireAfterSeconds: 0 });
+itinerarySchema.index({ lifecycleStatus: 1, updatedAt: -1 });
 
 const Itinerary = mongoose.model('Itinerary', itinerarySchema);
 export default Itinerary;

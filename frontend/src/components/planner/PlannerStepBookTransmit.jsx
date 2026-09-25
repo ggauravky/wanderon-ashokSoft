@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, ShieldCheck, Phone, User, Mail, Calendar, MessageSquare, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Send, ShieldCheck, User, Mail, Calendar, CheckCircle2, ArrowRight } from 'lucide-react';
 import { getExpeditionProfile } from '../../utils/expeditionPlannerData';
 import { createLeadApi, saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
 
@@ -35,7 +35,7 @@ const PlannerStepBookTransmit = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!whatsappNumber || whatsappNumber.replace(/\D/g, '').length < 10) {
-      alert('Please enter a valid 10-digit WhatsApp phone number so our specialist can transmit your itinerary.');
+      setSubmitError('Please enter a valid 10-digit WhatsApp phone number so our specialist can transmit your itinerary.');
       return;
     }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
@@ -44,6 +44,11 @@ const PlannerStepBookTransmit = ({
     }
     if (!itinerary) {
       setSubmitError('Please generate the itinerary before sending it to a specialist.');
+      return;
+    }
+    const persistedId = itinerary._id || itinerary.id;
+    if (!/^[a-f\d]{24}$/i.test(String(persistedId || '')) || itinerary?.persistence?.persisted === false) {
+      setSubmitError('Your plan has not been safely saved yet. Retry saving the plan before requesting a quotation.');
       return;
     }
 
@@ -68,21 +73,15 @@ const PlannerStepBookTransmit = ({
       const savePayload = {
         ...itinerary,
         plannerContext,
-        days: itinerary.days || itinerary.itineraryDays || []
+        days: itinerary.days || itinerary.itineraryDays || [],
+        guestEditToken: itinerary?.guestAuthorization?.editToken || ''
       };
       if (itinerary._id) {
-        try {
-          savedItinerary = await updateAIItineraryApi(itinerary._id, savePayload);
-        } catch (updateError) {
-          if (!/sign in|unauthorized|not authorized/i.test(updateError.message || '')) throw updateError;
-          delete savePayload._id;
-          delete savePayload.id;
-          savedItinerary = await saveAIItineraryApi(savePayload);
-        }
+        savedItinerary = await updateAIItineraryApi(itinerary._id, savePayload);
       } else {
         savedItinerary = await saveAIItineraryApi(savePayload);
       }
-      onItinerarySaved?.({ ...itinerary, ...savedItinerary, _id: savedItinerary._id || savedItinerary.id });
+      onItinerarySaved?.({ ...itinerary, ...savedItinerary, _id: savedItinerary._id || savedItinerary.id, guestAuthorization: savedItinerary.guestAuthorization || itinerary.guestAuthorization });
     } catch (err) {
       setSubmitError(err.message || 'Could not save the AI itinerary before creating the lead.');
       setIsSubmitting(false);
@@ -115,24 +114,9 @@ const PlannerStepBookTransmit = ({
       source: 'ai_planner',
       leadType: 'trip_enquiry',
       sourceItineraryId,
-      sourceItineraryHandoffToken: savedItinerary?.handoffToken || itinerary?.handoffToken || '',
+      sourceItineraryHandoffToken: savedItinerary?.guestAuthorization?.handoffToken || itinerary?.guestAuthorization?.handoffToken || '',
       priority: 'HIGH',
-      topics: ['Customized AI Itinerary', 'Direct WhatsApp Dispatch', `${duration} Days ${destination}`],
-      itinerarySnapshot: {
-        circuitTitle: profile.circuitTitle,
-        region: profile.region,
-        peakAltitudeFt: profile.peakAltitudeFt,
-        totalDistanceKm: profile.totalDistanceKm,
-        primeWindow: profile.primeWindow,
-        stops: (profile.stops || []).map(s => ({
-          day: s.day,
-          stage: s.stage,
-          name: s.name,
-          distance: s.distance,
-          details: s.details,
-          elevation: s.elevationLabel
-        }))
-      }
+      topics: ['Customized AI Itinerary', 'Direct WhatsApp Dispatch', `${duration} Days ${destination}`]
     };
 
     try {

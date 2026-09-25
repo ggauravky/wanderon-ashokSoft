@@ -51,8 +51,7 @@ const leadSchema = new mongoose.Schema(
     sourceItineraryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Itinerary',
-      default: null,
-      index: true
+      default: null
     },
     tripSlug: {
       type: String,
@@ -298,5 +297,13 @@ leadSchema.index({ 'callOutcomes.loggedBy': 1, 'callOutcomes.loggedAt': -1 });
 leadSchema.index({ 'marketingAttribution.campaignId': 1, createdAt: -1 });
 leadSchema.index({ 'marketingAttribution.firstTouch.source': 1, createdAt: -1 });
 leadSchema.index({ sourceItineraryId: 1, createdAt: -1 });
+leadSchema.index(
+  { sourceItineraryId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { sourceItineraryId: { $type: 'objectId' } },
+    name: 'unique_lead_per_source_itinerary'
+  }
+);
 
 export default mongoose.model('Lead', leadSchema);

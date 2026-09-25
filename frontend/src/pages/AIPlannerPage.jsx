@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, AlertCircle, Mountain } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import SEOHead from '../components/SEOHead';
@@ -17,7 +17,6 @@ import PlannerStepBookTransmit from '../components/planner/PlannerStepBookTransm
 import PlannerStepSuccessDispatch from '../components/planner/PlannerStepSuccessDispatch';
 
 import PlannerLiveSummary from '../components/planner/PlannerLiveSummary';
-import PlannerGeneratingScreen from '../components/planner/PlannerGeneratingScreen';
 import AIItineraryWorkspace from '../components/workspace/AIItineraryWorkspace';
 
 import { generateAIItinerary, extractTripInfoFromPrompt } from '../utils/aiPlannerEngine';
@@ -273,7 +272,7 @@ const AIPlannerPage = () => {
       }
     } catch (e) {
       console.warn('Overview generation note:', e);
-      setGenerationError('Generated itinerary with local cached destination profile.');
+      setGenerationError(e.message || 'We could not safely save your AI plan. Please retry generation.');
     } finally {
       setIsGeneratingOverview(false);
     }
@@ -356,6 +355,12 @@ const AIPlannerPage = () => {
 
       {/* 2. Main Page Content Container */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl pt-6 pb-16 grow">
+        {generationError && (
+          <div role="alert" className="mb-5 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-800">
+            <AlertCircle size={16} aria-hidden="true" />
+            <span>{generationError}</span>
+          </div>
+        )}
         {/* ================================================================= */}
         {/* VIEW 1: CONVERSATIONAL PROMPT DISCOVERY HERO */}
         {/* ================================================================= */}
@@ -414,13 +419,6 @@ const AIPlannerPage = () => {
                 </div>
 
                 <span className="text-xs font-black text-slate-400 hidden sm:inline">Personalization</span>
-              </div>
-            )}
-
-            {generationError && (
-              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2">
-                <AlertCircle size={16} />
-                <span>{generationError}</span>
               </div>
             )}
 

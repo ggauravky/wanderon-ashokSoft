@@ -10,10 +10,18 @@ import { recordStaffActivity } from '../services/staffActivityService.js';
 import { hasMeaningfulAttribution, resolveLeadAttribution } from '../services/marketingAttributionService.js';
 import { canStaffAccessLead } from '../services/leadAccessService.js';
 import { verifyItineraryHandoffToken } from '../services/itineraryHandoffService.js';
+import {
+  AI_PLANNER_LEAD_FILTER,
+  buildSalesLeadScope,
+  deriveAiPlannerLeadSummary,
+  loadAiPlannerLeadDossier
+} from '../services/aiPlannerLeadService.js';
+import { retainLinkedItinerary } from '../services/itineraryPersistenceService.js';
 
 const isDbConnected = () => mongoose.connection && mongoose.connection.readyState === 1;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ============================================================================
 // 1. CREATE LEAD / SUBMIT CALLBACK REQUEST
@@ -77,7 +85,7 @@ export const createLead = async (req, res) => {
 
     const formattedPhone = cleanPhone.length === 10 ? `+91 ${cleanPhone}` : `+${cleanPhone}`;
     const allowedLeadTypes = ['general', 'trip_enquiry', 'callback_request'];
-    const determinedLeadType = allowedLeadTypes.includes(leadType) ? leadType : (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
+    let determinedLeadType = allowedLeadTypes.includes(leadType) ? leadType : (preferredCallWindow ? 'callback_request' : 'trip_enquiry');
     const allowedSources = [
       'trip_page',
       'contact_page',
@@ -90,7 +98,7 @@ export const createLead = async (req, res) => {
       'expert_callback_modal',
       'ai_planner'
     ];
-    const determinedSource = (source && allowedSources.includes(source))
+    let determinedSource = (source && allowedSources.includes(source))
       ? source
       : (tripId ? 'trip_page' : 'custom_inquiry');
     const validCallWindows = ['Morning', 'Afternoon', 'Evening', 'Anytime', ''];
@@ -99,20 +107,41 @@ export const createLead = async (req, res) => {
     // Securely resolve authenticated customer user ObjectId (Staff roles or synthetic IDs resolve to null)
     const authUserId = await resolveCustomerUserObjectId(req.user);
     let validSourceItineraryId = null;
+    let sourceItinerary = null;
     if (sourceItineraryId) {
       if (!mongoose.Types.ObjectId.isValid(sourceItineraryId)) return res.status(400).json({ message: 'Invalid linked AI itinerary.' });
-      const sourceItinerary = await Itinerary.findById(sourceItineraryId).select('_id user').lean();
+      sourceItinerary = await Itinerary.findById(sourceItineraryId)
+        .select('_id user title destination duration travelers plannerContext lifecycleStatus retentionExpiresAt')
+        .lean();
       if (!sourceItinerary) return res.status(400).json({ message: 'Linked AI itinerary was not found. Please save the plan and try again.' });
       const ownedByAccount = authUserId && sourceItinerary.user && String(sourceItinerary.user) === String(authUserId);
       const guestProof = !sourceItinerary.user && verifyItineraryHandoffToken(sourceItineraryHandoffToken, sourceItinerary._id);
       if (!ownedByAccount && !guestProof) return res.status(403).json({ message: 'This AI itinerary cannot be linked to your request. Save it again and retry.' });
       validSourceItineraryId = sourceItinerary._id;
+      determinedSource = 'ai_planner';
+      determinedLeadType = 'trip_enquiry';
+
+      const existingAiLead = await Lead.findOne({ sourceItineraryId: validSourceItineraryId }).sort({ createdAt: 1 });
+      if (existingAiLead) {
+        await retainLinkedItinerary(validSourceItineraryId);
+        return res.status(200).json({
+          success: true,
+          existingRequest: true,
+          message: 'This AI plan is already linked to a Sales request.',
+          lead: existingAiLead
+        });
+      }
     }
 
+    const itinerarySummary = sourceItinerary
+      ? deriveAiPlannerLeadSummary(sourceItinerary, { tripTitle, destination, travelersCount, travelMonth, travelDate, budgetPerPerson, topics })
+      : null;
+
     // Calculate priority based on group size and intent
-    const parsedPax = Number(travelersCount) || 1;
+    const parsedPax = itinerarySummary?.travelersCount || Number(travelersCount) || 1;
+    const priorityTopics = itinerarySummary?.topics?.length ? itinerarySummary.topics : topics;
     let calculatedPriority = 'MEDIUM';
-    if (parsedPax >= 4 || (Array.isArray(topics) && topics.some(t => /discount|custom|corporate/i.test(t)))) {
+    if (parsedPax >= 4 || (Array.isArray(priorityTopics) && priorityTopics.some(t => /discount|custom|corporate/i.test(t)))) {
       calculatedPriority = 'HIGH';
     }
 
@@ -144,12 +173,12 @@ export const createLead = async (req, res) => {
     } catch (attributionError) {
       console.warn('Lead attribution was skipped:', attributionError.message);
     }
-    const existingLead = await Lead.findOne(queryFilter).sort({ createdAt: -1 });
+    // An AI itinerary has its own idempotency key above. Do not attach a new
+    // itinerary to a different recent Lead merely because contact details match.
+    const existingLead = validSourceItineraryId
+      ? null
+      : await Lead.findOne(queryFilter).sort({ createdAt: -1 });
     if (existingLead) {
-      if (validSourceItineraryId && determinedSource === 'ai_planner') {
-        existingLead.sourceItineraryId = validSourceItineraryId;
-        await existingLead.save();
-      }
       if (resolvedAttribution && !hasMeaningfulAttribution(existingLead.marketingAttribution)) {
         existingLead.marketingAttribution = resolvedAttribution;
         await existingLead.save();
@@ -183,18 +212,18 @@ export const createLead = async (req, res) => {
       tripRef: validTripRef,
       sourceItineraryId: validSourceItineraryId,
       tripSlug: tripSlug ? String(tripSlug).trim() : '',
-      tripTitle: tripTitle ? String(tripTitle).trim() : '',
-      tripTitleSnapshot: tripTitle ? String(tripTitle).trim() : '',
+      tripTitle: itinerarySummary?.tripTitle || (tripTitle ? String(tripTitle).trim() : ''),
+      tripTitleSnapshot: itinerarySummary?.tripTitleSnapshot || (tripTitle ? String(tripTitle).trim() : ''),
       tripPriceSnapshot: Number(tripPriceSnapshot) || 0,
       selectedBatch: selectedBatch ? String(selectedBatch).trim() : '',
-      destination: destination || (tripTitle ? String(tripTitle) : 'Expedition'),
-      travelersCount: parsedPax,
-      travelMonth: travelMonth || '',
-      travelDate: travelDate || '',
-      budgetPerPerson: budgetPerPerson || '',
+      destination: itinerarySummary?.destination || destination || (tripTitle ? String(tripTitle) : 'Expedition'),
+      travelersCount: itinerarySummary?.travelersCount || parsedPax,
+      travelMonth: itinerarySummary?.travelMonth || travelMonth || '',
+      travelDate: itinerarySummary?.travelDate || travelDate || '',
+      budgetPerPerson: itinerarySummary?.budgetPerPerson || budgetPerPerson || '',
       preferredCallDate: preferredCallDate || new Date().toISOString().split('T')[0],
       preferredCallWindow: safeCallWindow,
-      topics: cleanTopics,
+      topics: itinerarySummary?.topics?.length ? itinerarySummary.topics : cleanTopics,
       userId: authUserId,
       message: message ? String(message).trim() : '',
       status: 'NEW',
@@ -211,12 +240,23 @@ export const createLead = async (req, res) => {
     };
 
     let newLead = null;
+    let reusedExistingAiLead = false;
     let retries = 3;
     while (retries > 0) {
       try {
         newLead = await Lead.create(leadPayload);
         break;
       } catch (dbErr) {
+        const duplicateItinerary = dbErr.code === 11000
+          && validSourceItineraryId
+          && (dbErr.keyPattern?.sourceItineraryId || String(dbErr.message || '').includes('sourceItineraryId'));
+        if (duplicateItinerary) {
+          newLead = await Lead.findOne({ sourceItineraryId: validSourceItineraryId }).sort({ createdAt: 1 });
+          if (newLead) {
+            reusedExistingAiLead = true;
+            break;
+          }
+        }
         if (dbErr.code === 11000 && retries > 1) {
           retries--;
           leadPayload.referenceId = generateLeadReferenceId();
@@ -231,6 +271,20 @@ export const createLead = async (req, res) => {
         success: false,
         message: 'Unable to schedule callback right now. Please try again.'
       });
+    }
+
+    if (reusedExistingAiLead) {
+      await retainLinkedItinerary(validSourceItineraryId);
+      return res.status(200).json({
+        success: true,
+        existingRequest: true,
+        message: 'This AI plan is already linked to a Sales request.',
+        lead: newLead
+      });
+    }
+
+    if (validSourceItineraryId && determinedSource === 'ai_planner') {
+      await retainLinkedItinerary(validSourceItineraryId);
     }
 
     const confirmationMsg = determinedLeadType === 'callback_request'
@@ -280,8 +334,13 @@ export const getLeads = async (req, res) => {
       status,
       priority,
       leadType,
+      queue,
       destination,
       assignedToUser,
+      travelPeriod,
+      createdFrom,
+      createdTo,
+      hasQuotation,
       quickFilter,
       page = 1,
       limit = 100,
@@ -300,15 +359,15 @@ export const getLeads = async (req, res) => {
     // Sales operates on shared Travel Expert Requests plus AI Planner trip enquiries.
     // Server-authoritative: Sales cannot broaden into unrelated marketing/general leads.
     if (userRole === 'sales' && !isSuperOrAdmin) {
-      andConditions.push({
-        $or: [
-          { leadType: 'callback_request' },
-          { leadType: 'trip_enquiry', source: 'ai_planner' }
-        ]
-      });
+      andConditions.push(buildSalesLeadScope({ user: req.user, queue }));
     } else {
+      const queueScope = queue ? buildSalesLeadScope({ user: req.user, queue }) : null;
+      if (queueScope) andConditions.push(queueScope);
+      if (userRole === 'operations' && !queueScope) {
+        andConditions.push({ $nor: [{ ...AI_PLANNER_LEAD_FILTER }] });
+      }
       // Non-sales roles (Admin/Operations) can filter by leadType if provided
-      if (leadType && leadType !== 'all') {
+      if (!queueScope && leadType && leadType !== 'all') {
         andConditions.push({ leadType });
       }
     }
@@ -368,7 +427,7 @@ export const getLeads = async (req, res) => {
     }
 
     // Specific user assignment filter (only for general CRM admin workflows, not restricting sales shared queue)
-    if (assignedToUser && isSuperOrAdmin) {
+    if (assignedToUser) {
       if (assignedToUser === 'unassigned') {
         andConditions.push({
           $or: [
@@ -403,12 +462,39 @@ export const getLeads = async (req, res) => {
 
     // Destination filter
     if (destination && destination !== 'all') {
-      andConditions.push({ destination: { $regex: destination, $options: 'i' } });
+      andConditions.push({ destination: { $regex: escapeRegex(destination), $options: 'i' } });
     }
+
+    if (travelPeriod && typeof travelPeriod === 'string' && travelPeriod.trim()) {
+      const value = escapeRegex(travelPeriod.trim());
+      andConditions.push({ $or: [
+        { travelMonth: { $regex: value, $options: 'i' } },
+        { travelDate: { $regex: value, $options: 'i' } }
+      ] });
+    }
+
+    if (createdFrom || createdTo) {
+      const createdAt = {};
+      if (createdFrom) {
+        const from = new Date(createdFrom);
+        if (Number.isNaN(from.getTime())) return res.status(400).json({ success: false, message: 'Invalid created-from date.' });
+        createdAt.$gte = from;
+      }
+      if (createdTo) {
+        const to = new Date(createdTo);
+        if (Number.isNaN(to.getTime())) return res.status(400).json({ success: false, message: 'Invalid created-to date.' });
+        to.setHours(23, 59, 59, 999);
+        createdAt.$lte = to;
+      }
+      andConditions.push({ createdAt });
+    }
+
+    if (hasQuotation === 'true') andConditions.push({ 'quotations.0': { $exists: true } });
+    if (hasQuotation === 'false') andConditions.push({ 'quotations.0': { $exists: false } });
 
     // Search query
     if (search && typeof search === 'string' && search.trim()) {
-      const q = search.trim();
+      const q = escapeRegex(search.trim());
       andConditions.push({
         $or: [
           { referenceId: { $regex: q, $options: 'i' } },
@@ -434,7 +520,7 @@ export const getLeads = async (req, res) => {
       const candidates = await Lead.find(filter)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
-        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext version lifecycleStatus')
         .populate('quotations', 'quotationNumber status pricing createdAt')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .lean();
@@ -472,12 +558,21 @@ export const getLeads = async (req, res) => {
         .limit(pageSize)
         .populate('assignedToUser', 'name email role avatar phone')
         .populate('tripRef', 'title slug price destination location')
-        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext')
+        .populate('sourceItineraryId', 'title destination duration travelers updatedAt plannerContext version lifecycleStatus')
         .populate('quotations', 'quotationNumber status pricing createdAt')
         .populate('convertedBookingId', 'bookingId bookingStatus paymentStatus pricing')
         .lean();
       leads = leads.map((lead) => withLeadPriority(lead));
     }
+
+    leads = leads.map((lead) => ({
+      ...lead,
+      planUpdatedAfterEnquiry: Boolean(
+        lead?.sourceItineraryId?.updatedAt
+        && lead?.createdAt
+        && new Date(lead.sourceItineraryId.updatedAt) > new Date(lead.createdAt)
+      )
+    }));
 
     // Marketing role: Privacy masking on customer contact data
     if (userRole === 'marketing') {
@@ -509,6 +604,17 @@ export const getLeads = async (req, res) => {
   } catch (error) {
     console.error('Get leads error:', error);
     return sendErrorResponse(res, error, 'Unable to fetch leads.');
+  }
+};
+
+// Dedicated, sanitized Sales dossier for an AI Planner Lead.
+export const getAiPlannerLeadDossier = async (req, res) => {
+  try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'AI Planner Leads are temporarily unavailable.' });
+    const dossier = await loadAiPlannerLeadDossier({ id: req.params.id, user: req.user });
+    return res.json({ success: true, ...dossier });
+  } catch (error) {
+    return sendErrorResponse(res, error, 'Unable to load the AI Planner Lead dossier.');
   }
 };
 

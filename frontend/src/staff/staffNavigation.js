@@ -212,6 +212,16 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
+    id: 'ai_planner_leads',
+    label: 'AI Planner Leads',
+    path: '/staff/sales/ai-planner-leads',
+    icon: 'ai_planner_leads',
+    roles: Object.freeze(['super_admin', 'admin', 'sales']),
+    section: 'sales',
+    description: 'Review traveler AI plans, preferences and enquiry details before preparing a quotation.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'quotations',
     label: 'Quotations',
     path: '/staff/sales/quotations',

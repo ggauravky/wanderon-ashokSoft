@@ -56,7 +56,7 @@ const AIItineraryWorkspace = ({
     }
   }, [controlledActiveTab, internalActiveTab]);
 
-  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const [saveStatus, setSaveStatus] = useState(() => itinerary?.persistence?.persisted ? 'saved' : 'idle');
   const { user } = useAuth();
   const navigate = useNavigate();
   const isQuotationStaff = ['sales', 'admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
@@ -84,7 +84,8 @@ const AIItineraryWorkspace = ({
         ...itinerary,
         title: itinerary.title,
         destination: itinerary.destination,
-        days: itinerary.days || itinerary.itineraryDays
+        days: itinerary.days || itinerary.itineraryDays,
+        guestEditToken: itinerary?.guestAuthorization?.editToken || ''
       };
       let res;
       if (itinerary._id) {
@@ -93,13 +94,13 @@ const AIItineraryWorkspace = ({
         res = await saveAIItineraryApi(payload);
       }
       if (res && (res._id || res.id)) {
-        onUpdateItinerary({ ...itinerary, _id: res._id || res.id });
+        onUpdateItinerary({ ...itinerary, ...res, _id: res._id || res.id, guestAuthorization: res.guestAuthorization || itinerary.guestAuthorization });
       }
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3500);
     } catch (err) {
       console.warn('Save itinerary error:', err.message);
-      setSaveStatus('idle');
+      setSaveStatus('failed');
     }
   };
 
@@ -148,15 +149,10 @@ const AIItineraryWorkspace = ({
   const handleCreateQuotation = async () => {
     setSaveStatus('saving');
     try {
-      const payload = { ...itinerary, days: itinerary?.days || itinerary?.itineraryDays || [] };
+      const payload = { ...itinerary, days: itinerary?.days || itinerary?.itineraryDays || [], guestEditToken: itinerary?.guestAuthorization?.editToken || '' };
       let saved;
       if (itinerary?._id) {
-        try { saved = await updateAIItineraryApi(itinerary._id, payload); }
-        catch {
-          delete payload._id;
-          delete payload.id;
-          saved = await saveAIItineraryApi(payload);
-        }
+        saved = await updateAIItineraryApi(itinerary._id, payload);
       } else saved = await saveAIItineraryApi(payload);
       const id = saved?._id || saved?.id;
       if (!id) throw new Error('Saved plan has no identifier.');
@@ -255,7 +251,7 @@ const AIItineraryWorkspace = ({
             }`}
           >
             {saveStatus === 'saved' ? <BookmarkCheck size={13} /> : <Save size={13} />}
-            <span>{saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving...' : 'Save Plan'}</span>
+            <span>{saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving plan…' : saveStatus === 'failed' ? 'Retry saving plan' : 'Save Plan'}</span>
           </button>
 
           {/* Share Button */}

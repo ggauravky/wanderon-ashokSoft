@@ -3,6 +3,7 @@ import {
   createLead,
   getLeads,
   getLeadById,
+  getAiPlannerLeadDossier,
   updateLeadStatus,
   assignLead,
   claimLead,
@@ -21,6 +22,7 @@ router.get('/sales-users', protect, requireRoles('super_admin', 'admin', 'operat
 
 // Authenticated Lead Management with RBAC Scoping
 router.get('/', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), getLeads);
+router.get('/:id/ai-planner-dossier', protect, requireRoles('super_admin', 'admin', 'sales'), getAiPlannerLeadDossier);
 router.get('/:id', protect, requireRoles('super_admin', 'admin', 'operations', 'sales'), getLeadById);
 
 // Lead Actions

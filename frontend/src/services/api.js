@@ -731,6 +731,22 @@ export async function getLeadByIdApi(leadId) {
   return data.lead || data;
 }
 
+export const getAiPlannerLeadsApi = (params = {}) => getAdminLeadsApi({
+  ...params,
+  envelope: true,
+  queue: 'ai_planner'
+});
+
+export async function getAiPlannerLeadDossierApi(leadId) {
+  const response = await request(`${API_BASE_URL}/leads/${encodeURIComponent(leadId)}/ai-planner-dossier`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await parseApiResponse(response);
+  if (!response.ok) throw new Error(data.message || 'Failed to fetch AI Planner Lead dossier');
+  return data;
+}
+
 export async function claimLeadApi(leadId) {
   const response = await request(`${API_BASE_URL}/leads/${leadId}/claim`, {
     method: 'POST',
@@ -913,7 +929,7 @@ export async function createReviewApi(reviewPayload) {
 export async function generateAIItineraryApi(params) {
   const response = await request(`${API_BASE_URL}/ai/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify(params)
   });
 
@@ -921,7 +937,7 @@ export async function generateAIItineraryApi(params) {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to generate AI itinerary');
   }
-  return data.data;
+  return { ...data.data, ...(data.guestAuthorization ? { guestAuthorization: data.guestAuthorization } : {}) };
 }
 
 export async function saveAIItineraryApi(itineraryData) {
@@ -935,7 +951,7 @@ export async function saveAIItineraryApi(itineraryData) {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to save itinerary');
   }
-  return data.data;
+  return { ...data.data, ...(data.guestAuthorization ? { guestAuthorization: data.guestAuthorization } : {}) };
 }
 
 export async function updateAIItineraryApi(id, itineraryData) {
@@ -949,7 +965,7 @@ export async function updateAIItineraryApi(id, itineraryData) {
   if (!response.ok) {
     throw new Error(data.message || 'Failed to update itinerary');
   }
-  return data.data;
+  return { ...data.data, ...(data.guestAuthorization ? { guestAuthorization: data.guestAuthorization } : {}) };
 }
 
 export async function getAIItineraryByIdApi(id) {

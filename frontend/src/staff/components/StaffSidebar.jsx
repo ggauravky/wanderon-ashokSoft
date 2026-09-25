@@ -22,7 +22,8 @@ import {
   ListChecks,
   Siren,
   IndianRupee,
-  ChartNoAxesCombined
+  ChartNoAxesCombined,
+  WandSparkles
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -47,6 +48,7 @@ const ICONS = {
   operations_reports: ChartNoAxesCombined,
   sales: Headphones,
   expert_requests: PhoneCall,
+  ai_planner_leads: WandSparkles,
   quotations: FileText,
   bookings: BookOpen,
   marketing: Megaphone,

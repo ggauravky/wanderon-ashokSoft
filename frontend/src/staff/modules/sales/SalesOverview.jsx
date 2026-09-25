@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, ArrowRight, BadgeCheck, BookOpen, CheckCircle2, Clock3, CreditCard, FileText, Headphones, RefreshCw, Send, TimerOff, UserRoundPlus } from 'lucide-react';
+import { AlertCircle, ArrowRight, BadgeCheck, BookOpen, CheckCircle2, Clock3, CreditCard, FileText, Headphones, RefreshCw, Send, Sparkles, TimerOff, UserRoundPlus, WandSparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getSalesDashboardApi } from '../../../services/api.js';
 import SalesMetricCard from './components/SalesMetricCard';
@@ -24,6 +24,15 @@ const BOOKING_METRICS = [
   { key: 'totalBookings', label: 'Converted Bookings', icon: BookOpen },
   { key: 'pendingPaymentBookings', label: 'Pending Payment', icon: CreditCard },
   { key: 'paidBookings', label: 'Paid Bookings', icon: BadgeCheck }
+];
+
+const AI_PLANNER_METRICS = [
+  { key: 'total', label: 'AI Planner Leads', icon: WandSparkles },
+  { key: 'new', label: 'New', icon: UserRoundPlus },
+  { key: 'inProgress', label: 'In Progress', icon: RefreshCw },
+  { key: 'qualified', label: 'Qualified', icon: CheckCircle2 },
+  { key: 'withQuotation', label: 'With Quotation', icon: FileText },
+  { key: 'converted', label: 'Converted', icon: BadgeCheck }
 ];
 
 const SalesOverview = () => {
@@ -100,6 +109,13 @@ const SalesOverview = () => {
       )}
 
       {!error && (
+        <section aria-labelledby="ai-planner-metrics-title">
+          <div className="mb-3 flex items-center justify-between gap-4"><div><h3 id="ai-planner-metrics-title" className="flex items-center gap-2 text-base font-semibold text-slate-950"><Sparkles size={17} className="text-violet-500" aria-hidden="true" /> AI Planner pipeline</h3><p className="mt-1 text-sm text-slate-500">Traveler enquiries linked to persisted AI plans.</p></div><Link to="/staff/sales/ai-planner-leads" className="flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:text-emerald-800">Open AI Planner Leads <ArrowRight size={16} aria-hidden="true" /></Link></div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">{AI_PLANNER_METRICS.map((metric) => <SalesMetricCard key={metric.key} label={metric.label} value={metrics?.aiPlanner?.[metric.key]} icon={metric.icon} loading={loading} />)}</div>
+        </section>
+      )}
+
+      {!error && (
         <section aria-labelledby="quotation-metrics-title">
           <div className="mb-3 flex items-center justify-between gap-4">
             <div><h3 id="quotation-metrics-title" className="text-base font-semibold text-slate-950">Quotation pipeline</h3><p className="mt-1 text-sm text-slate-500">Records visible to your current quotation permissions.</p></div>
@@ -130,7 +146,7 @@ const SalesOverview = () => {
             Open all requests <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           {METRICS.slice(1, 5).map((item) => (
             <Link
               key={item.view}
@@ -141,6 +157,7 @@ const SalesOverview = () => {
               <ArrowRight size={15} className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-700" aria-hidden="true" />
             </Link>
           ))}
+          <Link to="/staff/sales/ai-planner-leads" className="group flex min-h-12 items-center justify-between rounded-lg border border-violet-200 bg-violet-50/50 px-4 text-sm font-medium text-violet-800 transition-colors hover:bg-violet-50">AI Planner Leads <ArrowRight size={15} className="text-violet-400 transition-transform group-hover:translate-x-0.5" aria-hidden="true" /></Link>
           <Link to="/staff/sales/quotations" className="group flex min-h-12 items-center justify-between rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800">Quotations <ArrowRight size={15} className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-700" aria-hidden="true" /></Link>
           <Link to="/staff/sales/bookings" className="group flex min-h-12 items-center justify-between rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800">Bookings <ArrowRight size={15} className="text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-700" aria-hidden="true" /></Link>
         </div>

@@ -81,11 +81,11 @@ const ExpertRequestsWorkspace = () => {
     try {
       const data = await getAdminLeadsApi({
         envelope: true,
-        leadType: 'callback_request',
+        queue: 'expert_requests',
         quickFilter: view === 'all' ? undefined : view,
         status,
         search: debouncedSearch,
-        limit: 100,
+        limit: 50,
         sortBy: 'newest'
       });
       setLeads(Array.isArray(data?.items) ? data.items : []);

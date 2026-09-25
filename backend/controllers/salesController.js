@@ -61,6 +61,7 @@ export const getSalesDashboard = async (req, res) => {
     let totalBookings = 0;
     let pendingPaymentBookings = 0;
     let paidBookings = 0;
+    let aiPlanner = { total: 0, new: 0, inProgress: 0, qualified: 0, withQuotation: 0, converted: 0 };
 
     if (isDbConnected()) {
       try {
@@ -79,6 +80,24 @@ export const getSalesDashboard = async (req, res) => {
         inProgressCount = (leadsByStage.IN_PROGRESS || 0) + (leadsByStage.CONTACTED || 0);
         qualifiedCount = leadsByStage.QUALIFIED || 0;
         totalConverted = leadsByStage.CONVERTED || 0;
+
+        const aiPlannerFilter = { leadType: 'trip_enquiry', source: 'ai_planner' };
+        const [aiPlannerStages, aiPlannerWithQuotation] = await Promise.all([
+          Lead.aggregate([
+            { $match: aiPlannerFilter },
+            { $group: { _id: '$status', count: { $sum: 1 } } }
+          ]),
+          Lead.countDocuments({ ...aiPlannerFilter, 'quotations.0': { $exists: true } })
+        ]);
+        const aiCounts = Object.fromEntries(aiPlannerStages.map((item) => [item._id, item.count]));
+        aiPlanner = {
+          total: aiPlannerStages.reduce((sum, item) => sum + item.count, 0),
+          new: aiCounts.NEW || 0,
+          inProgress: (aiCounts.CONTACTED || 0) + (aiCounts.IN_PROGRESS || 0),
+          qualified: aiCounts.QUALIFIED || 0,
+          withQuotation: aiPlannerWithQuotation,
+          converted: aiCounts.CONVERTED || 0
+        };
 
         // Due today for shared queue
         dueTodayCount = await Lead.countDocuments({
@@ -186,7 +205,8 @@ export const getSalesDashboard = async (req, res) => {
         totalBookings,
         pendingPaymentBookings,
         paidBookings,
-        conversionRate: `${conversionRate}%`
+        conversionRate: `${conversionRate}%`,
+        aiPlanner
       }
     });
   } catch (error) {

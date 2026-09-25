@@ -47,6 +47,8 @@ const BannersWorkspace = lazy(() => import('./staff/modules/marketing/banners/Ba
 const BannerEditor = lazy(() => import('./staff/modules/marketing/banners/BannerEditor'));
 const SalesOverview = lazy(() => import('./staff/modules/sales/SalesOverview'));
 const ExpertRequestsWorkspace = lazy(() => import('./staff/modules/sales/ExpertRequestsWorkspace'));
+const AIPlannerLeadsWorkspace = lazy(() => import('./staff/modules/sales/aiPlannerLeads/AIPlannerLeadsWorkspace'));
+const AIPlannerLeadDetail = lazy(() => import('./staff/modules/sales/aiPlannerLeads/AIPlannerLeadDetail'));
 const QuotationsWorkspace = lazy(() => import('./staff/modules/sales/quotations/QuotationsWorkspace'));
 const QuotationBuilderPage = lazy(() => import('./staff/modules/sales/quotations/QuotationBuilderPage'));
 const QuotationDetailPage = lazy(() => import('./staff/modules/sales/quotations/QuotationDetailPage'));
@@ -196,6 +198,12 @@ function App() {
               <StaffModuleRoute moduleId="expert_requests">
                 <ExpertRequestsWorkspace />
               </StaffModuleRoute>
+            } />
+            <Route path="sales/ai-planner-leads" element={
+              <StaffModuleRoute moduleId="ai_planner_leads"><AIPlannerLeadsWorkspace /></StaffModuleRoute>
+            } />
+            <Route path="sales/ai-planner-leads/:id" element={
+              <StaffModuleRoute moduleId="ai_planner_leads"><AIPlannerLeadDetail /></StaffModuleRoute>
             } />
             <Route path="sales/quotations" element={
               <StaffModuleRoute moduleId="quotations">

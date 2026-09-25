@@ -165,7 +165,7 @@ The application defines 7 explicit user roles:
 | :--- | :--- | :--- |
 | `super_admin` | Staff | Complete access across all workspaces, user management, and payouts. |
 | `admin` | Staff | Full administrative control: trips, bookings, team analytics, media library. |
-| `sales` | Staff | Sales portal: leads, expert inquiries, quotation builder, and customer bookings. |
+| `sales` | Staff | Sales portal: shared Expert Requests, AI Planner Leads and dossiers, quotation builder, and customer bookings. |
 | `marketing` | Staff | Marketing workspace: campaigns, banners, and lead acquisition analytics. |
 | `operations` | Staff | Operations Control Center for confirmed departure monitoring, trip execution, team tasks, customer update history, Incidents, Vendors, actual costs, settlement records, feedback, closure, and reporting. |
 | `user` | Customer | Standard traveler account for browsing, booking, and profile history. |
@@ -185,7 +185,7 @@ The staff portal is accessed at `/staff/*` and is organized around `StaffShell`:
 /staff/
 ├── admin/          # Admin Overview, Analytics, Trips, Bookings, Media Library, Users
 ├── operations/     # Live dashboard, Trip Execution, Tasks, Issues, and Vendors
-├── sales/          # Shared Sales Queue, Expert Requests, Quotations, Bookings
+├── sales/          # Sales Overview, Expert Requests, AI Planner Leads, Quotations, Bookings
 └── marketing/      # Marketing Overview, Campaign Management, Banners, Analytics
 ```
 
@@ -260,13 +260,17 @@ WanderLuxe provides an intelligent travel planner and Quotation Smart Builder th
 2. **Server-Side Generation**: Planner and quotation requests are dispatched through the shared current `@google/genai` provider adapter. The `GEMINI_API_KEY` is **never** sent to the client.
 3. **Structured JSON Mode**: Gemini generates strict day-by-day JSON itineraries with time slots, activities, and cost estimations.
 4. **Feasibility & Media Enrichment**: Generated itineraries are audited by `itineraryFeasibilityEngine.js` and enriched with high-resolution destination galleries via `mediaResolverService.js`.
-5. **Resilient Fallback**: If `GEMINI_API_KEY` is not configured, the planner gracefully synthesizes rich itineraries using the local knowledge base (`travelKnowledge.json`).
+5. **Persistence boundary**: The server persists every successful generated plan before returning it. If generation succeeds but MongoDB persistence fails, the request returns a retryable failure instead of exposing an unsafe quotation CTA.
 
 ### AI Planner to Quotation Smart Builder
 
 The AI Planner persists additive `plannerContext` on saved `Itinerary` records. This context describes the trip only: origin, flexible/exact dates, traveler breakdown, interests, stay/dining/transport preferences, budget intent, mobility notes, must-include experiences, avoid preferences, and custom trip notes. Customer identity remains in `Lead`, `User`, and Quotation `customerSnapshot`; it is not stored as AI itinerary content.
 
-Planner handoff creates a canonical `Lead` with `leadType: trip_enquiry`, `source: ai_planner`, and `sourceItineraryId` pointing at the saved itinerary. The lead links to the AI plan without duplicating the full itinerary. Quotation V2 drafts can also store `sourceItineraryId`.
+Planner generation writes the complete plan, `seasonContext`, structured `healthReport`, media, lifecycle metadata, and version to MongoDB. Authenticated plans belong to the customer; anonymous plans receive a configurable TTL plus separate short-lived guest-edit and Lead-handoff tokens. A successful Lead link clears the TTL and advances the plan to `LEAD_LINKED`.
+
+Planner handoff creates one canonical `Lead` per source Itinerary with `leadType: trip_enquiry`, `source: ai_planner`, and `sourceItineraryId` pointing at the saved itinerary. Application idempotency plus the partial unique `unique_lead_per_source_itinerary` index protect that invariant during repeated or concurrent submission. The Lead stores only searchable CRM summary fields derived from the authorized source plan. Full planning content stays normalized in Itinerary. Expert Requests and AI Planner Leads use separate server-narrowed Sales queues.
+
+`/staff/sales/ai-planner-leads` provides a paginated Sales queue, and its dedicated dossier route loads one sanitized Lead plus one complete source Itinerary and quotation history. **Create Smart Quotation** passes both `leadId` and `itineraryId` to the existing Quotation V2 builder; Phase 1 does not auto-create a quotation or change commercial pricing authority.
 
 Quotation Smart Assist uses two layers:
 
@@ -289,7 +293,7 @@ AI never controls commercial price. The Smart Builder never sets `manualPricing`
 | :--- | :--- | :---: | :---: | :--- |
 | **MongoDB Atlas** | Database | No (Boots) | **Yes** | Dev server boots; DB-dependent routes return 503. |
 | **Razorpay** | Checkout / Payments | Feature | **Yes** | Test mode required for checkout testing; fails closed if keys missing. |
-| **Google Gemini** | AI Planner 2.0 | No | Optional | Falls back to local structured template engine. |
+| **Google Gemini** | AI Planner 2.0 | No | Optional | The backend may use its structured template engine, but every successful result must still persist before customer handoff. |
 | **Cloudinary** | Media Storage / CDN | Feature | **Yes** | Dev falls back to local `./uploads` disk folder; prod fails closed. |
 | **Brevo** | Quotation OTP Emails | Feature | Optional | Verification email endpoint returns 503 if unconfigured. |
 | **Twilio** | WhatsApp E-Tickets | No | Optional | Returns status: `'NOT_CONFIGURED'`. |

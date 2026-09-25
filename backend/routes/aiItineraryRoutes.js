@@ -11,12 +11,12 @@ import {
   regenerateDayController,
   editPlanController
 } from '../controllers/aiItineraryController.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import { optionalAuth, protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 // Public Generation & Day Adjustment Endpoints
-router.post('/generate', generateItineraryController);
+router.post('/generate', optionalAuth, generateItineraryController);
 router.post('/regenerate-day', regenerateDayController);
 router.post('/edit-plan', editPlanController);
 
@@ -42,7 +42,7 @@ router.get('/itinerary/:id', (req, res, next) => {
   next();
 }, getItineraryByIdController);
 
-router.put('/itinerary/:id', protect, updateItineraryController);
+router.put('/itinerary/:id', optionalAuth, updateItineraryController);
 router.delete('/itinerary/:id', protect, deleteItineraryController);
 router.post('/itinerary/:id/share', protect, toggleShareItineraryController);
 

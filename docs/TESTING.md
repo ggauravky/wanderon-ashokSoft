@@ -40,6 +40,7 @@ WanderLuxe test scripts are categorized into five distinct tiers based on side e
 | `frontend/` | `npm run test:staff-foundation` | **A** | Verify RBAC navigation rules and staff module guards | No | No |
 | `frontend/` | `npm run preview` | **B** | Serve compiled production build locally | No | No |
 | `backend/` | `npm run test:quotation-v2` | **A** | Unit test Quotation V2 engine, hashing, and DTOs | No | No |
+| `backend/` | `npm run test:ai-planner-sales-phase1` | **A** | Verify itinerary persistence contracts, guest tokens, Sales queue isolation, and dossier sanitization | No | No |
 | `backend/` | `npm run test:payment-reliability` | **A** | Verify Razorpay HMAC SHA-256 signatures & math | No | No |
 | `backend/` | `npm run test:razorpay` | **C** | Test Razorpay test credentials & API connectivity | No | Optional |
 | `backend/` | `npm run payment:inspect -- <id>` | **D** | Inspect booking payment state, receipts, and balances | No | **Yes** |
@@ -69,7 +70,7 @@ npm run test:staff-foundation
 ```
 Uses Node's native test runner (`node --test`) to test `src/staff/staffAccess.test.js`. Verifies:
 - Administrators (`admin`, `super_admin`) have access to all department workspaces.
-- Sales role sees only Sales workspace (`Overview`, `Expert Requests`, `Quotations`, `Bookings`).
+- Sales role sees only Sales workspace (`Overview`, `Expert Requests`, `AI Planner Leads`, `Quotations`, `Bookings`).
 - Marketing role sees only Marketing workspace (`Campaigns`, `Banners`, `Analytics`).
 - Customer and unknown roles receive zero staff navigation access.
 - Operations role currently has no exposed frontend navigation.
@@ -88,7 +89,15 @@ Executes Vite's production build. Verifies TypeScript-free JSX compilation, asse
 
 All backend commands must be executed from the `backend/` directory.
 
-### 1. Quotation V2 Engine Test (Offline Unit Test)
+### 1. AI Planner Sales Phase 1 Test (Offline Unit Test)
+
+```bash
+cd backend
+npm run test:ai-planner-sales-phase1
+```
+Verifies queue/RBAC isolation, complete Itinerary persistence mapping, TTL configuration, purpose-bound guest authorization, lifecycle/version fields, source-derived Lead summaries, concurrent Lead-idempotency indexing, and dossier secret suppression. Existing databases must remove any historical duplicate non-null `sourceItineraryId` values before creating the partial unique Lead index.
+
+### 2. Quotation V2 Engine Test (Offline Unit Test)
 
 ```bash
 cd backend
@@ -100,7 +109,7 @@ Tests the core business logic of the Quotation V2 system (`test_quotation_v2.js`
 - Attachment category normalization and visibility rules (`all`, `customer_only`, `staff_only`).
 - SHA-256 token hashing and verification hash generation.
 
-### 2. Payment Reliability Test Suite (Offline Unit Test)
+### 3. Payment Reliability Test Suite (Offline Unit Test)
 
 ```bash
 cd backend
@@ -221,6 +230,7 @@ npm run build
 
 # 2. Backend Unit Tests
 cd ../backend
+npm run test:ai-planner-sales-phase1
 npm run test:quotation-v2
 npm run test:payment-reliability
 

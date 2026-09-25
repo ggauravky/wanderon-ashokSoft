@@ -6,14 +6,17 @@ import {
   getDestinationBySlug, 
   getSeasonContext, 
   getDestinationWeather, 
-  buildAITravelContext,
-  normalizeDestinationSlug
+  buildAITravelContext
 } from '../services/travelKnowledgeService.js';
 import { resolveItineraryMedia, batchResolveItineraryMedia } from '../services/mediaResolverService.js';
 import { auditAndSanitizeItinerary } from '../services/itineraryFeasibilityEngine.js';
 import { generateCopilotProposal } from '../services/itineraryCopilotService.js';
-import { signItineraryHandoffToken } from '../services/itineraryHandoffService.js';
 import { generateStructuredJson } from '../services/geminiService.js';
+import {
+  extractGuestEditToken,
+  persistGeneratedItinerary,
+  updatePersistedItinerary
+} from '../services/itineraryPersistenceService.js';
 
 const PLANNER_RESPONSE_SCHEMA = {
   type: 'object',
@@ -528,9 +531,7 @@ JSON SCHEMA:
     // Run deterministic feasibility and physical travel audit
     const { sanitizedItinerary, healthReport } = auditAndSanitizeItinerary(normalized, req.body);
 
-    const responsePayload = {
-      id: 'ai-plan-' + Date.now(),
-      createdAt: new Date().toISOString(),
+    const generatedPayload = {
       source,
       weather,
       seasonContext: season.name,
@@ -540,15 +541,29 @@ JSON SCHEMA:
       matchedCatalogTrip
     };
 
+    const { itinerary: persistedItinerary, guestAuthorization } = await persistGeneratedItinerary({
+      itineraryData: generatedPayload,
+      user: req.user
+    });
+    const responsePayload = {
+      ...persistedItinerary.toObject(),
+      id: String(persistedItinerary._id),
+      persistence: { persisted: true }
+    };
+
     res.json({
       success: true,
-      data: responsePayload
+      data: responsePayload,
+      ...(guestAuthorization ? { guestAuthorization } : {})
     });
   } catch (error) {
     console.error('AI Itinerary Generation Controller Error:', error);
-    res.status(500).json({
+    res.status(error.status || 503).json({
       success: false,
-      message: 'Failed to generate itinerary. Please try again.'
+      code: error.code || 'ITINERARY_GENERATION_FAILED',
+      message: error.status === 503
+        ? error.message
+        : 'Failed to generate and safely store the itinerary. Please try again.'
     });
   }
 };
@@ -590,102 +605,33 @@ export const saveItineraryController = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid itinerary data provided.' });
     }
 
-    const userId = req.user?._id && req.user._id !== 'usr_admin' && req.user._id !== 'usr_influencer'
-      ? req.user._id
-      : null;
-    const userEmail = req.user?.email || '';
-
     const targetId = itineraryData._id || (mongoose.Types.ObjectId.isValid(itineraryData.id) ? itineraryData.id : null);
-
-    let finalDays = itineraryData.days || itineraryData.itineraryDays || [];
-    const plannerContext = sanitizePlannerContext(itineraryData);
-    const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
-    if (needsResolution) {
-      finalDays = await batchResolveItineraryMedia(finalDays, itineraryData.destination, itineraryData.title);
-    }
-
-    // 1. If document already has an _id, update existing document instead of creating a duplicate
     if (targetId) {
-      let existingDoc = await Itinerary.findById(targetId);
-      if (existingDoc) {
-        if (!req.user) return res.status(403).json({ success: false, message: 'Sign in to update a saved itinerary.' });
-        // Ownership check
-        if ((existingDoc.user && existingDoc.user.toString() !== userId?.toString()) || (!existingDoc.user && (!existingDoc.userEmail || existingDoc.userEmail !== userEmail))) {
-          return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
-        }
-
-        existingDoc.title = itineraryData.title;
-        existingDoc.tagline = itineraryData.tagline || existingDoc.tagline;
-        existingDoc.destination = itineraryData.destination;
-        existingDoc.destinationSlug = normalizeDestinationSlug(itineraryData.destination);
-        existingDoc.duration = itineraryData.duration || itineraryData.daysCount || existingDoc.duration;
-        existingDoc.travelers = itineraryData.travelers || existingDoc.travelers;
-        existingDoc.travelStyle = itineraryData.travelStyle || itineraryData.mood || existingDoc.travelStyle;
-        existingDoc.pace = itineraryData.pace || existingDoc.pace;
-        existingDoc.budgetLevel = itineraryData.budgetLevel || existingDoc.budgetLevel;
-        existingDoc.totalEstimatedCost = itineraryData.totalEstimatedCost || existingDoc.totalEstimatedCost;
-        existingDoc.weather = itineraryData.weather || existingDoc.weather;
-        existingDoc.bestTimeToVisit = itineraryData.bestTimeToVisit || existingDoc.bestTimeToVisit;
-        existingDoc.days = finalDays;
-        existingDoc.staySuggestions = itineraryData.staySuggestions || existingDoc.staySuggestions;
-        existingDoc.foodSuggestions = itineraryData.foodSuggestions || existingDoc.foodSuggestions;
-        existingDoc.packingList = itineraryData.packingList || itineraryData.packingSuggestions || existingDoc.packingList;
-        existingDoc.localTips = itineraryData.localTips || existingDoc.localTips;
-        existingDoc.budgetBreakdown = itineraryData.budgetBreakdown || existingDoc.budgetBreakdown;
-        existingDoc.plannerContext = plannerContext || existingDoc.plannerContext || {};
-        if (itineraryData.matchedCatalogTrip || itineraryData.matchedTrip) {
-          existingDoc.matchedTrip = itineraryData.matchedCatalogTrip || itineraryData.matchedTrip;
-        }
-        existingDoc.source = 'customized';
-
-        await existingDoc.save();
-
-        return res.json({
-          success: true,
-          message: 'Itinerary updated successfully.',
-          data: existingDoc
-        });
-      }
+      const { itinerary, guestAuthorization } = await updatePersistedItinerary({
+        itineraryId: targetId,
+        itineraryData,
+        user: req.user,
+        guestEditToken: extractGuestEditToken(itineraryData)
+      });
+      return res.json({
+        success: true,
+        message: 'Itinerary updated successfully.',
+        data: { ...itinerary.toObject(), persistence: { persisted: true } },
+        ...(guestAuthorization ? { guestAuthorization } : {})
+      });
     }
 
-    // 2. Create new Itinerary document with stable MongoDB _id
-    const newDoc = new Itinerary({
-      user: userId,
-      userEmail,
-      title: itineraryData.title,
-      tagline: itineraryData.tagline || '',
-      destination: itineraryData.destination,
-      destinationSlug: normalizeDestinationSlug(itineraryData.destination),
-      duration: itineraryData.duration || itineraryData.daysCount || 5,
-      travelers: itineraryData.travelers || 2,
-      travelStyle: itineraryData.travelStyle || itineraryData.mood || 'Adventure',
-      pace: itineraryData.pace || 'Balanced',
-      budgetLevel: itineraryData.budgetLevel || 'Moderate',
-      totalEstimatedCost: itineraryData.totalEstimatedCost || 0,
-      weather: itineraryData.weather || {},
-      bestTimeToVisit: itineraryData.bestTimeToVisit || '',
-      days: finalDays,
-      staySuggestions: itineraryData.staySuggestions || [],
-      foodSuggestions: itineraryData.foodSuggestions || [],
-      packingList: itineraryData.packingList || itineraryData.packingSuggestions || [],
-      localTips: itineraryData.localTips || [],
-      budgetBreakdown: itineraryData.budgetBreakdown || {},
-      plannerContext,
-      matchedTrip: itineraryData.matchedCatalogTrip || itineraryData.matchedTrip || null,
-      source: itineraryData.source || 'gemini-ai',
-      isPublic: false
-    });
-
-    await newDoc.save();
+    const { itinerary, guestAuthorization } = await persistGeneratedItinerary({ itineraryData, user: req.user });
 
     res.status(201).json({
       success: true,
       message: 'AI Itinerary saved successfully to your travel profile.',
-      data: { ...newDoc.toObject(), handoffToken: userId ? undefined : signItineraryHandoffToken(newDoc._id) }
+      data: { ...itinerary.toObject(), persistence: { persisted: true } },
+      ...(guestAuthorization ? { guestAuthorization } : {})
     });
   } catch (error) {
     console.error('Save Itinerary Error:', error);
-    res.status(500).json({ success: false, message: 'Could not save itinerary to database: ' + error.message });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Could not save itinerary to database.' });
   }
 };
 
@@ -698,52 +644,22 @@ export const updateItineraryController = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
-
-    const doc = await Itinerary.findById(id);
-    if (!doc) {
-      return res.status(404).json({ success: false, message: 'Itinerary not found.' });
-    }
-
-    // Ownership check
-    const userEmail = req.user?.email || '';
-    const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Not authorized to update this itinerary.' });
-    }
-
-    if (updateData.title) doc.title = updateData.title;
-    if (updateData.tagline) doc.tagline = updateData.tagline;
-    if (updateData.days) {
-      let finalDays = updateData.days;
-      const needsResolution = finalDays.some(d => !d.coverMedia?.url || !Array.isArray(d.galleryMedia) || d.galleryMedia.length === 0);
-      if (needsResolution) {
-        finalDays = await batchResolveItineraryMedia(finalDays, doc.destination, doc.title);
-      }
-      doc.days = finalDays;
-    }
-    if (updateData.travelers) doc.travelers = updateData.travelers;
-    if (updateData.travelStyle) doc.travelStyle = updateData.travelStyle;
-    if (updateData.pace) doc.pace = updateData.pace;
-    if (updateData.budgetLevel) doc.budgetLevel = updateData.budgetLevel;
-    if (updateData.totalEstimatedCost) doc.totalEstimatedCost = updateData.totalEstimatedCost;
-    if (updateData.staySuggestions) doc.staySuggestions = updateData.staySuggestions;
-    if (updateData.foodSuggestions) doc.foodSuggestions = updateData.foodSuggestions;
-    if (updateData.packingList) doc.packingList = updateData.packingList;
-    if (updateData.localTips) doc.localTips = updateData.localTips;
-    if (updateData.budgetBreakdown) doc.budgetBreakdown = updateData.budgetBreakdown;
-    if (updateData.plannerContext) doc.plannerContext = sanitizePlannerContext(updateData);
-    doc.source = 'customized';
-
-    await doc.save();
+    const { itinerary, guestAuthorization } = await updatePersistedItinerary({
+      itineraryId: id,
+      itineraryData: updateData,
+      user: req.user,
+      guestEditToken: extractGuestEditToken(updateData)
+    });
 
     res.json({
       success: true,
       message: 'Itinerary updated successfully.',
-      data: doc
+      data: { ...itinerary.toObject(), persistence: { persisted: true } },
+      ...(guestAuthorization ? { guestAuthorization } : {})
     });
   } catch (error) {
     console.error('Update Itinerary Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update itinerary.' });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to update itinerary.' });
   }
 };
 
@@ -767,7 +683,7 @@ export const getItineraryByIdController = async (req, res) => {
       }
       const userEmail = req.user?.email || '';
       const userId = req.user?._id?.toString();
-      if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
+      if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && !['admin', 'super_admin'].includes(req.user?.role)) {
         return res.status(403).json({ success: false, message: 'Not authorized to view this private itinerary.' });
       }
     }
@@ -839,8 +755,15 @@ export const deleteItineraryController = async (req, res) => {
     // Ownership check
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
+    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && !['admin', 'super_admin'].includes(req.user?.role)) {
       return res.status(403).json({ success: false, message: 'Not authorized to delete this itinerary.' });
+    }
+
+    if (['LEAD_LINKED', 'QUOTATION_LINKED', 'BOOKED'].includes(doc.lifecycleStatus)) {
+      return res.status(409).json({
+        success: false,
+        message: 'This itinerary is linked to an active travel request and cannot be deleted.'
+      });
     }
 
     await Itinerary.findByIdAndDelete(id);
@@ -873,7 +796,7 @@ export const toggleShareItineraryController = async (req, res) => {
     // Ownership check
     const userEmail = req.user?.email || '';
     const userId = req.user?._id?.toString();
-    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && req.user?.role !== 'admin') {
+    if (doc.user?.toString() !== userId && !(userEmail && doc.userEmail === userEmail) && !['admin', 'super_admin'].includes(req.user?.role)) {
       return res.status(403).json({ success: false, message: 'Not authorized to modify share settings for this itinerary.' });
     }
 
@@ -913,7 +836,7 @@ export const getPublicSharedItineraryController = async (req, res) => {
     }
 
     const doc = await Itinerary.findOne({ shareToken, isPublic: true })
-      .select('-user -userEmail -__v');
+      .select('-user -userEmail -shareToken -__v -lifecycleStatus -retentionExpiresAt -leadLinkedAt -lastEditedAt');
 
     if (!doc) {
       return res.status(404).json({
