@@ -9,6 +9,10 @@ const list = (value, max = 20) => Array.isArray(value)
   : [];
 
 const normalizeLine = (value) => text(value).toLowerCase();
+const reviewedForInclusion = (item, prefix) => {
+  const aiCandidate = item?.sourceKind === 'AI_PLANNER' || String(item?.optionId || item?.activityId || '').startsWith(prefix);
+  return !aiCandidate || item.reviewStatus === 'REVIEWED';
+};
 
 export const dedupeQuotationLines = (values = []) => {
   const seen = new Set();
@@ -96,10 +100,11 @@ export const buildFallbackActivityDescription = (activity = {}) => {
 };
 
 export const buildFactualInclusions = (quotation = {}) => {
-  const hotels = (quotation.hotelOptions || []).filter((item) => item.selected === true && text(item.hotelName));
+  const hotels = (quotation.hotelOptions || []).filter((item) => item.selected === true && reviewedForInclusion(item, 'ai_hotel_') && text(item.hotelName));
   const transport = (quotation.transportOptions || []).filter((item) => item.selected === true
+    && reviewedForInclusion(item, 'ai_transport_')
     && (text(item.title || item.vehicle || item.mode) || text(item.pickup || item.route?.from) || text(item.drop || item.route?.to)));
-  const activities = (quotation.activities || []).filter((item) => item.selected === true && item.isIncluded === true && text(item.name));
+  const activities = (quotation.activities || []).filter((item) => item.selected === true && reviewedForInclusion(item, 'ai_act_') && item.isIncluded === true && text(item.name));
   const addOns = (quotation.addOns || []).filter((item) => item.selected === true && text(item.name));
   return dedupeQuotationLines([
     ...hotels.map((item) => `Accommodation at ${text(item.hotelName, 120)}${text(item.city, 80) ? `, ${text(item.city, 80)}` : ''}${text(item.mealPlan, 80) ? ` (${text(item.mealPlan, 80)})` : ''}`),

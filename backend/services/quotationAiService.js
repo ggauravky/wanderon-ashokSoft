@@ -12,7 +12,7 @@ const MAX_DAYS = 21;
 const MAX_ACTIVITIES_PER_SLOT = 8;
 const MERGE_MODES = new Set(['FILL_EMPTY_ONLY', 'REPLACE_SELECTED_SECTIONS']);
 const SECTION_FIELDS = {
-  journey: ['tripRequirements', 'sourceItineraryId'],
+  journey: ['tripRequirements', 'tripPreferences', 'planningReference', 'sourceItineraryId'],
   itinerary: ['itinerary'],
   hotels: ['hotelOptions'],
   transport: ['transportOptions'],
@@ -112,7 +112,7 @@ const itineraryDay = (day = {}, index = 0) => {
     evening: slotObjectText(day.evening),
     stay: text(day.stay, 220),
     mealsIncluded: list(day.mealsIncluded, 4, 50),
-    transferDetails: '',
+    transferDetails: text(day.transferDetails, 500),
     activityHighlights: [
       ...(Array.isArray(day.morning) ? day.morning : []),
       ...(Array.isArray(day.afternoon) ? day.afternoon : []),
@@ -140,15 +140,18 @@ const travelerBreakdown = (itinerary = {}) => {
   const ctx = itinerary.plannerContext || {};
   const tb = ctx.travelersBreakdown || {};
   const seniors = number(tb.seniors, 0);
-  const adults = Math.max(1, number(tb.adults, 0) + seniors || number(itinerary.travelers, 1));
+  const adults = Math.max(0, number(tb.adults, 0));
   const children = number(tb.children, 0);
   const infants = number(tb.infants, 0);
+  const statedTotal = number(itinerary.travelers, 0);
+  const structuredTotal = adults + children + infants + seniors;
+  const fallbackAdults = structuredTotal > 0 ? adults : Math.max(1, statedTotal || 1);
   return {
-    adults,
+    adults: fallbackAdults,
     children,
     infants,
     seniors,
-    total: Math.max(1, adults + children + infants)
+    total: Math.max(1, fallbackAdults + children + infants + seniors)
   };
 };
 
@@ -157,40 +160,95 @@ const normalizedCandidateKey = (...values) => values
   .filter(Boolean)
   .join('|');
 
+const reviewMetadata = (sourceLabel, sourceDayNumbers = []) => ({
+  sourceKind: 'AI_PLANNER',
+  reviewStatus: 'SUGGESTED',
+  sourceLabel,
+  sourceDayNumbers,
+  reviewedBy: null,
+  reviewedAt: null
+});
+
+const hotelCandidate = ({ id, segmentId, segmentName, segmentOrder, hotelName, city, nights, sourceDayNumbers, note }) => ({
+  ...reviewMetadata('AI Planner stay suggestion', sourceDayNumbers),
+  optionId: id,
+  segmentId,
+  segmentName,
+  segmentOrder,
+  tier: 'Custom',
+  label: sourceDayNumbers.length ? `AI stay · ${segmentName}` : 'AI alternative stay',
+  hotelName,
+  city,
+  location: '',
+  category: 'Suggested stay',
+  roomType: '',
+  rooms: 1,
+  occupancy: '',
+  mealPlan: '',
+  nights: Math.max(1, nights || 1),
+  costPerNight: 0,
+  pricePerNight: 0,
+  totalCost: 0,
+  totalPrice: 0,
+  imageUrl: '',
+  amenities: [],
+  notes: note,
+  recommendationType: 'CUSTOM',
+  selected: false
+});
+
 const hotelCandidates = (itinerary = {}) => {
   const seen = new Set();
-  const stays = list(itinerary.staySuggestions, 20, 180).filter((name) => {
-    const key = normalizedCandidateKey(name.replace(/,\s*(kaza|manali|spiti valley)$/i, ''));
-    if (!key || seen.has(key)) return false;
+  const result = [];
+  const maxNights = Math.max(0, number(itinerary.duration, itinerary.days?.length || 1) - 1);
+  const overnightDays = (itinerary.days || []).slice(0, Math.min(MAX_DAYS, maxNights || MAX_DAYS));
+  const segments = [];
+  overnightDays.forEach((day, index) => {
+    const name = text(day.stay, 180);
+    if (!name) return;
+    const key = normalizedCandidateKey(name);
+    const previous = segments.at(-1);
+    if (previous?.key === key && previous.lastIndex === index - 1) {
+      previous.nights += 1;
+      previous.dayNumbers.push(number(day.day, index + 1));
+      previous.lastIndex = index;
+    } else {
+      segments.push({ key, name, nights: 1, dayNumbers: [number(day.day, index + 1)], lastIndex: index,
+        city: text(day.locationName || day.destination || itinerary.destination, 120) });
+    }
+  });
+  segments.forEach((segment, index) => {
+    seen.add(segment.key);
+    result.push(hotelCandidate({
+      id: `ai_hotel_segment_${index + 1}`,
+      segmentId: `ai_stay_segment_${index + 1}`,
+      segmentName: segment.city || `Stay segment ${index + 1}`,
+      segmentOrder: index + 1,
+      hotelName: segment.name,
+      city: segment.city,
+      nights: segment.nights,
+      sourceDayNumbers: segment.dayNumbers,
+      note: 'Derived from consecutive overnight stays in the AI itinerary. Room allocation, availability, supplier, meal plan, and pricing require staff review.'
+    }));
+  });
+  list(itinerary.staySuggestions, 20, 180).forEach((name) => {
+    const key = normalizedCandidateKey(name);
+    if (!key || seen.has(key) || result.length >= 12) return;
     seen.add(key);
-    return true;
-  }).slice(0, 10);
-  return stays.map((name, index) => ({
-    optionId: `ai_hotel_${index + 1}`,
-    segmentId: 'ai_stay_suggestions',
-    segmentName: 'AI Stay Suggestions',
-    segmentOrder: index + 1,
-    tier: 'Custom',
-    label: `AI suggestion ${index + 1}`,
-    hotelName: name,
-    city: text(itinerary.destination, 120),
-    location: '',
-    category: 'Suggested stay',
-    roomType: '',
-    rooms: 1,
-    occupancy: '',
-    mealPlan: '',
-    nights: Math.max(1, number(itinerary.duration, 2) - 1),
-    costPerNight: 0,
-    pricePerNight: 0,
-    totalCost: 0,
-    totalPrice: 0,
-    imageUrl: '',
-    amenities: [],
-    notes: 'AI Planner stay candidate. Availability, supplier cost, and customer price require staff review.',
-    recommendationType: 'CUSTOM',
-    selected: false
-  }));
+    const index = result.length + 1;
+    result.push(hotelCandidate({
+      id: `ai_hotel_alternative_${index}`,
+      segmentId: 'ai_stay_alternatives',
+      segmentName: 'Alternative stays',
+      segmentOrder: index,
+      hotelName: name,
+      city: text(itinerary.destination, 120),
+      nights: 1,
+      sourceDayNumbers: [],
+      note: 'Top-level AI stay alternative. Night allocation and room allocation require review; availability, supplier, meal plan, and pricing are not confirmed.'
+    }));
+  });
+  return result;
 };
 
 const activityCandidates = (itinerary = {}) => {
@@ -206,6 +264,7 @@ const activityCandidates = (itinerary = {}) => {
         if (seen.has(dedupeKey)) return;
         seen.add(dedupeKey);
         rows.push({
+          ...reviewMetadata('AI Planner activity', [number(day.day, dayIndex + 1)]),
           activityId: `ai_act_${dayIndex + 1}_${slot}_${index + 1}`,
           dayNumber: dayIndex + 1,
           name,
@@ -233,6 +292,7 @@ const transportCandidate = (itinerary = {}) => {
   const origin = text(ctx.origin, 120);
   if (!preference && !origin) return null;
   return {
+    ...reviewMetadata('AI Planner transport preference'),
     optionId: 'ai_transport_candidate',
     mode: 'TRANSFER',
     type: preference || 'Transport to be reviewed',
@@ -250,7 +310,7 @@ const transportCandidate = (itinerary = {}) => {
     totalCost: 0,
     totalPrice: 0,
     inclusions: [],
-    notes: 'AI Planner transport candidate. Provider, vehicle, timings, and price require staff confirmation.',
+    notes: `AI Planner transport candidate for ${Math.max(1, travelerBreakdown(itinerary).total)} travelers. Provider, vehicle, timings, and price require staff confirmation.`,
     selected: false,
     vehicleMedia: [],
     documents: []
@@ -261,17 +321,7 @@ export function buildDeterministicPatch(itinerary = {}) {
   const duration = durationParts(itinerary.duration || itinerary.days?.length || 1);
   const travelers = travelerBreakdown(itinerary);
   const ctx = itinerary.plannerContext || {};
-  const special = [
-    travelers.seniors ? `Senior travelers: ${travelers.seniors} counted with adults for quotation traveler categories.` : '',
-    ctx.datesFlexible && ctx.flexibleMonth ? `Flexible travel month: ${ctx.flexibleMonth}` : '',
-    ctx.origin ? `Origin: ${ctx.origin}` : '',
-    ctx.stayPreference ? `Stay preference: ${ctx.stayPreference}` : '',
-    ctx.dietaryPreference ? `Dietary preference: ${ctx.dietaryPreference}` : '',
-    ctx.paceRhythm ? `Preferred rhythm: ${ctx.paceRhythm}` : '',
-    ctx.acclimatization ? `Acclimatization: ${ctx.acclimatization}` : '',
-    ctx.interests?.length ? `Interests: ${ctx.interests.join(', ')}` : '',
-    ctx.customPreferences ? `Planner notes: ${ctx.customPreferences}` : ''
-  ].filter(Boolean).join('\n');
+  const special = text(ctx.customPreferences, 1100);
 
   const startDate = !ctx.datesFlexible ? dateValue(ctx.startDate) : '';
   const endDate = !ctx.datesFlexible ? dateValue(ctx.endDate) : '';
@@ -279,35 +329,65 @@ export function buildDeterministicPatch(itinerary = {}) {
   const stayCandidates = hotelCandidates(itinerary);
   const activities = activityCandidates(itinerary);
   const transport = transportCandidate(itinerary);
+  const budgetScopeValue = text(ctx.budgetScope, 30).toUpperCase().replace(/[\s-]+/g, '_');
+  const plannerBudgetScope = ['TOTAL', 'PER_PERSON'].includes(budgetScopeValue) ? budgetScopeValue : 'UNSPECIFIED';
 
   return {
     sourceItineraryId: itinerary._id || null,
     tripRequirements: {
       title: text(itinerary.title, 180) || `${text(itinerary.destination, 120)} journey`,
       destination: text(itinerary.destination, 120),
+      origin: text(ctx.origin, 120),
       startDate,
       endDate,
+      datesFlexible: ctx.datesFlexible === true,
+      flexibleMonth: ctx.datesFlexible === true ? text(ctx.flexibleMonth, 80) : '',
       duration: duration.label,
       days: duration.days,
       nights: duration.nights,
       adults: travelers.adults,
       children: travelers.children,
       infants: travelers.infants,
+      seniors: travelers.seniors,
       totalTravelers: travelers.total,
       travelStyle: travelStyle(itinerary.travelStyle || itinerary.tripType),
       budgetPerPerson: 0,
       specialRequests: special
+    },
+    tripPreferences: {
+      tripType: text(ctx.tripType || itinerary.travelStyle, 100),
+      pace: text(itinerary.pace, 100),
+      paceRhythm: text(ctx.paceRhythm, 100),
+      acclimatization: text(ctx.acclimatization, 200),
+      interests: list(ctx.interests, 20, 120),
+      stayPreference: text(ctx.stayPreference, 160),
+      roomStyle: text(ctx.roomStyle, 160),
+      hotelRating: Number.isFinite(Number(ctx.hotelRating)) ? Number(ctx.hotelRating) : null,
+      dietaryPreference: text(ctx.dietaryPreference, 160),
+      transportPreference: text(ctx.transportPreference, 160),
+      mobilityConstraints: list(ctx.mobilityConstraints, 20, 180),
+      mustInclude: list(ctx.mustInclude, 20, 180),
+      avoid: list(ctx.avoid, 20, 180),
+      customPreferences: text(ctx.customPreferences, 1100)
+    },
+    planningReference: {
+      sourceItineraryVersion: number(itinerary.version, 0) || null,
+      sourceGeneratedAt: itinerary.generatedAt || null,
+      sourceUpdatedAt: itinerary.updatedAt || null,
+      plannerBudgetAmount: Number.isFinite(Number(ctx.budgetAmount)) ? Number(ctx.budgetAmount) : null,
+      plannerBudgetScope,
+      aiEstimatedTotal: number(itinerary.totalEstimatedCost, 0) || null,
+      currency: text(itinerary.currency, 10) || 'INR',
+      budgetBreakdown: clone(itinerary.budgetBreakdown || null),
+      bestTimeToVisit: text(itinerary.bestTimeToVisit, 180),
+      seasonContext: text(itinerary.seasonContext, 300)
     },
     itinerary: importedDays,
     hotelOptions: stayCandidates,
     transportOptions: transport ? [transport] : [],
     activities,
     inclusions: [],
-    exclusions: [
-      'Flights, trains, and transport tickets unless explicitly included',
-      'Personal expenses and optional activities not confirmed in the final quotation',
-      'Services not expressly listed in the final inclusions'
-    ],
+    exclusions: buildSafeExclusions(),
     policies: {
       importantInformation: [
         ctx.datesFlexible && ctx.flexibleMonth ? `Travel dates are flexible for ${ctx.flexibleMonth}; exact dates must be confirmed before pricing.` : '',
@@ -330,7 +410,17 @@ export function sanitizeAiQuotationPatch(patch = {}) {
   const safe = pick(patch, ['sourceItineraryId', 'personalNote', 'inclusions', 'exclusions']);
   safe.tripRequirements = pick(patch.tripRequirements, [
     'title', 'destination', 'startDate', 'endDate', 'duration', 'days', 'nights',
-    'adults', 'children', 'infants', 'totalTravelers', 'travelStyle', 'specialRequests'
+    'origin', 'datesFlexible', 'flexibleMonth', 'adults', 'children', 'infants', 'seniors',
+    'totalTravelers', 'travelStyle', 'specialRequests'
+  ]);
+  safe.tripPreferences = pick(patch.tripPreferences, [
+    'tripType', 'pace', 'paceRhythm', 'acclimatization', 'interests', 'stayPreference',
+    'roomStyle', 'hotelRating', 'dietaryPreference', 'transportPreference',
+    'mobilityConstraints', 'mustInclude', 'avoid', 'customPreferences'
+  ]);
+  safe.planningReference = pick(patch.planningReference, [
+    'sourceItineraryVersion', 'sourceGeneratedAt', 'sourceUpdatedAt', 'plannerBudgetAmount',
+    'plannerBudgetScope', 'aiEstimatedTotal', 'currency', 'budgetBreakdown', 'bestTimeToVisit', 'seasonContext'
   ]);
   safe.itinerary = (patch.itinerary || []).map((day) => pick(day, [
     'day', 'title', 'locationName', 'destination', 'description', 'morning', 'afternoon',
@@ -340,14 +430,17 @@ export function sanitizeAiQuotationPatch(patch = {}) {
   safe.hotelOptions = (patch.hotelOptions || []).map((item) => ({ ...pick(item, [
     'optionId', 'segmentId', 'segmentName', 'segmentOrder', 'tier', 'label', 'hotelName',
     'city', 'location', 'category', 'roomType', 'rooms', 'occupancy', 'mealPlan', 'nights',
-    'imageUrl', 'amenities', 'notes', 'recommendationType'
+    'imageUrl', 'amenities', 'notes', 'recommendationType', 'sourceKind', 'reviewStatus',
+    'sourceLabel', 'sourceDayNumbers'
   ]), selected: false, costPerNight: 0, pricePerNight: 0, totalCost: 0, totalPrice: 0 }));
   safe.transportOptions = (patch.transportOptions || []).map((item) => ({ ...pick(item, [
     'optionId', 'mode', 'type', 'title', 'vehicle', 'pickup', 'drop', 'route',
-    'capacity', 'quantity', 'pricingType', 'notes'
+    'capacity', 'quantity', 'pricingType', 'notes', 'sourceKind', 'reviewStatus',
+    'sourceLabel', 'sourceDayNumbers'
   ]), selected: false, unitCost: 0, unitPrice: 0, totalCost: 0, totalPrice: 0, inclusions: [] }));
   safe.activities = (patch.activities || []).map((item) => ({ ...pick(item, [
-    'activityId', 'dayNumber', 'name', 'description', 'location', 'pricingType', 'quantity'
+    'activityId', 'dayNumber', 'name', 'description', 'location', 'pricingType', 'quantity',
+    'sourceKind', 'reviewStatus', 'sourceLabel', 'sourceDayNumbers'
   ]), selected: false, isIncluded: false, isOptional: true,
   unitCost: 0, unitPrice: 0, totalCost: 0, totalPrice: 0 }));
   safe.policies = pick(patch.policies, ['travelRequirements', 'importantInformation']);
@@ -389,7 +482,7 @@ export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 
     fields.forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(patch, field)) return;
       if (mode === 'REPLACE_SELECTED_SECTIONS') {
-        if (field === 'tripRequirements' || field === 'policies') {
+        if (field === 'tripRequirements' || field === 'tripPreferences' || field === 'planningReference' || field === 'policies') {
           next[field] = { ...(next[field] || {}), ...clone(patch[field]) };
         } else if (['hotelOptions', 'transportOptions', 'activities'].includes(field)) {
           const idField = { hotelOptions: 'optionId', transportOptions: 'optionId', activities: 'activityId' }[field];
@@ -402,12 +495,12 @@ export function applyQuotationAiPatch({ quotation = {}, patch = {}, mergeMode = 
         changed = true;
         return;
       }
-      if (field === 'tripRequirements') {
+      if (field === 'tripRequirements' || field === 'tripPreferences' || field === 'planningReference') {
         const starterJourney = !next.tripRequirements?.title && !next.tripRequirements?.destination;
-        next.tripRequirements = { ...(next.tripRequirements || {}) };
-        Object.entries(patch.tripRequirements || {}).forEach(([key, value]) => {
-          if ((empty(next.tripRequirements[key]) || (starterJourney && ['days', 'nights', 'adults', 'children', 'infants', 'totalTravelers', 'duration'].includes(key))) && !empty(value)) {
-            next.tripRequirements[key] = clone(value);
+        next[field] = { ...(next[field] || {}) };
+        Object.entries(patch[field] || {}).forEach(([key, value]) => {
+          if ((empty(next[field][key]) || (field === 'tripRequirements' && starterJourney && ['days', 'nights', 'adults', 'children', 'infants', 'seniors', 'totalTravelers', 'duration', 'datesFlexible'].includes(key))) && !empty(value)) {
+            next[field][key] = clone(value);
             changed = true;
           }
         });
@@ -541,6 +634,10 @@ export function normalizeImportedItineraryPayload(input, { enforceSize = true } 
     matchedCatalogTrip: clone(itinerary.matchedCatalogTrip || itinerary.matchedTrip || null),
     totalEstimatedCost: number(itinerary.totalEstimatedCost, 0),
     budgetBreakdown: clone(itinerary.budgetBreakdown || null),
+    currency: text(itinerary.currency, 10) || 'INR',
+    seasonContext: text(itinerary.seasonContext, 300),
+    version: number(itinerary.version, 0) || null,
+    generatedAt: itinerary.generatedAt || null,
     createdAt: itinerary.createdAt || null,
     updatedAt: itinerary.updatedAt || null
   };
@@ -612,7 +709,9 @@ export async function buildQuotationAiImportPreview({ request = {}, user }) {
       itineraryId: itinerary._id || null,
       title: itinerary.title || '',
       destination: itinerary.destination || '',
-      updatedAt: itinerary.updatedAt || itinerary.createdAt || null
+      updatedAt: itinerary.updatedAt || itinerary.createdAt || null,
+      version: itinerary.version || null,
+      generatedAt: itinerary.generatedAt || null
     },
     deterministicPatch: patch,
     suggestions: {
@@ -656,6 +755,120 @@ export async function buildQuotationAiImportPreview({ request = {}, user }) {
       ...(patch.transportOptions?.length ? ['1 transport candidate'] : [])
     ],
     manualRemaining: ['Customer identity', 'Supplier and availability confirmation', 'Commercial pricing and payment amounts']
+  };
+}
+
+export function buildSmartQuotationDraft({ lead = {}, itinerary = {}, actor = {} } = {}) {
+  const normalized = normalizeImportedItineraryPayload(itinerary, { enforceSize: false });
+  const mapped = sanitizeAiQuotationPatch(buildDeterministicPatch(normalized));
+  const freeFormRequests = [...new Set([
+    text(lead.message, 1100),
+    text(mapped.tripPreferences?.customPreferences, 1100)
+  ].filter(Boolean))];
+  const draft = {
+    leadId: lead._id || lead.id || null,
+    sourceItineraryId: normalized._id || lead.sourceItineraryId || null,
+    customerId: lead.userId || null,
+    assignedTo: actor._id || actor.id || lead.assignedToUser || null,
+    customerSnapshot: {
+      name: text(lead.name, 160),
+      email: text(lead.email, 240).toLowerCase(),
+      phone: text(lead.phone, 80),
+      city: text(lead.city, 120),
+      notes: ''
+    },
+    ...mapped,
+    tripRequirements: {
+      ...mapped.tripRequirements,
+      specialRequests: freeFormRequests.join('\n')
+    },
+    inclusions: [],
+    manualPricing: {
+      currency: 'INR', componentReference: 0, finalCustomerPrice: 0, depositAmount: 0,
+      balanceAmount: 0, adjustments: [], paymentSchedule: [], priceNotes: ''
+    },
+    pricing: {},
+    paymentTerms: { depositPercent: 10, balanceDueDays: 6, paymentMode: 'PARTIAL', currency: 'INR' },
+    presentationSettings: {
+      template: 'journey', showComponentPrices: false, showPaymentSchedule: true,
+      showAttachments: true, showAdvisor: true, showTerms: true,
+      showItineraryGallery: true, showTripPreferences: false
+    },
+    aiImportProvenance: {
+      sourceType: 'LEAD_LINKED_ITINERARY',
+      sourceTitle: normalized.title,
+      sourceDestination: normalized.destination,
+      sourceUpdatedAt: normalized.updatedAt || normalized.createdAt || null,
+      sourceVersion: normalized.version || null,
+      sourceGeneratedAt: normalized.generatedAt || null,
+      buildMode: 'AI_LEAD_SMART_BUILD',
+      importedAt: new Date(),
+      importedBy: actor._id || actor.id || null
+    }
+  };
+  draft.policies = {
+    ...buildQuotationPolicyDefaults(draft),
+    ...mapped.policies
+  };
+  draft.personalNote = mapped.personalNote || buildQuotationFieldFallback({ quotation: draft, field: 'journey.personalNote' });
+  return draft;
+}
+
+export const buildSmartQuotationSummary = (quotation = {}) => ({
+  customerFilled: Boolean(quotation.customerSnapshot?.name && quotation.customerSnapshot?.email && quotation.customerSnapshot?.phone),
+  journeyFieldsFilled: Object.values(quotation.tripRequirements || {}).filter((value) => value !== '' && value !== null && value !== undefined).length,
+  itineraryDays: quotation.itinerary?.length || 0,
+  mediaItems: (quotation.itinerary || []).reduce((total, day) => total + (day.coverMedia?.url ? 1 : 0) + (day.galleryMedia?.length || 0), 0),
+  hotelCandidates: (quotation.hotelOptions || []).filter((item) => item.sourceKind === 'AI_PLANNER').length,
+  transportCandidates: (quotation.transportOptions || []).filter((item) => item.sourceKind === 'AI_PLANNER').length,
+  activityCandidates: (quotation.activities || []).filter((item) => item.sourceKind === 'AI_PLANNER').length,
+  policiesFilled: Object.values(quotation.policies || {}).filter(Boolean).length,
+  pricingChanged: false
+});
+
+export function sanitizeQuotationSourcePlan(itinerary = {}) {
+  const normalized = normalizeImportedItineraryPayload(itinerary, { enforceSize: false });
+  return pick(normalized, [
+    '_id', 'title', 'destination', 'duration', 'plannerContext', 'days', 'staySuggestions',
+    'foodSuggestions', 'packingList', 'localTips', 'budgetBreakdown', 'healthReport',
+    'weather', 'seasonContext', 'bestTimeToVisit', 'version', 'generatedAt', 'updatedAt'
+  ]);
+}
+
+const comparison = (key, current, source) => ({
+  key,
+  changed: JSON.stringify(current ?? null) !== JSON.stringify(source ?? null),
+  current: clone(current),
+  source: clone(source)
+});
+
+export function buildQuotationSourceComparison(quotation = {}, itinerary = {}) {
+  const normalized = normalizeImportedItineraryPayload(itinerary, { enforceSize: false });
+  const mapped = sanitizeAiQuotationPatch(buildDeterministicPatch(normalized));
+  const itineraryFields = ['day', 'title', 'locationName', 'destination', 'description', 'morning', 'afternoon', 'evening', 'stay', 'transferDetails'];
+  const stayFields = ['hotelName', 'city', 'nights', 'sourceDayNumbers'];
+  const transportFields = ['type', 'pickup', 'drop', 'capacity'];
+  const activityFields = ['dayNumber', 'name', 'location', 'description'];
+  const groups = [
+    comparison('Journey', pick(quotation.tripRequirements, ['title', 'destination', 'origin', 'duration', 'travelStyle']), pick(mapped.tripRequirements, ['title', 'destination', 'origin', 'duration', 'travelStyle'])),
+    comparison('Dates', pick(quotation.tripRequirements, ['datesFlexible', 'flexibleMonth', 'startDate', 'endDate']), pick(mapped.tripRequirements, ['datesFlexible', 'flexibleMonth', 'startDate', 'endDate'])),
+    comparison('Travelers', pick(quotation.tripRequirements, ['adults', 'children', 'infants', 'seniors', 'totalTravelers']), pick(mapped.tripRequirements, ['adults', 'children', 'infants', 'seniors', 'totalTravelers'])),
+    comparison('Preferences', quotation.tripPreferences || {}, mapped.tripPreferences || {}),
+    comparison('Itinerary', (quotation.itinerary || []).map((day) => pick(day, itineraryFields)), (mapped.itinerary || []).map((day) => pick(day, itineraryFields))),
+    comparison('Media', (quotation.itinerary || []).map((day) => ({ day: day.day, coverMedia: day.coverMedia, galleryMedia: day.galleryMedia })), (mapped.itinerary || []).map((day) => ({ day: day.day, coverMedia: day.coverMedia, galleryMedia: day.galleryMedia }))),
+    comparison('Stay suggestions', (quotation.hotelOptions || []).filter((item) => item.sourceKind === 'AI_PLANNER' || String(item.optionId || '').startsWith('ai_hotel_')).map((item) => pick(item, stayFields)), (mapped.hotelOptions || []).map((item) => pick(item, stayFields))),
+    comparison('Transport preference', (quotation.transportOptions || []).filter((item) => item.sourceKind === 'AI_PLANNER' || String(item.optionId || '').startsWith('ai_transport_')).map((item) => pick(item, transportFields)), (mapped.transportOptions || []).map((item) => pick(item, transportFields))),
+    comparison('Activity candidates', (quotation.activities || []).filter((item) => item.sourceKind === 'AI_PLANNER' || String(item.activityId || '').startsWith('ai_act_')).map((item) => pick(item, activityFields)), (mapped.activities || []).map((item) => pick(item, activityFields)))
+  ];
+  return {
+    source: { version: normalized.version || null, generatedAt: normalized.generatedAt || null, updatedAt: normalized.updatedAt || null },
+    sourceChanged: Boolean(
+      (normalized.version && normalized.version !== quotation.aiImportProvenance?.sourceVersion)
+      || (normalized.updatedAt && (!quotation.aiImportProvenance?.sourceUpdatedAt
+        || new Date(normalized.updatedAt) > new Date(quotation.aiImportProvenance.sourceUpdatedAt)))
+    ),
+    groups,
+    changedGroups: groups.filter((group) => group.changed).map((group) => group.key)
   };
 }
 

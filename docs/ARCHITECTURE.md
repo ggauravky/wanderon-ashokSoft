@@ -270,7 +270,19 @@ Planner generation writes the complete plan, `seasonContext`, structured `health
 
 Planner handoff creates one canonical `Lead` per source Itinerary with `leadType: trip_enquiry`, `source: ai_planner`, and `sourceItineraryId` pointing at the saved itinerary. Application idempotency plus the partial unique `unique_lead_per_source_itinerary` index protect that invariant during repeated or concurrent submission. The Lead stores only searchable CRM summary fields derived from the authorized source plan. Full planning content stays normalized in Itinerary. Expert Requests and AI Planner Leads use separate server-narrowed Sales queues.
 
-`/staff/sales/ai-planner-leads` provides a paginated Sales queue, and its dedicated dossier route loads one sanitized Lead plus one complete source Itinerary and quotation history. **Create Smart Quotation** passes both `leadId` and `itineraryId` to the existing Quotation V2 builder; Phase 1 does not auto-create a quotation or change commercial pricing authority.
+`/staff/sales/ai-planner-leads` provides a paginated Sales queue, and its dedicated dossier route loads one sanitized Lead plus one complete source Itinerary and quotation history. **Create Smart Quotation** now calls `POST /api/quotations/v2/from-ai-lead/:leadId`; the server authorizes the Lead, loads its exact source Itinerary, reuses the deterministic quotation mapper, persists a populated Quotation V2 draft, and returns the existing active draft on repeated clicks. The browser never supplies authoritative customer, plan, candidate, or pricing data to this endpoint.
+
+### One-click Smart Quotation boundary
+
+The Smart Build path keeps business authority separated:
+
+- `Lead` supplies customer identity and Sales ownership.
+- `Itinerary` supplies origin, exact or flexible dates, traveler categories, structured preferences, day plans, media, and internal planning estimates.
+- `Quotation` stores editable proposal content plus source provenance. Planning estimates remain in internal `planningReference`; commercial totals remain zero until Admin pricing.
+- Hotel, transport, and activity suggestions are created as internal `AI_PLANNER` candidates in `SUGGESTED` state. Staff must review them before use, and selected unreviewed candidates block pricing, finalization, and sharing.
+- Immutable revisions retain the structured trip facts. Public DTOs, PDFs, Booking snapshots, and Operations receive only selected services, while source metadata, review metadata, planning estimates, supplier costs, and other internal fields remain private.
+
+Source Itineraries move to `QUOTATION_LINKED` after a successful draft save and to `BOOKED` after conversion. Lifecycle updates are deliberately non-fatal to already-saved commercial records. The source-plan and comparison endpoints are read-only: they report factual changes by group and never mutate a Quotation automatically. Selective re-import continues through the existing server-resolved Smart Assist pipeline.
 
 Quotation Smart Assist uses two layers:
 

@@ -221,14 +221,16 @@ export default function QuotationBuilderWizard({
 
   const handleTripReqChange = (field, value) => {
     const updatedReqs = { ...quotation.tripRequirements, [field]: value };
-    if (field === 'adults' || field === 'children' || field === 'infants') {
+    if (field === 'adults' || field === 'children' || field === 'infants' || field === 'seniors') {
       const a = field === 'adults' ? Math.max(1, parseInt(value, 10) || 1) : (parseInt(quotation.tripRequirements.adults, 10) || 2);
       const c = field === 'children' ? Math.max(0, parseInt(value, 10) || 0) : (parseInt(quotation.tripRequirements.children, 10) || 0);
       const inf = field === 'infants' ? Math.max(0, parseInt(value, 10) || 0) : (parseInt(quotation.tripRequirements.infants, 10) || 0);
+      const senior = field === 'seniors' ? Math.max(0, parseInt(value, 10) || 0) : (parseInt(quotation.tripRequirements.seniors, 10) || 0);
       updatedReqs.adults = a;
       updatedReqs.children = c;
       updatedReqs.infants = inf;
-      updatedReqs.totalTravelers = a + c + inf;
+      updatedReqs.seniors = senior;
+      updatedReqs.totalTravelers = a + c + inf + senior;
     }
     updateAndRecalculate({ tripRequirements: updatedReqs });
   };

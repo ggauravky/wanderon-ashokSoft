@@ -169,6 +169,7 @@ const bookingSchema = new mongoose.Schema(
       statusAtConversion: { type: String, default: '' },
       customerSnapshot: { type: mongoose.Schema.Types.Mixed, default: null },
       tripRequirements: { type: mongoose.Schema.Types.Mixed, default: null },
+      tripPreferences: { type: mongoose.Schema.Types.Mixed, default: null },
       selectedHotel: { type: mongoose.Schema.Types.Mixed, default: null },
       hotelOptions: { type: [mongoose.Schema.Types.Mixed], default: [] },
       selectedTransport: { type: [mongoose.Schema.Types.Mixed], default: [] },

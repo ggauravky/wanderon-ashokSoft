@@ -19,6 +19,7 @@
     "test:operations-phase3": "node --test test_operations_phase3.js",
     "test:operations-phase4": "node --test test_operations_phase4.js",
     "test:ai-planner-sales-phase1": "node --test test_ai_planner_sales_phase1.js",
+    "test:ai-planner-sales-phase2": "node --test test_ai_planner_sales_phase2.js",
     "test:quotation-ai": "node --test test_quotation_ai_assist.js test_gemini_service.js",
     "test:gemini": "node scripts/testGeminiIntegration.js",
     "seed:quotation-ai-demo": "node scripts/seedQuotationAiDemo.js",

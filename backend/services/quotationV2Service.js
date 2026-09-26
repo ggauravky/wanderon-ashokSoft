@@ -16,6 +16,14 @@ const validDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+export const isAiPlannerCandidate = (item = {}, type = '') => item.sourceKind === 'AI_PLANNER'
+  || (type === 'hotel' && String(item.optionId || '').startsWith('ai_hotel_'))
+  || (type === 'transport' && String(item.optionId || '').startsWith('ai_transport_'))
+  || (type === 'activity' && String(item.activityId || '').startsWith('ai_act_'));
+
+export const isReviewedAiCandidate = (item = {}, type = '') => !isAiPlannerCandidate(item, type)
+  || item.reviewStatus === 'REVIEWED';
+
 export const isCommercialAdmin = (user) => ['admin', 'super_admin'].includes(String(user?.role || '').toLowerCase());
 export const secureToken = (bytes = 32) => crypto.randomBytes(bytes).toString('base64url');
 export const tokenHash = (token) => crypto.createHash('sha256').update(String(token || '')).digest('hex');
@@ -40,7 +48,7 @@ export const calculateComponentReference = (quotation = {}) => {
 
 const issue = (step, code, message) => ({ step, code, message });
 
-export const validateQuotationV2 = (quotation = {}, { forFinalization = false, forShare = false } = {}) => {
+export const validateQuotationV2 = (quotation = {}, { forFinalization = false, forShare = false, requireCandidateReview = false } = {}) => {
   const errors = [];
   const warnings = [];
   const customer = quotation.customerSnapshot || {};
@@ -56,7 +64,7 @@ export const validateQuotationV2 = (quotation = {}, { forFinalization = false, f
   const start = validDate(journey.startDate);
   const end = validDate(journey.endDate);
   if (start && end && end < start) errors.push(issue('journey', 'DATE_RANGE_INVALID', 'Journey end date cannot be before the start date.'));
-  const travelers = number(journey.adults) + number(journey.children) + number(journey.infants);
+  const travelers = number(journey.adults) + number(journey.children) + number(journey.infants) + number(journey.seniors);
   if (travelers <= 0) errors.push(issue('journey', 'TRAVELERS_REQUIRED', 'At least one traveler is required.'));
 
   (quotation.hotelOptions || []).forEach((hotel, index) => {
@@ -79,15 +87,17 @@ export const validateQuotationV2 = (quotation = {}, { forFinalization = false, f
   if (!quotation.transportOptions?.length) warnings.push(issue('transport', 'NO_TRANSPORT', 'No transportation has been added.'));
   if (!quotation.inclusions?.length) warnings.push(issue('inclusions', 'NO_INCLUSIONS', 'No inclusions have been added.'));
   if (!(quotation.itinerary || []).some((day) => day.coverMedia?.url)) warnings.push(issue('itinerary', 'NO_ITINERARY_IMAGES', 'No itinerary cover images have been selected.'));
-  if ((quotation.hotelOptions || []).some((item) => String(item.optionId || '').startsWith('ai_hotel_') && item.selected === true)) {
-    warnings.push(issue('hotels', 'AI_SUGGESTED_HOTEL_UNVERIFIED', 'Review availability, room allocation, meal plan, and supplier details for selected AI stay suggestions.'));
-  }
-  if ((quotation.transportOptions || []).some((item) => String(item.optionId || '').startsWith('ai_transport_') && item.selected === true)) {
-    warnings.push(issue('transport', 'TRANSPORT_REQUIRES_REVIEW', 'Confirm provider, route, schedule, and price for selected AI transport suggestions.'));
-  }
-  if ((quotation.activities || []).some((item) => String(item.activityId || '').startsWith('ai_act_') && item.selected === true)) {
-    warnings.push(issue('activities', 'ACTIVITY_REQUIRES_COMMERCIAL_REVIEW', 'Confirm inclusion and price for selected AI activity suggestions.'));
-  }
+  const reviewIssues = [
+    ['hotels', 'AI_HOTEL_REVIEW_REQUIRED', 'hotel', quotation.hotelOptions, 'Selected AI stay suggestions require Staff review.'],
+    ['transport', 'AI_TRANSPORT_REVIEW_REQUIRED', 'transport', quotation.transportOptions, 'Selected AI transport suggestions require Staff review.'],
+    ['activities', 'AI_ACTIVITY_REVIEW_REQUIRED', 'activity', quotation.activities, 'Selected AI activity suggestions require Staff review.']
+  ];
+  reviewIssues.forEach(([step, code, type, items, message]) => {
+    if ((items || []).some((item) => item.selected === true && !isReviewedAiCandidate(item, type))) {
+      const target = (forFinalization || forShare || requireCandidateReview) ? errors : warnings;
+      target.push(issue(step, code, message));
+    }
+  });
 
   const finalPrice = number(pricing.finalCustomerPrice);
   const deposit = number(pricing.depositAmount);
@@ -125,6 +135,8 @@ export const buildRevisionSnapshot = (quotation) => {
     version: value.version,
     customerSnapshot: value.customerSnapshot,
     tripRequirements: value.tripRequirements,
+    tripPreferences: value.tripPreferences || {},
+    planningReference: value.planningReference || null,
     personalNote: value.personalNote || '',
     itinerary: value.itinerary || [],
     hotelOptions: value.hotelOptions || [],
@@ -294,11 +306,18 @@ export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
       city: snapshot.customerSnapshot?.city
     },
     tripRequirements: snapshot.tripRequirements,
+    ...(snapshot.presentationSettings?.showTripPreferences === true ? {
+      tripPreferences: {
+        interests: snapshot.tripPreferences?.interests || [],
+        stayPreference: snapshot.tripPreferences?.stayPreference || '',
+        dietaryPreference: snapshot.tripPreferences?.dietaryPreference || ''
+      }
+    } : {}),
     personalNote: snapshot.personalNote,
     itinerary: (snapshot.itinerary || []).map(publicItineraryDay),
-    hotelOptions: (snapshot.hotelOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true)).map((item) => publicHotel(item, context)),
-    transportOptions: (snapshot.transportOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true)).map((item) => publicTransport(item, context)),
-    activities: (snapshot.activities || []).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true)).map((item) => publicActivity(item, context)),
+    hotelOptions: (snapshot.hotelOptions || []).filter((item) => !(isAiPlannerCandidate(item, 'hotel') && item.selected !== true)).map((item) => publicHotel(item, context)),
+    transportOptions: (snapshot.transportOptions || []).filter((item) => !(isAiPlannerCandidate(item, 'transport') && item.selected !== true)).map((item) => publicTransport(item, context)),
+    activities: (snapshot.activities || []).filter((item) => !(isAiPlannerCandidate(item, 'activity') && item.selected !== true)).map((item) => publicActivity(item, context)),
     addOns: (snapshot.addOns || []).map((item) => publicAddOn(item, context)),
     attachments: showAttachments ? [...new Map([...(snapshot.attachments || []), ...(quotation.attachments || [])]
       .filter((attachment) => attachmentAllowed(attachment, context))

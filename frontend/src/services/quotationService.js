@@ -190,6 +190,7 @@ async function quotationV2Request(path, { method = 'GET', body, auth = true } = 
 }
 
 export const createQuotationV2Api = (payload) => quotationV2Request('/v2', { method: 'POST', body: payload });
+export const createSmartQuotationFromAiLeadApi = (leadId) => quotationV2Request(`/v2/from-ai-lead/${encodeURIComponent(leadId)}`, { method: 'POST', body: {} });
 export const previewQuotationAiImportApi = (payload) => quotationV2Request('/v2/ai/import-preview', { method: 'POST', body: payload });
 export const listImportableItinerariesApi = (search = '') => quotationV2Request(`/v2/ai/importable-itineraries?search=${encodeURIComponent(search)}`);
 export const getQuotationPolicyDefaultsApi = (quotation) => quotationV2Request('/v2/ai/policy-defaults', { method: 'POST', body: { quotation } });
@@ -214,6 +215,9 @@ export const addQuotationAttachmentV2Api = (id, payload) => quotationV2Request(`
 export const deleteQuotationAttachmentV2Api = (id, attachmentId) => quotationV2Request(`/${encodeURIComponent(id)}/v2/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' });
 export const adminApproveQuotationV2Api = (id, reason) => quotationV2Request(`/${encodeURIComponent(id)}/v2/admin-approve`, { method: 'POST', body: { reason } });
 export const createBookingFromQuotationV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/create-booking`, { method: 'POST', body: {} });
+export const getQuotationSourcePlanApi = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/source-plan`);
+export const compareQuotationSourcePlanApi = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/source-plan/compare`);
+export const reviewQuotationCandidateApi = (id, type, candidateId, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/candidates/${encodeURIComponent(type)}/${encodeURIComponent(candidateId)}/review`, { method: 'POST', body: payload });
 
 export const getPublicQuotationV2Api = (token) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}`, { auth: true });
 export const requestQuotationVerificationV2Api = (token, email) => quotationV2Request(`/public/v2/${encodeURIComponent(token)}/request-verification`, { method: 'POST', body: { email }, auth: false });
@@ -626,10 +630,16 @@ export function getBlankQuotationState() {
     assignedTo: null,
     customerSnapshot: { name: '', email: '', phone: '', city: '', notes: '' },
     tripRequirements: {
-      title: '', destination: '', startDate: '', endDate: '', duration: '1D/0N',
-      days: 1, nights: 0, adults: 1, children: 0, infants: 0, totalTravelers: 1,
+      title: '', destination: '', origin: '', startDate: '', endDate: '', datesFlexible: false, flexibleMonth: '', duration: '1D/0N',
+      days: 1, nights: 0, adults: 1, children: 0, infants: 0, seniors: 0, totalTravelers: 1,
       travelStyle: 'Custom', budgetPerPerson: '', specialRequests: ''
     },
+    tripPreferences: {
+      tripType: '', pace: '', paceRhythm: '', acclimatization: '', interests: [],
+      stayPreference: '', roomStyle: '', hotelRating: null, dietaryPreference: '',
+      transportPreference: '', mobilityConstraints: [], mustInclude: [], avoid: [], customPreferences: ''
+    },
+    planningReference: null,
     pricingRules: {
       adultMultiplier: 1,
       childMultiplier: 0.7,
@@ -654,7 +664,7 @@ export function getBlankQuotationState() {
     attachments: [],
     presentationSettings: {
       template: 'journey', showComponentPrices: false, showPaymentSchedule: true,
-      showAttachments: true, showAdvisor: true, showTerms: true, showItineraryGallery: true
+      showAttachments: true, showAdvisor: true, showTerms: true, showItineraryGallery: true, showTripPreferences: false
     },
     commercialState: 'DRAFT',
     manualPricing: {
@@ -684,6 +694,7 @@ export function getBlankQuotationState() {
 
 export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName = 'Primary Stay') {
   return {
+    sourceKind: 'MANUAL', reviewStatus: 'REVIEWED', sourceLabel: '', sourceDayNumbers: [], reviewedBy: null, reviewedAt: null,
     optionId: `hotel_opt_${Date.now()}_${index}`,
     segmentId: segmentId || 'seg_1',
     segmentName: segmentName || 'Primary Stay',
@@ -715,6 +726,7 @@ export function getEmptyHotelOption(index = 1, segmentId = 'seg_1', segmentName 
 
 export function getEmptyTransportOption(index = 1) {
   return {
+    sourceKind: 'MANUAL', reviewStatus: 'REVIEWED', sourceLabel: '', sourceDayNumbers: [], reviewedBy: null, reviewedAt: null,
     optionId: `trans_opt_${Date.now()}_${index}`,
     mode: 'OTHER',
     type: '',
@@ -774,6 +786,7 @@ export function getEmptyTransportOption(index = 1) {
 
 export function getEmptyActivity(index = 1) {
   return {
+    sourceKind: 'MANUAL', reviewStatus: 'REVIEWED', sourceLabel: '', sourceDayNumbers: [], reviewedBy: null, reviewedAt: null,
     activityId: `act_${Date.now()}_${index}`,
     dayNumber: 1,
     name: '',

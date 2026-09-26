@@ -8,10 +8,14 @@
 
 export const calculateQuotationPrice = (quotationData = {}) => {
   const reqs = quotationData.tripRequirements || {};
-  const adults = Math.max(1, parseInt(reqs.adults, 10) || 2);
+  const adults = reqs.adults === undefined || reqs.adults === null || reqs.adults === ''
+    ? 2
+    : Math.max(0, parseInt(reqs.adults, 10) || 0);
   const children = Math.max(0, parseInt(reqs.children, 10) || 0);
   const infants = Math.max(0, parseInt(reqs.infants, 10) || 0);
-  const totalTravelers = adults + children + infants;
+  const seniors = Math.max(0, parseInt(reqs.seniors, 10) || 0);
+  const commercialAdults = adults + seniors;
+  const totalTravelers = adults + children + infants + seniors;
   const tripNights = Math.max(1, parseInt(reqs.nights, 10) || parseInt(reqs.days, 10) - 1 || 4);
 
   // Pricing Rules for Age Multipliers
@@ -23,7 +27,7 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   // Effective paying pax weight for per-person rate distribution
   const effectiveTravelers = Math.max(
     1,
-    Number((adults * adultMultiplier + children * childMultiplier + infants * infantMultiplier).toFixed(2))
+    Number((commercialAdults * adultMultiplier + children * childMultiplier + infants * infantMultiplier).toFixed(2))
   );
 
   // 1. Base Package Price & Internal Supplier Cost
@@ -224,7 +228,7 @@ export const calculateQuotationPrice = (quotationData = {}) => {
   const childPrice = Math.round(adultPrice * childMultiplier);
   const infantPrice = Math.round(adultPrice * infantMultiplier);
 
-  const adultTotal = Math.round(adultPrice * adults);
+  const adultTotal = Math.round(adultPrice * commercialAdults);
   const childTotal = Math.round(childPrice * children);
   const infantTotal = Math.round(infantPrice * infants);
 
@@ -246,6 +250,7 @@ export const calculateQuotationPrice = (quotationData = {}) => {
       adults,
       children,
       infants,
+      seniors,
       totalTravelers,
       nights: tripNights
     },

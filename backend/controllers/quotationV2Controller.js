@@ -9,13 +9,18 @@ import QuotationEvent from '../models/QuotationEvent.js';
 import QuotationApprovalVerification from '../models/QuotationApprovalVerification.js';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
+import Itinerary from '../models/Itinerary.js';
 import { loadAuthorizedLeadForStaff } from '../services/leadAccessService.js';
 import {
   applyQuotationAiPatch,
+  buildQuotationSourceComparison,
   buildQuotationAiImportPreview,
+  buildSmartQuotationDraft,
+  buildSmartQuotationSummary,
   generateQuotationTextDrafts,
   listImportableItineraries,
-  resolveImportSource
+  resolveImportSource,
+  sanitizeQuotationSourcePlan
 } from '../services/quotationAiService.js';
 import { getJwtSecret } from '../config/environment.js';
 import { buildQuotationPolicyDefaults } from '../config/quotationPolicyPresets.js';
@@ -116,7 +121,7 @@ const statusEntry = (status, user, reason = '') => ({
 });
 
 const editableFields = [
-  'leadId', 'customerId', 'customerSnapshot', 'tripRequirements', 'personalNote', 'itinerary',
+  'leadId', 'customerId', 'customerSnapshot', 'tripRequirements', 'tripPreferences', 'personalNote', 'itinerary',
   'hotelOptions', 'transportOptions', 'activities', 'addOns', 'attachments', 'inclusions',
   'exclusions', 'policies', 'termsAndConditions', 'cancellationPolicy', 'paymentTerms',
   'presentationSettings', 'validUntil', 'assignedTo', 'assignedToSnapshot'
@@ -143,8 +148,56 @@ const applyEditableFields = (quotation, input) => {
   const adults = asNumber(quotation.tripRequirements?.adults, 0);
   const children = asNumber(quotation.tripRequirements?.children, 0);
   const infants = asNumber(quotation.tripRequirements?.infants, 0);
-  quotation.tripRequirements.totalTravelers = Math.max(1, adults + children + infants);
+  const seniors = asNumber(quotation.tripRequirements?.seniors, 0);
+  quotation.tripRequirements.totalTravelers = Math.max(1, adults + children + infants + seniors);
   quotation.manualPricing.componentReference = calculateComponentReference(quotation);
+};
+
+const activeSmartStatuses = ['DRAFT', 'CONTENT_READY', 'AWAITING_PRICING', 'CHANGES_REQUESTED', 'READY_TO_SHARE'];
+
+const candidateCollections = {
+  hotel: { field: 'hotelOptions', id: 'optionId' },
+  transport: { field: 'transportOptions', id: 'optionId' },
+  activity: { field: 'activities', id: 'activityId' }
+};
+
+const commercialCandidateFields = new Set([
+  'costPerNight', 'pricePerNight', 'totalCost', 'totalPrice', 'taxRate', 'unitCost', 'unitPrice'
+]);
+
+const candidateUpdateFields = {
+  hotel: new Set(['label', 'hotelName', 'city', 'location', 'category', 'roomType', 'rooms', 'occupancy', 'mealPlan', 'checkIn', 'checkOut', 'nights', 'imageUrl', 'amenities', 'notes', 'recommendationType', ...commercialCandidateFields]),
+  transport: new Set(['mode', 'type', 'title', 'vehicle', 'provider', 'pickup', 'drop', 'route', 'schedule', 'reference', 'cabinClass', 'seatDetails', 'baggage', 'startDate', 'endDate', 'capacity', 'quantity', 'pricingType', 'inclusions', 'notes', 'vehicleMedia', 'documents', ...commercialCandidateFields]),
+  activity: new Set(['dayNumber', 'date', 'name', 'description', 'location', 'pricingType', 'quantity', 'isIncluded', 'isOptional', 'attachments', ...commercialCandidateFields])
+};
+
+const isAiCandidate = (item, type) => item?.sourceKind === 'AI_PLANNER'
+  || String(item?.[candidateCollections[type]?.id] || '').startsWith(type === 'activity' ? 'ai_act_' : `ai_${type}_`);
+
+const protectCandidateReviewMetadata = (quotation, input, { allowCommercial = false } = {}) => {
+  Object.entries(candidateCollections).forEach(([, { field, id }]) => {
+    if (!Array.isArray(input?.[field])) return;
+    const existing = new Map((quotation?.[field] || []).map((item) => [String(item[id]), item]));
+    input[field] = input[field].map((item) => {
+      const saved = existing.get(String(item?.[id]));
+      const protectedItem = saved ? {
+        ...item,
+        sourceKind: saved.sourceKind || 'MANUAL',
+        reviewStatus: saved.reviewStatus || (isAiCandidate(saved, field === 'activities' ? 'activity' : field === 'hotelOptions' ? 'hotel' : 'transport') ? 'SUGGESTED' : 'REVIEWED'),
+        sourceLabel: saved.sourceLabel || '',
+        sourceDayNumbers: clone(saved.sourceDayNumbers || []),
+        reviewedBy: saved.reviewedBy || null,
+        reviewedAt: saved.reviewedAt || null
+      } : { ...item, sourceKind: 'MANUAL', reviewStatus: 'REVIEWED', sourceLabel: '', sourceDayNumbers: [], reviewedBy: null, reviewedAt: null };
+      if (!allowCommercial) {
+        commercialCandidateFields.forEach((commercialField) => {
+          protectedItem[commercialField] = asNumber(saved?.[commercialField], 0);
+        });
+      }
+      return protectedItem;
+    });
+  });
+  return input;
 };
 
 const resolveShare = async (rawToken) => {
@@ -202,10 +255,77 @@ const approvalIdentity = (req, share) => {
   }
 };
 
+export const createSmartQuotationFromAiLead = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const lead = await loadAuthorizedLeadForStaff(req.params.leadId, req.user);
+    if (lead.leadType !== 'trip_enquiry' || lead.source !== 'ai_planner' || !lead.sourceItineraryId) {
+      return fail(res, 422, 'This AI Planner Lead no longer has an available source itinerary.');
+    }
+    const sourceItineraryId = lead.sourceItineraryId?._id || lead.sourceItineraryId;
+    const existing = await Quotation.findOne({
+      schemaVersion: 2,
+      leadId: lead._id,
+      sourceItineraryId,
+      status: { $in: activeSmartStatuses }
+    }).sort({ updatedAt: -1 });
+    if (existing) {
+      if (!ownsQuotation(existing, req.user)) return fail(res, 403, 'An active quotation exists for this Lead, but you cannot edit it.');
+      return res.json({ success: true, quotation: existing, isExisting: true, buildSummary: buildSmartQuotationSummary(existing) });
+    }
+    const itinerary = await Itinerary.findById(sourceItineraryId);
+    if (!itinerary) return fail(res, 409, 'This AI Planner Lead no longer has an available source itinerary.');
+    const userId = req.user._id || req.user.id;
+    const draft = buildSmartQuotationDraft({ lead: lead.toObject(), itinerary: itinerary.toObject(), actor: req.user });
+    const quotation = new Quotation({
+      ...draft,
+      schemaVersion: 2,
+      quotationNumber: await generateQuotationNumber(),
+      version: 1,
+      assignedTo: userId,
+      assignedToSnapshot: { name: actorName(req.user), email: req.user.email || '', phone: req.user.phone || '' },
+      createdBy: userId,
+      updatedBy: userId,
+      validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      status: 'DRAFT',
+      commercialState: 'DRAFT',
+      statusHistory: [statusEntry('DRAFT', req.user, 'Smart quotation created from AI Planner Lead')]
+    });
+    quotation.manualPricing.componentReference = 0;
+    await quotation.save();
+    await Lead.findByIdAndUpdate(lead._id, { status: 'IN_PROGRESS', $addToSet: { quotations: quotation._id } });
+    try {
+      await Itinerary.findByIdAndUpdate(sourceItineraryId, { lifecycleStatus: 'QUOTATION_LINKED', retentionExpiresAt: null });
+    } catch (lifecycleError) {
+      console.error('Smart Quotation Itinerary Lifecycle Update Error:', lifecycleError);
+    }
+    const buildSummary = buildSmartQuotationSummary(quotation);
+    await createQuotationEvent({
+      quotationId: quotation._id,
+      type: 'SMART_QUOTATION_CREATED',
+      actor: req.user,
+      details: {
+        sourceItineraryId,
+        sourceVersion: draft.aiImportProvenance?.sourceVersion || null,
+        leadId: lead._id,
+        itineraryDays: buildSummary.itineraryDays,
+        hotelCandidates: buildSummary.hotelCandidates,
+        transportCandidates: buildSummary.transportCandidates,
+        activityCandidates: buildSummary.activityCandidates,
+        pricingChanged: false
+      }
+    });
+    return res.status(201).json({ success: true, quotation, isExisting: false, buildSummary });
+  } catch (error) {
+    console.error('Create Smart Quotation Error:', error);
+    return fail(res, error.status || 500, error.message || 'Unable to create smart quotation.');
+  }
+};
+
 export const createQuotationV2 = async (req, res) => {
   try {
     if (!ensureDatabase(res)) return;
-    const payload = normalizeQuotationAttachmentPayload(req.body || {});
+    const payload = protectCandidateReviewMetadata(null, normalizeQuotationAttachmentPayload(req.body || {}), { allowCommercial: isCommercialAdmin(req.user) });
     const linkedLead = payload.leadId ? await loadAuthorizedLeadForStaff(payload.leadId, req.user) : null;
     if (payload.sourceItineraryId) {
       if (linkedLead && String(payload.sourceItineraryId) !== String(linkedLead.sourceItineraryId || '')) {
@@ -227,6 +347,7 @@ export const createQuotationV2 = async (req, res) => {
       updatedBy: userId,
       customerSnapshot: payload.customerSnapshot,
       tripRequirements: payload.tripRequirements,
+      tripPreferences: payload.tripPreferences || {},
       itinerary: payload.itinerary || [],
       hotelOptions: payload.hotelOptions || [],
       transportOptions: payload.transportOptions || [],
@@ -391,12 +512,16 @@ export const applyQuotationAiImport = async (req, res) => {
       conflictChoices: req.body?.conflictChoices || {}
     });
     applyEditableFields(quotation, result.quotation);
+    if (result.quotation.planningReference) quotation.planningReference = clone(result.quotation.planningReference);
     if (preview.source.itineraryId) quotation.sourceItineraryId = preview.source.itineraryId;
     quotation.aiImportProvenance = {
       sourceType: preview.source.type,
       sourceTitle: preview.source.title,
       sourceDestination: preview.source.destination,
       sourceUpdatedAt: preview.source.updatedAt || null,
+      sourceVersion: preview.source.version || null,
+      sourceGeneratedAt: preview.source.generatedAt || null,
+      buildMode: 'REIMPORT',
       importedAt: new Date(),
       importedBy: req.user._id
     };
@@ -461,7 +586,7 @@ export const updateQuotationV2 = async (req, res) => {
     if (!isCommercialAdmin(req.user) && Object.prototype.hasOwnProperty.call(req.body || {}, 'manualPricing')) {
       return fail(res, 403, 'Only Admin or Super Admin can edit commercial pricing.');
     }
-    const normalizedInput = normalizeQuotationAttachmentPayload(req.body || {});
+    const normalizedInput = protectCandidateReviewMetadata(quotation, normalizeQuotationAttachmentPayload(req.body || {}), { allowCommercial: isCommercialAdmin(req.user) });
     applyEditableFields(quotation, normalizedInput);
     if (isCommercialAdmin(req.user) && req.body?.manualPricing) {
       const commercial = req.body.manualPricing;
@@ -490,7 +615,7 @@ export const requestQuotationPricing = async (req, res) => {
     const quotation = await loadAuthorized(req, res, { edit: true });
     if (!quotation) return;
     if (quotation.manualPricing?.finalizedAt) return fail(res, 409, 'Pricing is already finalized for this revision.');
-    const validation = validateQuotationV2(quotation);
+    const validation = validateQuotationV2(quotation, { requireCandidateReview: true });
     if (validation.errors.length) return fail(res, 422, 'Complete the required proposal details before requesting pricing.', validation);
     quotation.status = 'AWAITING_PRICING';
     quotation.commercialState = 'AWAITING_PRICING';
@@ -707,6 +832,98 @@ export const getQuotationEvents = async (req, res) => {
   } catch (error) {
     console.error('List Quotation Events Error:', error);
     return fail(res, 500, 'Unable to load quotation history.');
+  }
+};
+
+export const getQuotationSourcePlan = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res);
+    if (!quotation) return;
+    if (!quotation.sourceItineraryId) return fail(res, 404, 'This quotation does not have a linked source plan.');
+    const itinerary = await Itinerary.findById(quotation.sourceItineraryId);
+    if (!itinerary) return fail(res, 404, 'The linked source plan is no longer available.');
+    const sourcePlan = sanitizeQuotationSourcePlan(itinerary.toObject());
+    const sourceChanged = Boolean(
+      (sourcePlan.version && sourcePlan.version !== quotation.aiImportProvenance?.sourceVersion)
+      || (sourcePlan.updatedAt && (!quotation.aiImportProvenance?.sourceUpdatedAt
+        || new Date(sourcePlan.updatedAt) > new Date(quotation.aiImportProvenance.sourceUpdatedAt)))
+    );
+    return res.json({ success: true, sourcePlan, sourceChanged });
+  } catch (error) {
+    console.error('Get Quotation Source Plan Error:', error);
+    return fail(res, 500, 'Unable to load the source AI plan.');
+  }
+};
+
+export const compareQuotationSourcePlan = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res);
+    if (!quotation) return;
+    if (!quotation.sourceItineraryId) return fail(res, 404, 'This quotation does not have a linked source plan.');
+    const itinerary = await Itinerary.findById(quotation.sourceItineraryId);
+    if (!itinerary) return fail(res, 404, 'The linked source plan is no longer available.');
+    return res.json({ success: true, ...buildQuotationSourceComparison(quotation.toObject(), itinerary.toObject()) });
+  } catch (error) {
+    console.error('Compare Quotation Source Plan Error:', error);
+    return fail(res, 500, 'Unable to compare the source AI plan.');
+  }
+};
+
+export const reviewQuotationCandidate = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res, { edit: true });
+    if (!quotation) return;
+    if (!activeSmartStatuses.includes(quotation.status) || quotation.manualPricing?.finalizedAt) {
+      return fail(res, 409, 'This revision is frozen. Create a new revision before reviewing suggestions.');
+    }
+    const type = String(req.params.type || '').toLowerCase();
+    const config = candidateCollections[type];
+    if (!config) return fail(res, 422, 'Select a valid candidate type.');
+    const candidate = quotation[config.field]?.find((item) => String(item[config.id]) === String(req.params.candidateId));
+    if (!candidate || !isAiCandidate(candidate, type)) return fail(res, 404, 'AI Planner candidate not found.');
+    const action = String(req.body?.action || '').toUpperCase();
+    if (!['USE', 'DISMISS', 'RESTORE'].includes(action)) return fail(res, 422, 'Select USE, DISMISS, or RESTORE.');
+    const updates = req.body?.updates && typeof req.body.updates === 'object' && !Array.isArray(req.body.updates) ? req.body.updates : {};
+    const submittedCommercialFields = Object.keys(updates).filter((key) => commercialCandidateFields.has(key));
+    if (submittedCommercialFields.length && !isCommercialAdmin(req.user)) {
+      return fail(res, 403, 'Only Admin or Super Admin can edit commercial pricing.');
+    }
+    Object.entries(updates).forEach(([key, value]) => {
+      if (candidateUpdateFields[type].has(key)) candidate.set(key, clone(value));
+    });
+    candidate.sourceKind = 'AI_PLANNER';
+    if (action === 'USE') {
+      candidate.reviewStatus = 'REVIEWED';
+      candidate.selected = true;
+      candidate.reviewedBy = req.user._id;
+      candidate.reviewedAt = new Date();
+    } else if (action === 'DISMISS') {
+      candidate.reviewStatus = 'DISMISSED';
+      candidate.selected = false;
+      candidate.reviewedBy = req.user._id;
+      candidate.reviewedAt = new Date();
+    } else {
+      candidate.reviewStatus = 'SUGGESTED';
+      candidate.selected = false;
+      candidate.reviewedBy = null;
+      candidate.reviewedAt = null;
+    }
+    quotation.updatedBy = req.user._id;
+    quotation.manualPricing.componentReference = calculateComponentReference(quotation);
+    await quotation.save();
+    await createQuotationEvent({
+      quotationId: quotation._id,
+      type: action === 'DISMISS' ? 'AI_CANDIDATE_DISMISSED' : 'AI_CANDIDATE_REVIEWED',
+      actor: req.user,
+      details: { type, candidateId: candidate[config.id], action }
+    });
+    return res.json({ success: true, quotation, candidate, validation: validateQuotationV2(quotation) });
+  } catch (error) {
+    console.error('Review Quotation Candidate Error:', error);
+    return quotationFailure(res, error, 'Unable to review this suggestion.');
   }
 };
 
@@ -1008,6 +1225,7 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     const existing = await Booking.findOne({ sourceQuotationId: quotation._id });
     if (existing) {
       await syncLeadConversionFromBooking(existing);
+      if (quotation.sourceItineraryId) await Itinerary.findByIdAndUpdate(quotation.sourceItineraryId, { lifecycleStatus: 'BOOKED', retentionExpiresAt: null }).catch((error) => console.error('Existing Booking Itinerary Lifecycle Update Error:', error));
       return res.json({ success: true, booking: existing, quotation, checkoutUrl: `/checkout?bookingId=${existing.bookingId}`, isExisting: true });
     }
     const revision = await QuotationRevision.findById(quotation.approvedRevisionId);
@@ -1018,9 +1236,9 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     const manual = snapshot.manualPricing || {};
     const finalAmount = asNumber(manual.finalCustomerPrice);
     if (finalAmount <= 0) return fail(res, 409, 'Approved revision does not contain a valid final price.');
-    const bookingHotels = (snapshot.hotelOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true));
-    const bookingTransport = (snapshot.transportOptions || []).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true));
-    const bookingActivities = (snapshot.activities || []).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true));
+    const bookingHotels = (snapshot.hotelOptions || []).filter((item) => !(isAiCandidate(item, 'hotel') && item.selected !== true));
+    const bookingTransport = (snapshot.transportOptions || []).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true));
+    const bookingActivities = (snapshot.activities || []).filter((item) => !(isAiCandidate(item, 'activity') && item.selected !== true));
     const selectedHotel = bookingHotels.find((item) => item.selected) || bookingHotels[0] || null;
     const selectedTransport = bookingTransport.filter((item) => item.selected !== false);
     const bookingId = `WLX-${new Date().getFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
@@ -1073,6 +1291,7 @@ export const createBookingFromQuotationV2 = async (req, res) => {
         statusAtConversion: quotation.status,
         customerSnapshot: customer,
         tripRequirements: journey,
+        tripPreferences: snapshot.tripPreferences || {},
         selectedHotel,
         hotelOptions: bookingHotels,
         selectedTransport,
@@ -1095,6 +1314,10 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     quotation.statusHistory.push(statusEntry('CONVERTED', req.user, `Converted from approved revision ${revision.version}`));
     await quotation.save();
     await syncLeadConversionFromBooking(booking);
+    if (quotation.sourceItineraryId) {
+      await Itinerary.findByIdAndUpdate(quotation.sourceItineraryId, { lifecycleStatus: 'BOOKED', retentionExpiresAt: null })
+        .catch((error) => console.error('Booking Itinerary Lifecycle Update Error:', error));
+    }
     await createQuotationEvent({ quotationId: quotation._id, revisionId: revision._id, type: 'BOOKING_CREATED', actor: req.user, details: { bookingId: booking._id, bookingCode: booking.bookingId, version: revision.version } });
     return res.status(201).json({ success: true, booking, quotation, checkoutUrl: `/checkout?bookingId=${booking.bookingId}`, isExisting: false });
   } catch (error) {

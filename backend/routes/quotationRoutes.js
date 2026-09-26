@@ -21,6 +21,7 @@ import {
   addQuotationAttachment,
   adminApproveQuotationV2,
   createBookingFromQuotationV2,
+  createSmartQuotationFromAiLead,
   createQuotationRevisionV2,
   createQuotationShare,
   createQuotationV2,
@@ -30,6 +31,7 @@ import {
   finalizeQuotationPricing,
   getPublicQuotationV2,
   getQuotationEvents,
+  getQuotationSourcePlan,
   getQuotationRevisionsV2,
   getQuotationShares,
   legacyQuotationOnly,
@@ -47,6 +49,8 @@ import {
   getQuotationAiSample,
   suggestQuotationAiField,
   trackPublicQuotationEvent,
+  compareQuotationSourcePlan,
+  reviewQuotationCandidate,
   updateQuotationV2,
   verifyQuotationRecipient
 } from '../controllers/quotationV2Controller.js';
@@ -74,6 +78,7 @@ router.use(protect);
 
 router.post('/calculate-preview', requireRoles('super_admin', 'admin', 'sales'), calculateQuotationPricingPreview);
 router.post('/v2', requireRoles('super_admin', 'admin', 'sales'), createQuotationV2);
+router.post('/v2/from-ai-lead/:leadId', requireRoles('super_admin', 'admin', 'sales'), createSmartQuotationFromAiLead);
 router.post('/v2/ai/import-preview', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-import-preview', limit: 60, windowMs: 3600000 }), previewQuotationAiImport);
 router.get('/v2/ai/importable-itineraries', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-itinerary-list', limit: 120, windowMs: 3600000 }), getImportableAiItineraries);
 router.post('/v2/ai/policy-defaults', requireRoles('super_admin', 'admin', 'sales'), quotationRateLimit({ action: 'ai-policy-defaults', limit: 120, windowMs: 3600000 }), getQuotationPolicyDefaults);
@@ -105,6 +110,9 @@ router.post('/:id/v2/shares', requireRoles('super_admin', 'admin', 'sales'), cre
 router.get('/:id/v2/shares', requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationShares);
 router.post('/:id/v2/shares/:shareId/revoke', requireRoles('super_admin', 'admin', 'sales'), revokeQuotationShare);
 router.get('/:id/v2/events', requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationEvents);
+router.get('/:id/v2/source-plan', requireRoles('super_admin', 'admin', 'sales'), getQuotationSourcePlan);
+router.get('/:id/v2/source-plan/compare', requireRoles('super_admin', 'admin', 'sales'), compareQuotationSourcePlan);
+router.post('/:id/v2/candidates/:type/:candidateId/review', requireRoles('super_admin', 'admin', 'sales'), reviewQuotationCandidate);
 router.post('/:id/v2/duplicate', requireRoles('super_admin', 'admin', 'sales'), duplicateQuotationV2);
 router.post('/:id/v2/attachments', requireRoles('super_admin', 'admin', 'sales'), addQuotationAttachment);
 router.delete('/:id/v2/attachments/:attachmentId', requireRoles('super_admin', 'admin', 'sales'), deleteQuotationAttachment);

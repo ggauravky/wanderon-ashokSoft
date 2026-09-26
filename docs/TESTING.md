@@ -231,6 +231,7 @@ npm run build
 # 2. Backend Unit Tests
 cd ../backend
 npm run test:ai-planner-sales-phase1
+npm run test:ai-planner-sales-phase2
 npm run test:quotation-v2
 npm run test:payment-reliability
 
@@ -239,4 +240,6 @@ cd ..
 node scripts/validateTravelData.js
 ```
 
-If all 6 steps pass without errors, your branch is ready for review!
+The Phase 2 suite covers deterministic Lead-to-Quotation mapping, exact and flexible dates, separate senior counts, stay segmentation, review-only candidates, zero commercial pricing, source comparison, public filtering, revision propagation, and additive schema contracts. Complete the relevant manual Lead, candidate-review, source-change, PDF/share, and Booking/Operations journeys against a connected development database before release.
+
+If all steps pass without errors, your branch is ready for manual review.

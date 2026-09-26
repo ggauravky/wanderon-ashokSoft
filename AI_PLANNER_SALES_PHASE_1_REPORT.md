@@ -24,7 +24,7 @@ The detail UI presents customer facts, trip summary, traveler breakdown, structu
 
 ## Quotation boundary
 
-Create Smart Quotation sends both `leadId` and authoritative `itineraryId` to `/staff/sales/quotations/new`. Existing Quotation V2 and Smart Assist behavior is preserved. Phase 1 does not auto-create a quotation, change pricing, or implement the Phase 2 aggressive autofill experience.
+Phase 1 originally handed `leadId` and the authoritative `itineraryId` to `/staff/sales/quotations/new`. Phase 2 now builds and persists the populated Quotation V2 draft server-side from the authorized Lead and its linked Itinerary. See `AI_PLANNER_SALES_PHASE_2_REPORT.md`; Phase 1 remains the source-persistence, Lead-linkage, and Sales-dossier foundation.
 
 ## Security and tests
 

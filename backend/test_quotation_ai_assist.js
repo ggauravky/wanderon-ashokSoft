@@ -114,19 +114,21 @@ test('normalization and deterministic mapping never carry imported pricing', () 
   assert.equal(patch.hotelOptions.every((item) => item.unitPrice === undefined && item.pricePerNight === 0), true);
 });
 
-test('traveler breakdown counts seniors with adults and preserves senior fact', () => {
+test('traveler breakdown preserves seniors as a separate traveler category', () => {
   const patch = buildDeterministicPatch(baseItinerary);
-  assert.equal(patch.tripRequirements.adults, 3);
+  assert.equal(patch.tripRequirements.adults, 2);
+  assert.equal(patch.tripRequirements.seniors, 1);
   assert.equal(patch.tripRequirements.children, 1);
   assert.equal(patch.tripRequirements.infants, 1);
-  assert.match(patch.tripRequirements.specialRequests, /Senior travelers: 1/);
+  assert.equal(patch.tripRequirements.totalTravelers, 5);
 });
 
 test('flexible month does not invent exact dates', () => {
   const patch = buildDeterministicPatch(baseItinerary);
   assert.equal(patch.tripRequirements.startDate, '');
   assert.equal(patch.tripRequirements.endDate, '');
-  assert.match(patch.tripRequirements.specialRequests, /October 2026/);
+  assert.equal(patch.tripRequirements.datesFlexible, true);
+  assert.equal(patch.tripRequirements.flexibleMonth, 'October 2026');
 });
 
 test('itinerary activity arrays map to readable strings, not raw objects', () => {

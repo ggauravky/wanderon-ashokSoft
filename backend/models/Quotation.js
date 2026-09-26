@@ -8,6 +8,15 @@ import {
   normalizeTransportDocumentType
 } from '../constants/quotationAttachments.js';
 
+const candidateReviewFields = {
+  sourceKind: { type: String, enum: ['MANUAL', 'AI_PLANNER'], default: 'MANUAL' },
+  reviewStatus: { type: String, enum: ['SUGGESTED', 'REVIEWED', 'DISMISSED'], default: 'REVIEWED' },
+  sourceLabel: { type: String, default: '' },
+  sourceDayNumbers: { type: [Number], default: [] },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  reviewedAt: { type: Date, default: null }
+};
+
 const quotationAttachmentSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
@@ -41,6 +50,7 @@ const quotationAttachmentSchema = new mongoose.Schema(
 
 const hotelOptionSchema = new mongoose.Schema(
   {
+    ...candidateReviewFields,
     optionId: { type: String, required: true },
     segmentId: { type: String, default: 'seg_default' },
     segmentName: { type: String, default: 'Primary Stay' },
@@ -129,6 +139,7 @@ const transportDocumentSchema = new mongoose.Schema(
 
 const transportOptionSchema = new mongoose.Schema(
   {
+    ...candidateReviewFields,
     optionId: { type: String, required: true },
     mode: {
       type: String,
@@ -214,6 +225,7 @@ const transportOptionSchema = new mongoose.Schema(
 
 const activitySchema = new mongoose.Schema(
   {
+    ...candidateReviewFields,
     activityId: { type: String, required: true },
     dayNumber: { type: Number, default: 1 },
     date: { type: Date },
@@ -372,14 +384,18 @@ const quotationSchema = new mongoose.Schema(
     tripRequirements: {
       title: { type: String, required: [true, 'Trip title is required'], trim: true },
       destination: { type: String, required: [true, 'Destination is required'], trim: true },
+      origin: { type: String, default: '', trim: true },
       startDate: { type: Date },
       endDate: { type: Date },
+      datesFlexible: { type: Boolean, default: false },
+      flexibleMonth: { type: String, default: '', trim: true },
       duration: { type: String, default: '5D/4N' },
       days: { type: Number, default: 5, min: 1 },
       nights: { type: Number, default: 4, min: 0 },
-      adults: { type: Number, default: 2, min: 1 },
+      adults: { type: Number, default: 2, min: 0 },
       children: { type: Number, default: 0, min: 0 },
       infants: { type: Number, default: 0, min: 0 },
+      seniors: { type: Number, default: 0, min: 0 },
       totalTravelers: { type: Number, default: 2, min: 1 },
       travelStyle: { 
         type: String, 
@@ -388,6 +404,36 @@ const quotationSchema = new mongoose.Schema(
       },
       budgetPerPerson: { type: Number, default: 0, min: 0 },
       specialRequests: { type: String, default: '' }
+    },
+
+    tripPreferences: {
+      tripType: { type: String, default: '' },
+      pace: { type: String, default: '' },
+      paceRhythm: { type: String, default: '' },
+      acclimatization: { type: String, default: '' },
+      interests: { type: [String], default: [] },
+      stayPreference: { type: String, default: '' },
+      roomStyle: { type: String, default: '' },
+      hotelRating: { type: Number, default: null, min: 0, max: 5 },
+      dietaryPreference: { type: String, default: '' },
+      transportPreference: { type: String, default: '' },
+      mobilityConstraints: { type: [String], default: [] },
+      mustInclude: { type: [String], default: [] },
+      avoid: { type: [String], default: [] },
+      customPreferences: { type: String, default: '' }
+    },
+
+    planningReference: {
+      sourceItineraryVersion: { type: Number, default: null },
+      sourceGeneratedAt: { type: Date, default: null },
+      sourceUpdatedAt: { type: Date, default: null },
+      plannerBudgetAmount: { type: Number, default: null, min: 0 },
+      plannerBudgetScope: { type: String, enum: ['', 'UNSPECIFIED', 'TOTAL', 'PER_PERSON'], default: '' },
+      aiEstimatedTotal: { type: Number, default: null, min: 0 },
+      currency: { type: String, default: 'INR' },
+      budgetBreakdown: { type: mongoose.Schema.Types.Mixed, default: null },
+      bestTimeToVisit: { type: String, default: '' },
+      seasonContext: { type: String, default: '' }
     },
 
     // Pricing Rules for Age Categories & Concessions
@@ -451,7 +497,8 @@ const quotationSchema = new mongoose.Schema(
       showAttachments: { type: Boolean, default: true },
       showAdvisor: { type: Boolean, default: true },
       showTerms: { type: Boolean, default: true },
-      showItineraryGallery: { type: Boolean, default: true }
+      showItineraryGallery: { type: Boolean, default: true },
+      showTripPreferences: { type: Boolean, default: false }
     },
 
     commercialState: {
@@ -608,6 +655,9 @@ const quotationSchema = new mongoose.Schema(
       sourceTitle: { type: String, default: '' },
       sourceDestination: { type: String, default: '' },
       sourceUpdatedAt: { type: Date, default: null },
+      sourceVersion: { type: Number, default: null },
+      sourceGeneratedAt: { type: Date, default: null },
+      buildMode: { type: String, enum: ['', 'PREVIEW', 'SMART_BUILD', 'REIMPORT', 'AI_LEAD_SMART_BUILD'], default: '' },
       importedAt: { type: Date, default: null },
       importedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
     },

@@ -2,6 +2,13 @@ const numeric = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const text = (value) => typeof value === 'string' ? value.trim() : '';
 const list = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
 const unique = (items) => [...new Set(items.map(text).filter(Boolean))];
+const isAiCandidate = (item, type) => item?.sourceKind === 'AI_PLANNER'
+  || (type === 'hotel' && String(item?.optionId || '').startsWith('ai_hotel_'))
+  || (type === 'transport' && String(item?.optionId || '').startsWith('ai_transport_'))
+  || (type === 'activity' && String(item?.activityId || '').startsWith('ai_act_'));
+const travelerLabel = (travelers) => [
+  ['Adult', travelers.adults], ['Child', travelers.children], ['Infant', travelers.infants], ['Senior', travelers.seniors]
+].filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}${count === 1 ? '' : label === 'Child' ? 'ren' : 's'}`).join(' · ');
 
 const attachmentAllowed = (attachment, { approved, booked }) => {
   const visibility = attachment?.visibility || 'INTERNAL_ONLY';
@@ -92,16 +99,17 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
     showAttachments: quotation.presentationSettings?.showAttachments !== false,
     showAdvisor: quotation.presentationSettings?.showAdvisor !== false,
     showTerms: quotation.presentationSettings?.showTerms !== false,
-    showItineraryGallery: quotation.presentationSettings?.showItineraryGallery !== false
+    showItineraryGallery: quotation.presentationSettings?.showItineraryGallery !== false,
+    showTripPreferences: quotation.presentationSettings?.showTripPreferences === true
   };
   const pricingSource = quotation.pricing?.finalCustomerPrice !== undefined ? quotation.pricing : (quotation.manualPricing || {});
   const status = text(options.status || quotation.status || quotation.commercialState || 'DRAFT').toUpperCase();
   const approved = status === 'APPROVED' || Boolean(quotation.approval?.approvedAt);
   const booked = status === 'CONVERTED' || Boolean(quotation.bookingId);
   const itinerary = list(quotation.itinerary).map(safeItinerary);
-  const hotels = list(quotation.hotelOptions).filter((item) => !(String(item.optionId || '').startsWith('ai_hotel_') && item.selected !== true)).map(safeHotel).sort((a, b) => priority(a) - priority(b));
-  const transport = list(quotation.transportOptions).filter((item) => !(String(item.optionId || '').startsWith('ai_transport_') && item.selected !== true)).map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
-  const activities = list(quotation.activities).filter((item) => !(String(item.activityId || '').startsWith('ai_act_') && item.selected !== true)).map((item, index) => ({
+  const hotels = list(quotation.hotelOptions).filter((item) => !(isAiCandidate(item, 'hotel') && item.selected !== true)).map(safeHotel).sort((a, b) => priority(a) - priority(b));
+  const transport = list(quotation.transportOptions).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true)).map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
+  const activities = list(quotation.activities).filter((item) => !(isAiCandidate(item, 'activity') && item.selected !== true)).map((item, index) => ({
     id: item.activityId || String(index), dayNumber: numeric(item.dayNumber), date: item.date || '', name: text(item.name),
     description: text(item.description), location: text(item.location), selected: item.selected !== false,
     optional: item.isOptional === true
@@ -118,8 +126,15 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
     ...transport.flatMap((item) => item.vehicleMedia.map((media) => media.url))
   ]);
   const totalTravelers = numeric(quotation.tripRequirements?.totalTravelers)
-    || numeric(quotation.tripRequirements?.adults) + numeric(quotation.tripRequirements?.children) + numeric(quotation.tripRequirements?.infants)
+    || numeric(quotation.tripRequirements?.adults) + numeric(quotation.tripRequirements?.children) + numeric(quotation.tripRequirements?.infants) + numeric(quotation.tripRequirements?.seniors)
     || 1;
+  const travelerCounts = {
+    adults: numeric(quotation.tripRequirements?.adults), children: numeric(quotation.tripRequirements?.children),
+    infants: numeric(quotation.tripRequirements?.infants), seniors: numeric(quotation.tripRequirements?.seniors), total: totalTravelers
+  };
+  const dateLabel = quotation.tripRequirements?.datesFlexible === true
+    ? [text(quotation.tripRequirements?.flexibleMonth), 'Flexible dates'].filter(Boolean).join(' · ')
+    : '';
   const finalCustomerPrice = numeric(pricingSource.finalCustomerPrice);
   const depositAmount = numeric(pricingSource.depositAmount);
   const visibility = { approved, booked };
@@ -164,16 +179,20 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
     journey: {
       title: text(quotation.tripRequirements?.title) || 'A thoughtfully composed journey',
       destination: text(quotation.tripRequirements?.destination),
+      origin: text(quotation.tripRequirements?.origin),
       startDate: quotation.tripRequirements?.startDate || '',
       endDate: quotation.tripRequirements?.endDate || '',
+      datesFlexible: quotation.tripRequirements?.datesFlexible === true,
+      flexibleMonth: text(quotation.tripRequirements?.flexibleMonth),
       duration: text(quotation.tripRequirements?.duration) || `${numeric(quotation.tripRequirements?.days) || itinerary.length} days`,
       days: numeric(quotation.tripRequirements?.days) || itinerary.length,
       nights: numeric(quotation.tripRequirements?.nights),
       travelStyle: text(quotation.tripRequirements?.travelStyle),
       travelers: {
-        adults: numeric(quotation.tripRequirements?.adults), children: numeric(quotation.tripRequirements?.children),
-        infants: numeric(quotation.tripRequirements?.infants), total: totalTravelers
+        ...travelerCounts,
+        label: travelerLabel(travelerCounts)
       },
+      dateLabel,
       routeStops,
       specialRequests: text(quotation.tripRequirements?.specialRequests),
       personalNote: text(quotation.personalNote),
@@ -181,6 +200,11 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
       secondaryImages: images.slice(1, 5),
       highlights
     },
+    preferences: settings.showTripPreferences ? {
+      interests: list(quotation.tripPreferences?.interests).map(text).filter(Boolean),
+      stayPreference: text(quotation.tripPreferences?.stayPreference),
+      dietaryPreference: text(quotation.tripPreferences?.dietaryPreference)
+    } : null,
     itinerary,
     hotels,
     transport,

@@ -149,6 +149,7 @@ npm run dev                    # Start Express with native watcher (--watch)
 npm start                      # Production server start
 npm run test:quotation-v2      # Run Quotation V2 engine unit tests
 npm run test:ai-planner-sales-phase1 # Verify persisted-plan, queue, token, TTL, dossier, and Lead-idempotency contracts
+npm run test:ai-planner-sales-phase2 # Verify one-click Smart Build, mapping, candidate safety, source comparison, and snapshots
 npm run test:payment-reliability # Run Razorpay HMAC crypto & math tests
 npm run test:razorpay          # Run Razorpay test mode connectivity check
 npm run payment:inspect -- <id># Inspect booking payment state (read-only diagnostic)
@@ -166,6 +167,7 @@ Comprehensive engineering documentation is available in the `docs/` directory:
 - 🔑 [**Environment Variables Reference**](docs/ENVIRONMENT_VARIABLES.md): Complete catalog of required and optional configuration keys.
 - 🏛️ [**System Architecture & Design**](docs/ARCHITECTURE.md): Request lifecycles, authentication, RBAC, Quotation V2, and payment workflows.
 - 🧪 [**Testing & Diagnostics**](docs/TESTING.md): Test classifications, safety rules, and validation commands.
+- 🧭 [**AI Planner Sales Phase 2 Report**](AI_PLANNER_SALES_PHASE_2_REPORT.md): One-click quotation architecture, review controls, pricing isolation, and verification.
 - 🤝 [**Contributing Guidelines**](docs/CONTRIBUTING.md): Git branch conventions, line endings, case sensitivity rules, and PR checklists.
 - 🛠️ [**Troubleshooting Guide**](docs/TROUBLESHOOTING.md): Solutions for port conflicts, MongoDB DNS SRV issues, and session debugging.
 - 🚀 [**Deployment Operations**](docs/DEPLOYMENT.md): Production setup for Vercel (frontend), Render (backend), and Razorpay live webhooks.

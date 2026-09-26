@@ -134,10 +134,15 @@ const stripEmpty = (value) => {
   return value;
 };
 
+const reviewedForContext = (item, prefix) => {
+  const aiCandidate = item?.sourceKind === 'AI_PLANNER' || String(item?.optionId || item?.activityId || '').startsWith(prefix);
+  return !aiCandidate || item.reviewStatus === 'REVIEWED';
+};
+
 const selectedServices = (quotation = {}) => ({
-  hotels: (quotation.hotelOptions || []).filter((item) => item.selected === true && item.hotelName).map((item) => ({ name: trimmed(item.hotelName, 120), city: trimmed(item.city, 80), mealPlan: trimmed(item.mealPlan, 80) })),
-  transport: (quotation.transportOptions || []).filter((item) => item.selected === true).map((item) => ({ title: trimmed(item.title || item.vehicle || item.mode, 120), from: trimmed(item.pickup || item.route?.from, 80), to: trimmed(item.drop || item.route?.to, 80) })),
-  activities: (quotation.activities || []).filter((item) => item.selected === true && item.isIncluded === true && item.name).map((item) => trimmed(item.name, 120)),
+  hotels: (quotation.hotelOptions || []).filter((item) => item.selected === true && reviewedForContext(item, 'ai_hotel_') && item.hotelName).map((item) => ({ name: trimmed(item.hotelName, 120), city: trimmed(item.city, 80), mealPlan: trimmed(item.mealPlan, 80) })),
+  transport: (quotation.transportOptions || []).filter((item) => item.selected === true && reviewedForContext(item, 'ai_transport_')).map((item) => ({ title: trimmed(item.title || item.vehicle || item.mode, 120), from: trimmed(item.pickup || item.route?.from, 80), to: trimmed(item.drop || item.route?.to, 80) })),
+  activities: (quotation.activities || []).filter((item) => item.selected === true && reviewedForContext(item, 'ai_act_') && item.isIncluded === true && item.name).map((item) => trimmed(item.name, 120)),
   addOns: (quotation.addOns || []).filter((item) => item.selected === true && item.name).map((item) => trimmed(item.name, 120))
 });
 
@@ -168,8 +173,15 @@ export const buildFieldContext = (quotation = {}, field, index = 0) => {
   if (collection && !row && field !== 'itinerary.missingDescriptions') throw Object.assign(new Error('Select a valid quotation item.'), { status: 422 });
 
   let context = { field, current };
-  if (field === 'journey.title') context.trip = tripContext(trip, ['destination', 'duration', 'travelStyle']);
-  else if (field === 'journey.personalNote') context.trip = tripContext(trip, ['destination', 'duration', 'travelStyle', 'specialRequests']);
+  const preferences = quotation.tripPreferences || {};
+  const safePreferences = stripEmpty({
+    tripType: trimmed(preferences.tripType, 100), pace: trimmed(preferences.pace || preferences.paceRhythm, 100),
+    interests: cleanList(preferences.interests, 12, 100), stayPreference: trimmed(preferences.stayPreference, 120),
+    dietaryPreference: trimmed(preferences.dietaryPreference, 120), mustInclude: cleanList(preferences.mustInclude, 12, 140),
+    avoid: cleanList(preferences.avoid, 12, 140), customPreferences: trimmed(preferences.customPreferences, 300)
+  });
+  if (field === 'journey.title') { context.trip = tripContext(trip, ['origin', 'destination', 'duration', 'travelStyle']); context.preferences = safePreferences; }
+  else if (field === 'journey.personalNote') { context.trip = tripContext(trip, ['origin', 'destination', 'duration', 'travelStyle', 'specialRequests']); context.preferences = safePreferences; }
   else if (field === 'journey.specialRequests' || field === 'customer.notes') context.trip = tripContext(trip, ['destination']);
   else if (field === 'itinerary.missingDescriptions') context.missingDays = (quotation.itinerary || [])
     .filter((day) => !trimmed(day.description)).slice(0, 21).map((day) => stripEmpty({
