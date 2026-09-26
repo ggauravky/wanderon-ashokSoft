@@ -92,7 +92,7 @@ test('template registry preserves internal keys and exposes professional names',
 });
 
 test('PDF filenames include the immutable template identity', () => {
-  assert.equal(quotationPdfFileName(rawQuotation(), 'minimal'), 'WanderLuxe_WLX-QA-2026_v4_Expedition-Dossier.pdf');
+  assert.equal(quotationPdfFileName(rawQuotation(), 'minimal'), 'WanderLuxe_WLX-QA-2026_Expedition-Dossier.pdf');
 });
 
 test('hotel gallery primary image and transport media survive the customer model', () => {
@@ -111,12 +111,17 @@ test('hotel gallery primary image and transport media survive the customer model
   assert.equal(model.transport[0].documents[0].relation.kind, 'transport');
 });
 
-test('hotel continuation pages preserve every secondary gallery image', () => {
+test('hotel PDF gallery respects the template image budget without duplicating the hero', () => {
   const gallery = Array.from({ length: 7 }, (_, index) => ({ url: `https://example.com/stay-${index}.jpg` }));
-  const parts = splitHotel({ id: 'hotel-1', heroImage: gallery[0], gallery, notes: '', amenities: [], documents: [] });
-  assert.equal(parts.length, 3);
-  assert.deepEqual(parts.flatMap((part) => part.gallery.map((image) => image.url)), gallery.slice(1).map((image) => image.url));
+  const parts = splitHotel({ id: 'hotel-1', heroImage: gallery[0], gallery, notes: '', amenities: [], documents: [] }, 3);
+  assert.equal(parts.length, 1);
+  assert.deepEqual(parts.flatMap((part) => part.gallery.map((image) => image.url)), gallery.slice(1, 4).map((image) => image.url));
   assert.equal(parts[0].heroImage.url, gallery[0].url);
+});
+
+test('split itinerary fragments have stable unique render keys', () => {
+  const fragments = chunkItinerary([{ day: 4, title: 'Long day', description: 'A detailed sentence. '.repeat(100) }], 'minimal').flat();
+  assert.equal(new Set(fragments.map((item) => item.fragmentId)).size, fragments.length);
 });
 
 test('document visibility follows approval and booking, with no internal or unsafe links', () => {
@@ -131,6 +136,6 @@ test('document visibility follows approval and booking, with no internal or unsa
   const ids = (overrides = {}) => buildQuotationPresentationModel({ ...quote, ...overrides }).allCustomerDocuments.map((item) => item.id);
   assert.deepEqual(ids(), ['visible']);
   assert.deepEqual(ids({ status: 'APPROVED' }), ['visible', 'approval']);
-  assert.deepEqual(ids({ status: 'CONVERTED' }), ['visible', 'booking']);
+  assert.deepEqual(ids({ status: 'CONVERTED' }), ['visible', 'approval', 'booking']);
   assert.deepEqual(ids({ status: 'APPROVED', booked: true }), ['visible', 'approval', 'booking']);
 });

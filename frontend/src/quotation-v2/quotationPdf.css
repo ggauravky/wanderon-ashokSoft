@@ -56,7 +56,9 @@
 .pdf-hotel-gallery figcaption, .pdf-image-caption { margin: 4px 0 0; font-size: 8px; line-height: 1.35; opacity: .6; }
 .pdf-transport-heading { display: flex; align-items: center; gap: 10px; }
 .pdf-transport-heading svg { flex: none; }
-.pdf-transport-image { width: 100%; height: 150px; margin-top: 12px; border-radius: 4px; object-fit: cover; }
+.pdf-transport-media { display: grid; grid-template-columns: 1fr; gap: 7px; height: 150px; margin-top: 12px; }
+.pdf-transport-media.has-secondary { grid-template-columns: 1.35fr .65fr; }
+.pdf-transport-image { width: 100%; height: 150px; border-radius: 4px; object-fit: cover; }
 .pdf-document-available { margin-top: 10px !important; font-size: 9px !important; font-weight: 700; opacity: .9 !important; }
 .pdf-card-kicker { margin-bottom: 7px; opacity: .65; }
 .pdf-card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }

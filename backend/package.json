@@ -16,6 +16,7 @@
     "test:quotation-v2": "node --test test_quotation_v2.js",
     "test:quotation-pdf": "node --test test_quotation_pdf_renderer.js",
     "qa:quotation-pdf": "node scripts/qaQuotationPdf.js",
+    "qa:quotation-pdf-server": "node scripts/qaQuotationPdfServer.js",
     "test:operations-phase1": "node --test test_operations_phase1.js",
     "test:operations-phase2": "node --test test_operations_phase2.js",
     "test:operations-phase3": "node --test test_operations_phase3.js",

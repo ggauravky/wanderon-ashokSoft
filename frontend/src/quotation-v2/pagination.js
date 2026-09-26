@@ -34,7 +34,8 @@ export const chunkItinerary = (items, templateKey) => {
 };
 
 export const chunkHotels = (items, templateKey) => {
-  const fragments = items.flatMap(splitHotel);
+  const galleryLimit = templateKey === 'signature_luxe' ? 3 : templateKey === 'minimal' ? 1 : 2;
+  const fragments = items.flatMap((hotel) => splitHotel(hotel, galleryLimit));
   return chunkByWeight(fragments, templateKey === 'signature_luxe' ? 1 : 2.4, (item) => item.continued ? 1.1 : 1.5 + (item.heroImage ? 0.5 : 0));
 };
 
@@ -66,7 +67,8 @@ const splitText = (value, maxLength = 1150) => {
 export const splitItineraryDay = (day) => {
   const fields = ['description', 'morning', 'afternoon', 'evening', 'transferDetails'];
   const segments = fields.flatMap((field) => splitText(day[field], 550).map((value) => ({ field, value })));
-  if (!segments.length) return [day];
+  const fragmentBase = day.id || day.day || 'day';
+  if (!segments.length) return [{ ...day, fragmentId: `${fragmentBase}-0` }];
   const empty = () => ({ ...day, description: '', morning: '', afternoon: '', evening: '', transferDetails: '', activityHighlights: [] });
   const output = [];
   let current = empty();
@@ -82,14 +84,14 @@ export const splitItineraryDay = (day) => {
   });
   current.activityHighlights = day.activityHighlights || [];
   output.push(current);
-  return output;
+  return output.map((fragment, index) => ({ ...fragment, fragmentId: `${fragmentBase}-${index}` }));
 };
 
-export const splitHotel = (hotel) => {
+export const splitHotel = (hotel, galleryLimit = 2) => {
   const notes = splitText(hotel.notes, 700);
   const amenities = chunkByWeight(hotel.amenities || [], 12, () => 1);
-  const gallery = (hotel.gallery || []).filter((image) => image.url !== hotel.heroImage?.url);
-  const galleryChunks = chunkByWeight(gallery, 2, () => 1);
+  const gallery = (hotel.gallery || []).filter((image) => image.url !== hotel.heroImage?.url).slice(0, galleryLimit);
+  const galleryChunks = gallery.length ? [gallery] : [];
   const parts = Math.max(1, notes.length, amenities.length, galleryChunks.length);
   return Array.from({ length: parts }, (_, index) => ({
     ...hotel,

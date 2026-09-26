@@ -756,8 +756,9 @@ export const downloadQuotationPdfV2 = async (req, res) => {
     const dto = buildPublicRevisionDto({ quotation, revision, share });
     dto.superseded = revision.status === 'SUPERSEDED' || Boolean(quotation.latestSharedRevisionId && String(quotation.latestSharedRevisionId) !== String(revision._id));
     const { bytes, pageCount } = await renderQuotationPdf(dto, templateKey);
-    const basename = String(quotation.quotationNumber || 'Quotation').replace(/[^A-Za-z0-9_-]/g, '_');
-    const fileName = `WanderLuxe_${basename}_v${revision.version}_${templateKey}.pdf`;
+    const basename = String(quotation.quotationNumber || 'Quotation').replace(/[^A-Za-z0-9_-]/g, '-');
+    const templateName = { signature_luxe: 'Signature-Luxe', journey: 'Journey-Journal', minimal: 'Expedition-Dossier' }[templateKey];
+    const fileName = `WanderLuxe_${basename}_${templateName}.pdf`;
     console.info('Quotation PDF rendered', { quotationId: String(quotation._id), revisionId: String(revision._id), templateKey, pageCount, bytes: bytes.length, durationMs: Date.now() - started });
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${fileName}"`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
     return res.send(bytes);

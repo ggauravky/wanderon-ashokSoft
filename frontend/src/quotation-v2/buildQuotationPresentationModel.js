@@ -127,8 +127,10 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   };
   const pricingSource = quotation.pricing?.finalCustomerPrice !== undefined ? quotation.pricing : (quotation.manualPricing || {});
   const status = text(options.status || quotation.status || quotation.commercialState || 'DRAFT').toUpperCase();
-  const approved = status === 'APPROVED' || Boolean(quotation.approval?.approvedAt);
-  const booked = status === 'CONVERTED' || Boolean(quotation.bookingId || quotation.booked);
+  const booked = ['BOOKED', 'CONVERTED'].includes(status) || Boolean(quotation.bookingId || quotation.booked);
+  // Booking is downstream of approval. Treating the states as mutually exclusive
+  // made AFTER_APPROVAL documents disappear from an otherwise valid booked PDF.
+  const approved = booked || status === 'APPROVED' || Boolean(quotation.approval?.approvedAt);
   const itinerary = list(quotation.itinerary).map(safeItinerary);
   const rawHotels = list(quotation.hotelOptions).filter((item) => !(isAiCandidate(item, 'hotel') && item.selected !== true));
   const rawTransport = list(quotation.transportOptions).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true));

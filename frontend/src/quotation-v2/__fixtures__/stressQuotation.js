@@ -58,7 +58,8 @@ export const brokenMediaQuotation = {
   ...minimalQuotation,
   quotationNumber: 'WL-Q-BROKEN',
   tripRequirements: { ...minimalQuotation.tripRequirements, coverImage: '/missing-pdf-image.jpg' },
-  hotelOptions: [{ ...hotel(1), imageUrl: '/missing-hotel-image.jpg', gallery: [{ url: '/missing-gallery.jpg', isPrimary: true }] }]
+  hotelOptions: [{ ...hotel(1), imageUrl: '/missing-hotel-image.jpg', gallery: [{ url: '/missing-gallery.jpg', isPrimary: true }] }],
+  attachments: [{ id: 'broken-pdf', category: 'GENERAL', title: 'Unavailable PDF preview', mimeType: 'application/pdf', secureUrl: 'https://example.com/broken.pdf?invalid=1', visibility: 'CUSTOMER_VISIBLE' }]
 };
 
 export const extremeQuotation = {

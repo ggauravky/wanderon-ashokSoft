@@ -286,8 +286,8 @@ const publicAddOn = (item = {}, context) => ({
 
 export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
   const snapshot = deepClone(revision.snapshot);
-  const approved = revision.status === 'APPROVED' || Boolean(revision.approval?.approvedAt);
   const booked = Boolean(quotation.bookingId);
+  const approved = booked || revision.status === 'APPROVED' || Boolean(revision.approval?.approvedAt);
   const showAttachments = share.allowAttachments && snapshot.presentationSettings?.showAttachments !== false;
   const context = {
     approved,

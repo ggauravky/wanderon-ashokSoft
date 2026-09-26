@@ -62,12 +62,13 @@ const mediaAssetSchema = new mongoose.Schema(
       destination: { type: Boolean, default: true },
       tripCard: { type: Boolean, default: true },
       hero: { type: Boolean, default: false },
+      hotel: { type: Boolean, default: false },
       gallery: { type: Boolean, default: true }
     },
     source: {
       sourceType: {
         type: String,
-        enum: ['ADMIN_UPLOAD', 'PROJECT_ASSET', 'AUTHORIZED_EXTERNAL_SOURCE', 'PARTNER_MEDIA', 'UNSPLASH_CURATED', 'PEXELS_CURATED'],
+        enum: ['ADMIN_UPLOAD', 'STAFF_UPLOAD', 'PROJECT_ASSET', 'AUTHORIZED_EXTERNAL_SOURCE', 'PARTNER_MEDIA', 'UNSPLASH_CURATED', 'PEXELS_CURATED'],
         default: 'PROJECT_ASSET'
       },
       attribution: { type: String, default: 'WanderLuxe Verified Media' },

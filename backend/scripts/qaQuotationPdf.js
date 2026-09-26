@@ -7,7 +7,7 @@ import { chromium } from 'playwright-chromium';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const output = path.join(root, 'tmp', 'pdfs');
 const base = process.env.PDF_QA_BASE_URL || 'http://127.0.0.1:5180';
-const fixtures = (process.env.PDF_QA_FIXTURES || 'stress,minimal,broken').split(',').map((item) => item.trim());
+const fixtures = (process.env.PDF_QA_FIXTURES || 'stress,minimal,broken,extreme').split(',').map((item) => item.trim());
 const templates = ['signature_luxe', 'journey', 'minimal'];
 const executablePath = process.env.CHROME_EXECUTABLE_PATH || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined);
 
@@ -24,8 +24,14 @@ try {
     for (const template of templates) {
       const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
       try {
+        const browserErrors = [];
+        page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(message.text()); });
+        page.on('pageerror', (error) => browserErrors.push(error.message));
+        page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`${response.status()} ${response.url()}`); });
+        page.on('requestfailed', (request) => browserErrors.push(`${request.failure()?.errorText || 'request failed'} ${request.url()}`));
         await page.route('https://example.com/**', (route) => {
-          const isPdf = route.request().url().endsWith('.pdf');
+          const requestUrl = new URL(route.request().url());
+          const isPdf = requestUrl.pathname.endsWith('.pdf') && !requestUrl.searchParams.has('invalid');
           return route.fulfill({ status: 200, contentType: isPdf ? 'application/pdf' : 'image/png', body: isPdf ? pdfTicket : imageTicket,
             headers: { 'access-control-allow-origin': '*' } });
         });
@@ -34,9 +40,12 @@ try {
         const report = await page.evaluate(() => window.__WANDERLUXE_PDF_REPORT__);
         assert(report.layout.valid, `${fixture}/${template} overflow: ${JSON.stringify(report.layout.pages.filter((entry) => entry.verticalOverflowPx > 3 || entry.horizontalOverflowPx > 3))}`);
         assert(report.layout.pages.length > 0);
-        if (fixture === 'broken') assert(report.assets.failedImages > 0, `${template} did not render a broken-image fallback`);
+        if (fixture === 'broken') {
+          assert(report.assets.failedImages > 0, `${template} did not render a broken-image fallback`);
+          assert(report.assets.documentPreviewFailures > 0, `${template} did not render a broken-PDF fallback`);
+        }
         if (fixture === 'stress') {
-          assert.equal(report.assets.documentPreviewFailures, 0);
+          assert.equal(report.assets.documentPreviewFailures, 0, `PDF preview errors: ${browserErrors.join(' | ')}`);
           const bytes = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true, margin: { top: 0, bottom: 0, left: 0, right: 0 } });
           assert.equal(bytes.subarray(0, 4).toString(), '%PDF');
           assert(bytes.length > 10000);

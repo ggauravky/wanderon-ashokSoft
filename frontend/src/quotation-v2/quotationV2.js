@@ -76,7 +76,6 @@ const PDF_TEMPLATE_NAMES = { signature_luxe: 'Signature-Luxe', journey: 'Journey
 
 export const quotationPdfFileName = (quotation, templateKey) => {
   const numberValue = String(quotation?.quotationNumber || 'quotation').replace(/[^a-z0-9_-]/gi, '-');
-  const version = quotation?.version || 1;
   const template = templateKey ? `_${PDF_TEMPLATE_NAMES[templateKey] || String(templateKey).replace(/[^a-z0-9_-]/gi, '-')}` : '';
-  return `WanderLuxe_${numberValue}_v${version}${template}.pdf`;
+  return `WanderLuxe_${numberValue}${template}.pdf`;
 };
