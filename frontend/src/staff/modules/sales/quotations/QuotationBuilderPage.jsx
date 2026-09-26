@@ -25,8 +25,16 @@ const QuotationBuilderPage = () => {
     let cancelled = false;
     setLoadingLead(true);
     setLeadError('');
+    setLead(null);
     getLeadByIdApi(leadId)
-      .then((data) => { if (!cancelled) setLead(data); })
+      .then((data) => {
+        if (cancelled) return;
+        if (!data || (!data._id && !data.id)) {
+          setLeadError('The linked Expert Request could not be loaded.');
+          return;
+        }
+        setLead(data);
+      })
       .catch((error) => { if (!cancelled) setLeadError(error.message || 'Unable to load the linked Expert Request.'); })
       .finally(() => { if (!cancelled) setLoadingLead(false); });
     return () => { cancelled = true; };
