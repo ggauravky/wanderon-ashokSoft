@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Lead, { generateLeadReferenceId } from '../models/Lead.js';
 import Itinerary from '../models/Itinerary.js';
@@ -9,7 +10,7 @@ import { compareLeadPriority, withLeadPriority } from '../utils/leadPriority.js'
 import { recordStaffActivity } from '../services/staffActivityService.js';
 import { hasMeaningfulAttribution, resolveLeadAttribution } from '../services/marketingAttributionService.js';
 import { canStaffAccessLead } from '../services/leadAccessService.js';
-import { verifyItineraryHandoffToken } from '../services/itineraryHandoffService.js';
+import { authorizeItineraryLeadHandoff } from '../services/itineraryHandoffService.js';
 import {
   AI_PLANNER_LEAD_FILTER,
   buildSalesLeadScope,
@@ -104,8 +105,9 @@ export const createLead = async (req, res) => {
     const validCallWindows = ['Morning', 'Afternoon', 'Evening', 'Anytime', ''];
     const safeCallWindow = validCallWindows.includes(preferredCallWindow) ? preferredCallWindow : 'Anytime';
 
-    // Securely resolve authenticated customer user ObjectId (Staff roles or synthetic IDs resolve to null)
-    const authUserId = await resolveCustomerUserObjectId(req.user);
+    // Customer identity is intentionally role-restricted and is used only for
+    // the Lead relationship. It must not decide itinerary ownership.
+    const customerUserId = await resolveCustomerUserObjectId(req.user);
     let validSourceItineraryId = null;
     let sourceItinerary = null;
     if (sourceItineraryId) {
@@ -114,9 +116,24 @@ export const createLead = async (req, res) => {
         .select('_id user title destination duration travelers plannerContext lifecycleStatus retentionExpiresAt')
         .lean();
       if (!sourceItinerary) return res.status(400).json({ message: 'Linked AI itinerary was not found. Please save the plan and try again.' });
-      const ownedByAccount = authUserId && sourceItinerary.user && String(sourceItinerary.user) === String(authUserId);
-      const guestProof = !sourceItinerary.user && verifyItineraryHandoffToken(sourceItineraryHandoffToken, sourceItinerary._id);
-      if (!ownedByAccount && !guestProof) return res.status(403).json({ message: 'This AI itinerary cannot be linked to your request. Save it again and retry.' });
+      const handoffAuthorization = authorizeItineraryLeadHandoff({
+        requester: req.user,
+        itinerary: sourceItinerary,
+        handoffToken: sourceItineraryHandoffToken
+      });
+      if (!handoffAuthorization.authorized) {
+        console.warn('AI itinerary Lead handoff denied', {
+          referenceId: crypto.randomBytes(4).toString('hex'),
+          sourceItineraryExists: true,
+          itineraryHasAccountOwner: Boolean(sourceItinerary.user),
+          authenticatedRequesterPresent: Boolean(req.user),
+          requesterRole: String(req.user?.role || 'anonymous').toLowerCase(),
+          accountOwnershipMatched: handoffAuthorization.ownedByAuthenticatedAccount,
+          guestHandoffProofValid: handoffAuthorization.guestHandoffProofValid,
+          requestPath: req.originalUrl || req.path || '/api/leads'
+        });
+        return res.status(403).json({ message: 'This AI itinerary cannot be linked to your request. Save it again and retry.' });
+      }
       validSourceItineraryId = sourceItinerary._id;
       determinedSource = 'ai_planner';
       determinedLeadType = 'trip_enquiry';
@@ -224,7 +241,7 @@ export const createLead = async (req, res) => {
       preferredCallDate: preferredCallDate || new Date().toISOString().split('T')[0],
       preferredCallWindow: safeCallWindow,
       topics: itinerarySummary?.topics?.length ? itinerarySummary.topics : cleanTopics,
-      userId: authUserId,
+      userId: customerUserId,
       message: message ? String(message).trim() : '',
       status: 'NEW',
       source: determinedSource,

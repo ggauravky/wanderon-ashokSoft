@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { Send, ShieldCheck, User, Mail, Calendar, CheckCircle2, ArrowRight } from 'lucide-react';
 import { getExpeditionProfile } from '../../utils/expeditionPlannerData';
 import { createLeadApi, saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js';
+import {
+  getFreshGuestHandoffToken,
+  isGuestItinerary,
+  mergeSavedItinerary
+} from '../../utils/itineraryAuthorization.js';
 
 const futureTravelMonths = (count = 12) => {
   const formatter = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' });
@@ -76,12 +81,12 @@ const PlannerStepBookTransmit = ({
         days: itinerary.days || itinerary.itineraryDays || [],
         guestEditToken: itinerary?.guestAuthorization?.editToken || ''
       };
-      if (itinerary._id) {
-        savedItinerary = await updateAIItineraryApi(itinerary._id, savePayload);
+      if (persistedId) {
+        savedItinerary = await updateAIItineraryApi(persistedId, savePayload);
       } else {
         savedItinerary = await saveAIItineraryApi(savePayload);
       }
-      onItinerarySaved?.({ ...itinerary, ...savedItinerary, _id: savedItinerary._id || savedItinerary.id, guestAuthorization: savedItinerary.guestAuthorization || itinerary.guestAuthorization });
+      onItinerarySaved?.(mergeSavedItinerary(itinerary, savedItinerary));
     } catch (err) {
       setSubmitError(err.message || 'Could not save the AI itinerary before creating the lead.');
       setIsSubmitting(false);
@@ -89,6 +94,18 @@ const PlannerStepBookTransmit = ({
     }
 
     const sourceItineraryId = savedItinerary?._id || savedItinerary?.id;
+    if (String(sourceItineraryId || '') !== String(persistedId)) {
+      setSubmitError('Your saved plan could not be matched safely. Please retry.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const sourceItineraryHandoffToken = getFreshGuestHandoffToken(savedItinerary);
+    if (isGuestItinerary(savedItinerary) && !sourceItineraryHandoffToken) {
+      setSubmitError('Your plan was saved, but its secure handoff could not be refreshed. Please retry.');
+      setIsSubmitting(false);
+      return;
+    }
 
     const leadPayload = {
       name: cleanName,
@@ -114,7 +131,7 @@ const PlannerStepBookTransmit = ({
       source: 'ai_planner',
       leadType: 'trip_enquiry',
       sourceItineraryId,
-      sourceItineraryHandoffToken: savedItinerary?.guestAuthorization?.handoffToken || itinerary?.guestAuthorization?.handoffToken || '',
+      sourceItineraryHandoffToken,
       priority: 'HIGH',
       topics: ['Customized AI Itinerary', 'Direct WhatsApp Dispatch', `${duration} Days ${destination}`]
     };

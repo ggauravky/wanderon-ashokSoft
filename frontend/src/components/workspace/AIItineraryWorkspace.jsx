@@ -14,6 +14,7 @@ import { saveAIItineraryApi, updateAIItineraryApi } from '../../services/api.js'
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { buildQuotationReadyExport } from '../../staff/modules/sales/quotations/quotationSmartBuilder.js';
+import { mergeSavedItinerary } from '../../utils/itineraryAuthorization.js';
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
@@ -94,7 +95,7 @@ const AIItineraryWorkspace = ({
         res = await saveAIItineraryApi(payload);
       }
       if (res && (res._id || res.id)) {
-        onUpdateItinerary({ ...itinerary, ...res, _id: res._id || res.id, guestAuthorization: res.guestAuthorization || itinerary.guestAuthorization });
+        onUpdateItinerary(mergeSavedItinerary(itinerary, res));
       }
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3500);
@@ -156,7 +157,7 @@ const AIItineraryWorkspace = ({
       } else saved = await saveAIItineraryApi(payload);
       const id = saved?._id || saved?.id;
       if (!id) throw new Error('Saved plan has no identifier.');
-      onUpdateItinerary?.({ ...itinerary, ...saved, _id: id });
+      onUpdateItinerary?.(mergeSavedItinerary(itinerary, saved));
       navigate(`/staff/sales/quotations/new?itineraryId=${encodeURIComponent(id)}`);
     } catch (err) {
       console.warn('Unable to create quotation from plan:', err.message);
