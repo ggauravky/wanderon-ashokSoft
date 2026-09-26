@@ -175,6 +175,7 @@ const publicAttachment = (attachment) => ({
   title: attachment.title || attachment.fileName || 'Travel document',
   fileName: attachment.fileName,
   mimeType: attachment.mimeType,
+  visibility: attachment.visibility,
   size: attachment.size,
   secureUrl: attachment.secureUrl,
   bookingReference: attachment.bookingReference || '',
@@ -358,6 +359,7 @@ export const buildPublicRevisionDto = ({ quotation, revision, share }) => {
       isExpired: new Date(share.expiresAt) <= new Date(),
       isRevoked: Boolean(share.revokedAt)
     },
+    booked,
     superseded: String(quotation.latestSharedRevisionId || '') !== String(revision._id)
   };
   return dto;

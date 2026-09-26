@@ -206,6 +206,31 @@ export const requestQuotationPricingV2Api = (id, payload = {}) => quotationV2Req
 export const finalizeQuotationPricingV2Api = (id, manualPricing) => quotationV2Request(`/${encodeURIComponent(id)}/v2/finalize-pricing`, { method: 'POST', body: { manualPricing } });
 export const createQuotationRevisionV2Api = (id, payload = {}) => quotationV2Request(`/${encodeURIComponent(id)}/v2/revisions`, { method: 'POST', body: payload });
 export const getQuotationRevisionsV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/revisions`);
+export async function downloadQuotationPdfServerApi(id, { templateKey, revisionId, filename }) {
+  const response = await request(`${API_BASE_URL}/quotations/${encodeURIComponent(id)}/v2/pdf`, {
+    method: 'POST', headers: getHeaders(), body: JSON.stringify({ templateKey, revisionId })
+  });
+  if (!response.ok) {
+    const data = await parseApiResponse(response);
+    const error = new Error(data?.message || 'Unable to render quotation PDF.');
+    error.status = response.status;
+    throw error;
+  }
+  const blob = await response.blob();
+  if (blob.type !== 'application/pdf' || blob.size < 1000) throw new Error('The server returned an invalid PDF.');
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+  return true;
+}
 export const createQuotationShareV2Api = (id, payload) => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares`, { method: 'POST', body: payload });
 export const getQuotationSharesV2Api = (id) => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares`);
 export const revokeQuotationShareV2Api = (id, shareId, reason = '') => quotationV2Request(`/${encodeURIComponent(id)}/v2/shares/${encodeURIComponent(shareId)}/revoke`, { method: 'POST', body: { reason } });

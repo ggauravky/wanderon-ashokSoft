@@ -169,6 +169,8 @@ test('approval and booking attachment visibility is enforced by the public DTO',
     share: { _id: 'share-1', templateKey: 'journey', allowAttachments: true, allowPdfDownload: true, requireEmailVerification: true, approvalEnabled: true, isActive: true, expiresAt: new Date(Date.now() + 86_400_000) }
   });
   assert.deepEqual(dto.attachments.map((item) => item.id).sort(), ['approval', 'booking']);
+  assert.equal(dto.booked, true);
+  assert.deepEqual(dto.attachments.map((item) => item.visibility).sort(), ['CUSTOMER_VISIBLE_AFTER_APPROVAL', 'CUSTOMER_VISIBLE_AFTER_BOOKING']);
 });
 
 test('share and verification secrets are one-way deterministic hashes', () => {

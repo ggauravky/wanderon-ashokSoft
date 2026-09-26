@@ -1,5 +1,49 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { preparePdfAssets, validatePdfLayout } from '../quotation-v2/pdfPreflight.js';
+import { PAGE_WIDTH_PX } from '../quotation-v2/pdfLayoutConstants.js';
+
+export { preparePdfAssets, validatePdfLayout };
+
+export const exportPagedElementToPdf = async (element, options = {}) => {
+  if (!element) throw new Error('Quotation PDF preview is not ready.');
+  const { filename = 'WanderLuxe_Quotation.pdf', scale = 1.9, quality = 0.84, onProgress } = options;
+  const report = await preparePdfAssets(element, { onProgress });
+  onProgress?.({ stage: 'layout', message: 'Validating quotation pages...' });
+  const layout = validatePdfLayout(element);
+  if (!layout.valid) {
+    const page = layout.pages.find((item) => item.verticalOverflowPx > 3 || item.horizontalOverflowPx > 3);
+    const error = new Error(`This proposal could not be safely paginated. ${page?.title || 'A page'} overflows by ${Math.ceil(Math.max(page?.verticalOverflowPx || 0, page?.horizontalOverflowPx || 0))} px.`);
+    error.code = 'PDF_LAYOUT_OVERFLOW';
+    error.page = page;
+    throw error;
+  }
+  const pages = [...element.querySelectorAll('[data-pdf-page="true"]')];
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  pdf.setProperties({ title: `WanderLuxe Quotation - ${pages[0]?.dataset.pageTitle || 'Travel Proposal'}`, author: 'WanderLuxe', subject: 'Travel quotation', creator: 'WanderLuxe' });
+  const width = pdf.internal.pageSize.getWidth();
+  const height = pdf.internal.pageSize.getHeight();
+  for (let i = 0; i < pages.length; i += 1) {
+    onProgress?.({ stage: 'render', current: i + 1, total: pages.length, message: `Composing page ${i + 1} of ${pages.length}...` });
+    const canvas = await html2canvas(pages[i], {
+      scale, useCORS: true, allowTaint: false, logging: false, backgroundColor: '#ffffff',
+      windowWidth: PAGE_WIDTH_PX,
+      onclone: (cloned) => {
+        const doc = cloned.querySelector('.quotation-pdf-document');
+        if (doc) doc.style.transform = 'none';
+        const page = cloned.querySelectorAll('[data-pdf-page="true"]')[i];
+        if (page) { page.style.boxShadow = 'none'; page.style.visibility = 'visible'; page.style.opacity = '1'; }
+      }
+    });
+    try {
+      if (i) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg', quality), 'JPEG', 0, 0, width, height, undefined, 'FAST');
+    } finally { canvas.width = 0; canvas.height = 0; }
+  }
+  onProgress?.({ stage: 'done', message: 'Downloading PDF...' });
+  pdf.save(filename);
+  return { pages: pages.length, assets: report, bytes: pdf.output('arraybuffer').byteLength };
+};
 
 /**
  * Wait for all images within an element to be loaded / decoded.
@@ -16,16 +60,10 @@ const waitForImages = async (container, timeoutMs = 4000) => {
       return Promise.resolve();
     }
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(), timeoutMs);
-      img.onload = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      img.onerror = () => {
-        clearTimeout(timer);
-        img.crossOrigin = 'anonymous';
-        resolve();
-      };
+      const finish = () => { clearTimeout(timer); img.removeEventListener('load', finish); img.removeEventListener('error', finish); resolve(); };
+      const timer = setTimeout(finish, timeoutMs);
+      img.addEventListener('load', finish, { once: true });
+      img.addEventListener('error', finish, { once: true });
     });
   });
 
@@ -175,8 +213,8 @@ export const exportElementToPdf = async (element, options = {}) => {
 /**
  * Clean In-Browser Print Helper with A4 Page Optimization
  */
-export const printElementDirectly = (element, title = 'Travel Document') => {
-  if (!element) return;
+export const printElementDirectly = async (element, title = 'Travel Document') => {
+  if (!element) return false;
 
   const printFrame = document.createElement('iframe');
   printFrame.style.position = 'fixed';
@@ -190,60 +228,23 @@ export const printElementDirectly = (element, title = 'Travel Document') => {
 
   const frameDoc = printFrame.contentWindow.document;
   frameDoc.open();
-  frameDoc.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>${title}</title>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-          @page {
-            size: A4 portrait;
-            margin: 0;
-          }
-          body {
-            background-color: #ffffff;
-            margin: 0;
-            padding: 0;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          * {
-            box-sizing: border-box;
-          }
-          .pdf-page {
-            width: 794px !important;
-            min-height: 1123px !important;
-            max-height: 1123px !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            overflow: hidden !important;
-            box-sizing: border-box !important;
-          }
-          .break-inside-avoid {
-            break-inside: avoid !important;
-            page-break-inside: avoid !important;
-          }
-        </style>
-      </head>
-      <body>
-        <div style="width: 100%; max-width: 794px; margin: 0 auto;">
-          ${element.innerHTML}
-        </div>
-      </body>
-    </html>
-  `);
+  frameDoc.write('<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>');
   frameDoc.close();
-
-  setTimeout(() => {
-    printFrame.contentWindow.focus();
-    printFrame.contentWindow.print();
-    setTimeout(() => {
-      document.body.removeChild(printFrame);
-    }, 1000);
-  }, 600);
+  frameDoc.title = String(title);
+  [...document.head.querySelectorAll('link[rel="stylesheet"], style')].forEach((node) => frameDoc.head.appendChild(node.cloneNode(true)));
+  const style = frameDoc.createElement('style');
+  style.textContent = '@page{size:A4 portrait;margin:0}body{margin:0;background:#fff;print-color-adjust:exact}.quotation-pdf-document{transform:none!important}.pdf-page{break-after:page;page-break-after:always;box-shadow:none!important}.pdf-page:last-child{break-after:auto}';
+  frameDoc.head.appendChild(style);
+  frameDoc.body.appendChild(element.cloneNode(true));
+  await Promise.race([Promise.all([...frameDoc.querySelectorAll('link[rel="stylesheet"]')].map((link) => new Promise((resolve) => { link.onload = resolve; link.onerror = resolve; }))), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  await Promise.race([frameDoc.fonts?.ready || Promise.resolve(), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  await waitForImages(frameDoc.body, 5000);
+  const cleanup = () => { if (printFrame.isConnected) printFrame.remove(); };
+  printFrame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
+  setTimeout(cleanup, 60000);
+  printFrame.contentWindow.focus();
+  printFrame.contentWindow.print();
+  return true;
 };
 
 export default {

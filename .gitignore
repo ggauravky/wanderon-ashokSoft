@@ -7,6 +7,7 @@
 **/dist/
 **/dist-ssr/
 **/build/
+/tmp/pdfs/
 
 # Environment Files & Secrets
 **/.env

@@ -2,6 +2,19 @@ const numeric = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const text = (value) => typeof value === 'string' ? value.trim() : '';
 const list = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
 const unique = (items) => [...new Set(items.map(text).filter(Boolean))];
+const httpsUrl = (value) => {
+  try {
+    const url = new URL(text(value));
+    return url.protocol === 'https:' ? url.href : '';
+  } catch { return ''; }
+};
+const mediaItem = (value, fallback = '') => {
+  const item = typeof value === 'string' ? { url: value } : value || {};
+  const url = text(item.url || item.secureUrl || item.imageUrl || item.src);
+  return url ? { url, altText: text(item.altText || item.alt || fallback), caption: text(item.caption), isPrimary: item.isPrimary === true || item.primary === true } : null;
+};
+const mediaList = (items, fallback = '') => list(items).map((item) => mediaItem(item, fallback)).filter(Boolean)
+  .filter((item, index, all) => all.findIndex((candidate) => candidate.url === item.url) === index);
 const isAiCandidate = (item, type) => item?.sourceKind === 'AI_PLANNER'
   || (type === 'hotel' && String(item?.optionId || '').startsWith('ai_hotel_'))
   || (type === 'transport' && String(item?.optionId || '').startsWith('ai_transport_'))
@@ -18,13 +31,18 @@ const attachmentAllowed = (attachment, { approved, booked }) => {
   return false;
 };
 
-const safeAttachment = (item = {}) => ({
+const safeAttachment = (item = {}, relation = null) => ({
   id: item.id || item._id || '',
   category: text(item.category),
+  documentType: text(item.type || item.documentType || item.category) || 'Travel document',
   title: text(item.title || item.fileName) || 'Travel document',
   fileName: text(item.fileName),
   mimeType: text(item.mimeType),
-  secureUrl: text(item.secureUrl)
+  secureUrl: httpsUrl(item.secureUrl),
+  bookingReference: text(item.bookingReference),
+  passengerName: text(item.passengerName),
+  visibility: text(item.visibility),
+  relation
 });
 
 const safeItinerary = (item = {}, index) => ({
@@ -61,11 +79,15 @@ const safeHotel = (item = {}, index) => ({
   checkIn: item.checkIn || '',
   checkOut: item.checkOut || '',
   nights: numeric(item.nights),
-  imageUrl: text(item.imageUrl),
+  heroImage: mediaList(item.gallery, item.hotelName).find((media) => media.isPrimary)
+    || mediaItem(item.imageUrl, item.hotelName)
+    || mediaList(item.gallery, item.hotelName)[0] || null,
+  gallery: mediaList(item.gallery, item.hotelName),
   amenities: list(item.amenities).map(text).filter(Boolean),
   notes: text(item.customerNotes || item.description),
   recommendationType: text(item.recommendationType),
-  selected: item.selected === true
+  selected: item.selected === true,
+  documents: []
 });
 
 const safeTransport = (item = {}, index) => ({
@@ -81,13 +103,14 @@ const safeTransport = (item = {}, index) => ({
     arrivalDate: item.schedule?.arrivalDate || item.endDate || '',
     arrivalTime: text(item.schedule?.arrivalTime)
   },
-  reference: text(item.reference),
+  reference: text(item.reference?.bookingReference || item.reference?.pnr || item.reference?.flightNumber || item.reference?.trainNumber || item.reference?.busNumber || item.reference),
   cabinClass: text(item.cabinClass),
-  seatDetails: text(item.seatDetails),
-  baggage: text(item.baggage),
+  seatDetails: text(item.seatDetails?.seatNumber || item.seatDetails),
+  baggage: text(item.baggage?.cabin || item.baggage?.checkIn || item.baggage),
   notes: text(item.customerNotes),
   selected: item.selected !== false,
-  vehicleMedia: list(item.vehicleMedia).map((media) => ({ url: text(media.url || media.secureUrl), altText: text(media.altText || item.vehicle) })).filter((media) => media.url)
+  media: mediaList(item.vehicleMedia, item.vehicle || item.title),
+  documents: []
 });
 
 const priority = (item) => item.selected ? 0 : /recommend/i.test(item.recommendationType || item.label) ? 1 : 2;
@@ -105,16 +128,18 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const pricingSource = quotation.pricing?.finalCustomerPrice !== undefined ? quotation.pricing : (quotation.manualPricing || {});
   const status = text(options.status || quotation.status || quotation.commercialState || 'DRAFT').toUpperCase();
   const approved = status === 'APPROVED' || Boolean(quotation.approval?.approvedAt);
-  const booked = status === 'CONVERTED' || Boolean(quotation.bookingId);
+  const booked = status === 'CONVERTED' || Boolean(quotation.bookingId || quotation.booked);
   const itinerary = list(quotation.itinerary).map(safeItinerary);
-  const hotels = list(quotation.hotelOptions).filter((item) => !(isAiCandidate(item, 'hotel') && item.selected !== true)).map(safeHotel).sort((a, b) => priority(a) - priority(b));
-  const transport = list(quotation.transportOptions).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true)).map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
+  const rawHotels = list(quotation.hotelOptions).filter((item) => !(isAiCandidate(item, 'hotel') && item.selected !== true));
+  const rawTransport = list(quotation.transportOptions).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true));
+  const hotels = rawHotels.map(safeHotel).sort((a, b) => priority(a) - priority(b));
+  const transport = rawTransport.map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
   const activities = list(quotation.activities).filter((item) => !(isAiCandidate(item, 'activity') && item.selected !== true)).map((item, index) => ({
     id: item.activityId || String(index), dayNumber: numeric(item.dayNumber), date: item.date || '', name: text(item.name),
     description: text(item.description), location: text(item.location), selected: item.selected !== false,
     optional: item.isOptional === true
   })).filter((item) => item.name);
-  const addOns = list(quotation.addOns).map((item, index) => ({
+  const addOns = list(quotation.addOns).filter((item) => item.selected === true).map((item, index) => ({
     id: item.addonId || String(index), name: text(item.name), description: text(item.description), category: text(item.category),
     selected: item.selected === true
   })).filter((item) => item.name);
@@ -122,8 +147,8 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const images = unique([
     text(quotation.tripRequirements?.coverImage),
     ...itinerary.flatMap((day) => [day.coverMedia?.url, ...day.galleryMedia.map((media) => media.url)]),
-    ...[...hotels].sort((a, b) => Number(b.selected) - Number(a.selected)).map((hotel) => hotel.imageUrl),
-    ...transport.flatMap((item) => item.vehicleMedia.map((media) => media.url))
+    ...[...hotels].sort((a, b) => Number(b.selected) - Number(a.selected)).map((hotel) => hotel.heroImage?.url),
+    ...transport.flatMap((item) => item.media.map((media) => media.url))
   ]);
   const totalTravelers = numeric(quotation.tripRequirements?.totalTravelers)
     || numeric(quotation.tripRequirements?.adults) + numeric(quotation.tripRequirements?.children) + numeric(quotation.tripRequirements?.infants) + numeric(quotation.tripRequirements?.seniors)
@@ -138,15 +163,37 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const finalCustomerPrice = numeric(pricingSource.finalCustomerPrice);
   const depositAmount = numeric(pricingSource.depositAmount);
   const visibility = { approved, booked };
-  const topLevelAttachments = settings.showAttachments
-    ? list(quotation.attachments).filter((item) => attachmentAllowed(item, visibility)).map(safeAttachment)
-    : [];
-  const nestedAttachments = settings.showAttachments
-    ? [
-      ...list(quotation.hotelOptions).flatMap((item) => list(item.documents)),
-      ...list(quotation.transportOptions).flatMap((item) => list(item.documents))
-    ].filter((item) => attachmentAllowed(item, visibility)).map(safeAttachment)
-    : [];
+  const generalAttachments = [];
+  const allCustomerDocuments = [];
+  const seenDocuments = new Set();
+  const addDocument = (item, relation, target) => {
+    if (!settings.showAttachments || !attachmentAllowed(item, visibility)) return;
+    const safe = safeAttachment(item, relation);
+    if (!safe.secureUrl) return;
+    const key = safe.id || safe.secureUrl;
+    if (seenDocuments.has(key)) return;
+    seenDocuments.add(key);
+    target.push(safe);
+    allCustomerDocuments.push(safe);
+  };
+  rawHotels.forEach((item) => {
+    const hotel = hotels.find((entry) => entry.id === (item.optionId || String(rawHotels.indexOf(item))));
+    if (!hotel) return;
+    list(item.documents).forEach((document) => addDocument(document, { kind: 'hotel', id: hotel.id, name: hotel.hotelName, city: hotel.city, checkIn: hotel.checkIn, checkOut: hotel.checkOut }, hotel.documents));
+  });
+  rawTransport.forEach((item) => {
+    const segment = transport.find((entry) => entry.id === (item.optionId || String(rawTransport.indexOf(item))));
+    if (!segment) return;
+    list(item.documents).forEach((document) => addDocument(document, { kind: 'transport', id: segment.id, name: segment.title, route: [segment.pickup, segment.drop].filter(Boolean).join(' to '), schedule: segment.schedule }, segment.documents));
+  });
+  list(quotation.attachments).forEach((document) => {
+    const hotel = document.sectionType === 'HOTEL' && hotels.find((item) => item.id === document.sectionId);
+    const segment = document.sectionType === 'TRANSPORT' && transport.find((item) => item.id === document.sectionId);
+    const relation = hotel ? { kind: 'hotel', id: hotel.id, name: hotel.hotelName, city: hotel.city, checkIn: hotel.checkIn, checkOut: hotel.checkOut }
+      : segment ? { kind: 'transport', id: segment.id, name: segment.title, route: [segment.pickup, segment.drop].filter(Boolean).join(' to '), schedule: segment.schedule }
+        : null;
+    addDocument(document, relation, hotel?.documents || segment?.documents || generalAttachments);
+  });
   const highlights = unique([
     ...activities.filter((item) => item.selected).map((item) => item.name),
     ...itinerary.flatMap((day) => day.activityHighlights),
@@ -225,7 +272,9 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
       refundNotes: text(quotation.policies?.refundNotes), travelRequirements: text(quotation.policies?.travelRequirements),
       importantInformation: text(quotation.policies?.importantInformation), termsAndConditions: text(quotation.policies?.termsAndConditions || list(quotation.termsAndConditions).map(text).filter(Boolean).join('\n'))
     } : {},
-    attachments: [...new Map([...topLevelAttachments, ...nestedAttachments].map((item) => [item.id || item.secureUrl, item])).values()],
+    generalAttachments,
+    allCustomerDocuments,
+    attachments: allCustomerDocuments,
     advisor: settings.showAdvisor ? {
       name: text(quotation.advisor?.name || quotation.assignedToSnapshot?.name),
       email: text(quotation.advisor?.email || quotation.assignedToSnapshot?.email),

@@ -36,6 +36,8 @@ const PublicQuotationView = lazy(() => import('./pages/PublicQuotationGateway'))
 const NotFound = lazy(() => import('./pages/NotFound'));
 const PlaceholderPage = lazy(() => import('./pages/PlaceholderPage'));
 const AIPlannerPage = lazy(() => import('./pages/AIPlannerPage'));
+const PdfQaPage = import.meta.env.DEV ? lazy(() => import('./quotation-v2/PdfQaPage.jsx')) : null;
+const PdfRenderPage = lazy(() => import('./quotation-v2/PdfRenderPage.jsx'));
 
 const StaffOverview = lazy(() => import('./staff/StaffOverview'));
 const AdminWorkspace = lazy(() => import('./staff/workspaces/AdminWorkspace'));
@@ -105,6 +107,8 @@ function App() {
         <MarketingAttributionTracker />
         <Suspense fallback={<RouteLoader />}>
         <Routes>
+          {PdfQaPage && <Route path="/__quotation-pdf-qa" element={<PdfQaPage />} />}
+          <Route path="/internal/quotation-pdf" element={<PdfRenderPage />} />
           <Route path="/staff/login" element={<AdminLogin />} />
           <Route path="/admin/login" element={<Navigate to="/staff/login" replace />} />
           <Route path="/admin" element={<Navigate to="/staff/admin" replace />} />

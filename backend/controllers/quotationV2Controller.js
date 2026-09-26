@@ -23,6 +23,7 @@ import {
   sanitizeQuotationSourcePlan
 } from '../services/quotationAiService.js';
 import { getJwtSecret } from '../config/environment.js';
+import { renderQuotationPdf, serverPdfEnabled } from '../services/quotationPdfRenderer.js';
 import { buildQuotationPolicyDefaults } from '../config/quotationPolicyPresets.js';
 import { generateQuotationFieldSuggestion } from '../services/quotationFieldAiService.js';
 import { checkGeminiHealth, getGeminiStatus, publicAiError } from '../services/geminiService.js';
@@ -731,6 +732,38 @@ export const getQuotationRevisionsV2 = async (req, res) => {
   } catch (error) {
     console.error('List Quotation Revisions V2 Error:', error);
     return fail(res, 500, 'Unable to load quotation revisions.');
+  }
+};
+
+export const downloadQuotationPdfV2 = async (req, res) => {
+  if (!serverPdfEnabled()) return fail(res, 503, 'Server PDF rendering is unavailable.');
+  const started = Date.now();
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res);
+    if (!quotation) return;
+    const templateKey = req.body?.templateKey;
+    if (!V2_TEMPLATES.includes(templateKey)) return fail(res, 422, 'Select a valid quotation template.');
+    const revisionId = req.body?.revisionId || quotation.currentRevisionId;
+    if (!mongoose.Types.ObjectId.isValid(revisionId)) return fail(res, 409, 'Finalize this quotation before downloading the server PDF.');
+    const revision = await QuotationRevision.findOne({ _id: revisionId, quotationId: quotation._id });
+    if (!revision || revision.status === 'DRAFT_SNAPSHOT') return fail(res, 409, 'A finalized revision is required for server PDF rendering.');
+    const share = {
+      _id: revision._id, templateKey, allowPdfDownload: true, allowAttachments: true,
+      requireEmailVerification: false, approvalEnabled: false, recipientEmail: '',
+      isActive: true, expiresAt: new Date('2100-01-01'), revokedAt: null
+    };
+    const dto = buildPublicRevisionDto({ quotation, revision, share });
+    dto.superseded = revision.status === 'SUPERSEDED' || Boolean(quotation.latestSharedRevisionId && String(quotation.latestSharedRevisionId) !== String(revision._id));
+    const { bytes, pageCount } = await renderQuotationPdf(dto, templateKey);
+    const basename = String(quotation.quotationNumber || 'Quotation').replace(/[^A-Za-z0-9_-]/g, '_');
+    const fileName = `WanderLuxe_${basename}_v${revision.version}_${templateKey}.pdf`;
+    console.info('Quotation PDF rendered', { quotationId: String(quotation._id), revisionId: String(revision._id), templateKey, pageCount, bytes: bytes.length, durationMs: Date.now() - started });
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${fileName}"`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+    return res.send(bytes);
+  } catch (error) {
+    console.error('Quotation PDF rendering failed', { code: error.code || 'PDF_RENDER_ERROR', durationMs: Date.now() - started });
+    return fail(res, error.code === 'PDF_LAYOUT_OVERFLOW' ? 422 : 503, error.code === 'PDF_LAYOUT_OVERFLOW' ? 'Quotation PDF content exceeds the page bounds.' : 'Server PDF rendering is temporarily unavailable.');
   }
 };
 

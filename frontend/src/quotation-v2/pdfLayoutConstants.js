@@ -1,0 +1,5 @@
+export const PAGE_WIDTH_PX = 794;
+export const PAGE_HEIGHT_PX = 1123;
+export const CONTENT_TOP_PX = 72;
+export const CONTENT_BOTTOM_PX = 62;
+export const CONTENT_HEIGHT_PX = PAGE_HEIGHT_PX - CONTENT_TOP_PX - CONTENT_BOTTOM_PX;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildQuotationPresentationModel } from './buildQuotationPresentationModel.js';
-import { chunkItinerary, chunkPolicyEntries } from './pagination.js';
+import { chunkItinerary, chunkPolicyEntries, splitHotel } from './pagination.js';
 import { quotationPdfFileName } from './quotationV2.js';
 import { QUOTATION_TEMPLATE_KEYS, quotationTemplateOptions } from './templateRegistry.js';
 
@@ -66,7 +66,10 @@ test('weighted pagination preserves every itinerary day for all templates', () =
   for (const key of QUOTATION_TEMPLATE_KEYS) {
     const chunks = chunkItinerary(days, key);
     assert.ok(chunks.length > 1, `${key} should paginate long itineraries`);
-    assert.deepEqual(chunks.flat().map((day) => day.day), days.map((day) => day.day));
+    assert.deepEqual([...new Set(chunks.flat().map((day) => day.day))], days.map((day) => day.day));
+    for (const day of days) {
+      assert.equal(chunks.flat().filter((part) => part.day === day.day).map((part) => part.description).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(), day.description.trim());
+    }
     assert.ok(chunks.every((chunk) => chunk.length > 0));
   }
 });
@@ -90,4 +93,44 @@ test('template registry preserves internal keys and exposes professional names',
 
 test('PDF filenames include the immutable template identity', () => {
   assert.equal(quotationPdfFileName(rawQuotation(), 'minimal'), 'WanderLuxe_WLX-QA-2026_v4_Expedition-Dossier.pdf');
+});
+
+test('hotel gallery primary image and transport media survive the customer model', () => {
+  const quotation = rawQuotation({
+    hotelOptions: [{ ...rawQuotation().hotelOptions[0], imageUrl: 'https://example.com/old.jpg', gallery: [
+      { url: 'https://example.com/side.jpg' }, { secureUrl: 'https://example.com/primary.jpg', isPrimary: true }
+    ] }],
+    transportOptions: [{ ...rawQuotation().transportOptions[0], vehicleMedia: [{ url: 'https://example.com/car.jpg' }],
+      reference: { bookingReference: 'TRANSFER-123' }, documents: [{ id: 'ticket', title: 'Transfer ticket', visibility: 'CUSTOMER_VISIBLE', mimeType: 'image/png', secureUrl: 'https://example.com/ticket.png' }] }]
+  });
+  const model = buildQuotationPresentationModel(quotation);
+  assert.equal(model.hotels[0].heroImage.url, 'https://example.com/primary.jpg');
+  assert.equal(model.hotels[0].gallery.length, 2);
+  assert.equal(model.transport[0].media[0].url, 'https://example.com/car.jpg');
+  assert.equal(model.transport[0].reference, 'TRANSFER-123');
+  assert.equal(model.transport[0].documents[0].relation.kind, 'transport');
+});
+
+test('hotel continuation pages preserve every secondary gallery image', () => {
+  const gallery = Array.from({ length: 7 }, (_, index) => ({ url: `https://example.com/stay-${index}.jpg` }));
+  const parts = splitHotel({ id: 'hotel-1', heroImage: gallery[0], gallery, notes: '', amenities: [], documents: [] });
+  assert.equal(parts.length, 3);
+  assert.deepEqual(parts.flatMap((part) => part.gallery.map((image) => image.url)), gallery.slice(1).map((image) => image.url));
+  assert.equal(parts[0].heroImage.url, gallery[0].url);
+});
+
+test('document visibility follows approval and booking, with no internal or unsafe links', () => {
+  const documents = [
+    { id: 'visible', visibility: 'CUSTOMER_VISIBLE', secureUrl: 'https://example.com/visible.pdf' },
+    { id: 'approval', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL', secureUrl: 'https://example.com/approval.pdf' },
+    { id: 'booking', visibility: 'CUSTOMER_VISIBLE_AFTER_BOOKING', secureUrl: 'https://example.com/booking.pdf' },
+    { id: 'internal', visibility: 'INTERNAL_ONLY', secureUrl: 'https://example.com/internal.pdf' },
+    { id: 'unsafe', visibility: 'CUSTOMER_VISIBLE', secureUrl: 'http://example.com/unsafe.pdf' }
+  ];
+  const quote = rawQuotation({ attachments: documents, hotelOptions: [], transportOptions: [] });
+  const ids = (overrides = {}) => buildQuotationPresentationModel({ ...quote, ...overrides }).allCustomerDocuments.map((item) => item.id);
+  assert.deepEqual(ids(), ['visible']);
+  assert.deepEqual(ids({ status: 'APPROVED' }), ['visible', 'approval']);
+  assert.deepEqual(ids({ status: 'CONVERTED' }), ['visible', 'booking']);
+  assert.deepEqual(ids({ status: 'APPROVED', booked: true }), ['visible', 'approval', 'booking']);
 });

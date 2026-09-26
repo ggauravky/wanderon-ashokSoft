@@ -27,6 +27,7 @@ import {
   createQuotationV2,
   decidePublicQuotationV2,
   deleteQuotationAttachment,
+  downloadQuotationPdfV2,
   duplicateQuotationV2,
   finalizeQuotationPricing,
   getPublicQuotationV2,
@@ -106,6 +107,7 @@ router.post('/:id/v2/request-pricing', requireRoles('super_admin', 'admin', 'sal
 router.post('/:id/v2/finalize-pricing', requireRoles('super_admin', 'admin'), finalizeQuotationPricing);
 router.post('/:id/v2/revisions', requireRoles('super_admin', 'admin', 'sales'), createQuotationRevisionV2);
 router.get('/:id/v2/revisions', requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationRevisionsV2);
+router.post('/:id/v2/pdf', requireRoles('super_admin', 'admin', 'operations', 'sales'), quotationRateLimit({ action: 'quotation-pdf', limit: 20 }), downloadQuotationPdfV2);
 router.post('/:id/v2/shares', requireRoles('super_admin', 'admin', 'sales'), createQuotationShare);
 router.get('/:id/v2/shares', requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationShares);
 router.post('/:id/v2/shares/:shareId/revoke', requireRoles('super_admin', 'admin', 'sales'), revokeQuotationShare);

@@ -1,8 +1,9 @@
 import React from 'react';
 import QuotationPdfPage from '../components/QuotationPdfPage.jsx';
 import PdfImage from '../components/PdfImage.jsx';
-import { ApprovalBlock, BulletList, Facts, HotelCard, ItineraryDay, Money, PolicyEntries, RouteFlow, TransportCard } from '../components/templateShared.jsx';
-import { chunkHotels, chunkItinerary, chunkPolicyEntries, chunkTransport } from '../pagination.js';
+import { ApprovalBlock, Experiences, Facts, HotelCard, ItineraryDay, Money, PolicyEntries, RouteFlow, TransportCard } from '../components/templateShared.jsx';
+import TravelDocumentCard from '../components/TravelDocumentCard.jsx';
+import { chunkByWeight, chunkHotels, chunkItinerary, chunkPolicyEntries, chunkTransport } from '../pagination.js';
 import { formatQuotationV2Date } from '../quotationV2.js';
 
 export default function SignatureLuxeTemplate({ model }) {
@@ -11,7 +12,7 @@ export default function SignatureLuxeTemplate({ model }) {
   const transportChunks = chunkTransport(model.transport, 'signature_luxe');
   const policyEntries = [['inclusions', model.inclusions], ['exclusions', model.exclusions], ...Object.entries(model.policies)]
     .filter(([, value]) => Array.isArray(value) ? value.length : value);
-  const policyChunks = chunkPolicyEntries(policyEntries);
+  const policyChunks = chunkPolicyEntries(policyEntries, 1400);
   const pages = [];
 
   pages.push({ title: 'Cover', cover: true, className: 'signature-cover', content: <>
@@ -28,8 +29,10 @@ export default function SignatureLuxeTemplate({ model }) {
 
   itineraryChunks.forEach((days) => pages.push({ title: `Itinerary Chronicle · Days ${String(days[0].day).padStart(2, '0')}-${String(days.at(-1).day).padStart(2, '0')}`, content: <><p className="pdf-kicker">THE DAILY CHRONICLE</p><h2 className="pdf-section-title">Itinerary Chronicle</h2><div className="pdf-itinerary-list">{days.map((day) => <ItineraryDay key={day.day} day={day} detailed image={model.settings.showItineraryGallery} />)}</div></> }));
 
-  hotelChunks.forEach((hotels, index) => pages.push({ title: `Handpicked Stays${index ? ' · Continued' : ''}`, content: <><p className="pdf-kicker">BESPOKE STAYS</p><h2 className="pdf-section-title">Handpicked Stays{index ? ' · Continued' : ''}</h2><div className="pdf-card-grid">{hotels.map((hotel) => <HotelCard key={hotel.id} hotel={hotel} detailed />)}</div></> }));
-  transportChunks.forEach((items, index) => pages.push({ title: `Transport & Logistics${index ? ' · Continued' : ''}`, content: <><p className="pdf-kicker">SEAMLESS MOVEMENT</p><h2 className="pdf-section-title">Dedicated Transport & Logistics</h2><div className="pdf-card-grid">{items.map((item) => <TransportCard key={item.id} item={item} />)}</div>{model.attachments.length > 0 && <div style={{ marginTop: 28 }}><p className="pdf-kicker">CUSTOMER DOCUMENTS</p><BulletList items={model.attachments.map((item) => item.title)} /></div>}</> }));
+  hotelChunks.forEach((hotels, index) => pages.push({ title: `Handpicked Stays${index ? ' · Continued' : ''}`, content: <><p className="pdf-kicker">BESPOKE STAYS</p><h2 className="pdf-section-title">Handpicked Stays{index ? ' · Continued' : ''}</h2><div className="pdf-card-grid is-signature">{hotels.map((hotel) => <HotelCard key={hotel.id} hotel={hotel} detailed galleryLimit={3} />)}</div></> }));
+  transportChunks.forEach((items, index) => pages.push({ title: `Transport & Logistics${index ? ' · Continued' : ''}`, content: <><p className="pdf-kicker">SEAMLESS MOVEMENT</p><h2 className="pdf-section-title">Dedicated Transport & Logistics</h2><div className="pdf-card-grid">{items.map((item) => <TransportCard key={item.id} item={item} />)}</div></> }));
+  if (model.activities.length || model.addOns.length) chunkByWeight([...model.activities.map((item) => ({ ...item, kind: 'activity' })), ...model.addOns.map((item) => ({ ...item, kind: 'addon' }))], 5, (item) => 1 + (item.description?.length || 0) / 300).forEach((items, index) => pages.push({ title: `Experiences${index ? ' · Continued' : ''}`, content: <><p className="pdf-kicker">CURATED EXPERIENCES</p><h2 className="pdf-section-title">Experiences & Enhancements</h2><Experiences activities={items.filter((item) => item.kind === 'activity')} addOns={items.filter((item) => item.kind === 'addon')} /></> }));
+  model.allCustomerDocuments.forEach((document, index) => pages.push({ title: `Travel Documents · ${index + 1}`, content: <><p className="pdf-kicker">TRAVEL DOCUMENTS</p><h2 className="pdf-section-title">Tickets & Vouchers</h2><TravelDocumentCard document={document} /></> }));
 
   pages.push({ title: 'Your Journey Investment', content: <><p className="pdf-kicker">FINANCIAL SUMMARY & PAYMENT PLAN</p><h2 className="pdf-section-title">Your Journey Investment</h2><div className="pdf-price-hero" style={{ marginTop: 24 }}><span className="pdf-kicker">FINAL CUSTOMER PRICE</span><strong><Money value={model.pricing.finalCustomerPrice} currency={model.pricing.currency} /></strong><p className="pdf-copy">The final customer price entered for this proposal.</p></div><div style={{ marginTop: 20 }}><Facts items={[["Deposit", <Money key="deposit" value={model.pricing.depositAmount} currency={model.pricing.currency} />], ["Balance", <Money key="balance" value={model.pricing.balanceAmount} currency={model.pricing.currency} />], ["Valid until", formatQuotationV2Date(model.meta.validUntil)], ["Travelers", model.journey.travelers.total]]} /></div>{model.pricing.customerVisibleComponents.length > 0 && <div style={{ marginTop: 22 }}><p className="pdf-kicker">CUSTOMER-FACING COMPONENTS</p><Facts items={model.pricing.customerVisibleComponents.map(([label, amount]) => [label, <Money key={label} value={amount} currency={model.pricing.currency} />])} /></div>}{model.pricing.paymentSchedule.length > 0 && <table className="pdf-payment-table"><thead><tr><th>Milestone</th><th>Amount</th><th>Due date</th><th>Notes</th></tr></thead><tbody>{model.pricing.paymentSchedule.map((item, index) => <tr key={`${item.label}-${index}`}><td>{item.label}</td><td><Money value={item.amount} currency={model.pricing.currency} /></td><td>{formatQuotationV2Date(item.dueDate)}</td><td>{item.notes}</td></tr>)}</tbody></table>}{model.pricing.priceNotes && <p className="pdf-copy">{model.pricing.priceNotes}</p>}</> });
 
