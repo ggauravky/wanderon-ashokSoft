@@ -14,8 +14,13 @@ export default function PdfRenderPage() {
     document.title = `WanderLuxe ${data.quotation.quotationNumber || 'Quotation'}`;
     (async () => {
       try {
-        for (let i = 0; i < 100 && !ref.current?.querySelector('[data-pdf-page]'); i += 1) await new Promise((resolve) => setTimeout(resolve, 50));
+        for (let i = 0; i < 800 && ref.current?.querySelector('[data-pdf-layout-state]')?.dataset.pdfLayoutState !== 'ready'; i += 1) {
+          const state = ref.current?.querySelector('[data-pdf-layout-state]');
+          if (state?.dataset.pdfLayoutState === 'error') throw new Error(state.dataset.pdfLayoutError || 'Quotation layout failed.');
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
         if (!ref.current) throw new Error('Quotation pages did not render.');
+        if (ref.current.querySelector('[data-pdf-layout-state]')?.dataset.pdfLayoutState !== 'ready') throw new Error('Quotation layout did not become ready in time.');
         const assets = await preparePdfAssets(ref.current);
         const layout = validatePdfLayout(ref.current);
         if (!layout.valid) throw new Error('Quotation pages exceeded A4 bounds.');

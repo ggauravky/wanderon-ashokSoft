@@ -16,7 +16,7 @@ export const QUOTATION_TEMPLATES = Object.freeze({
     shortDescription: 'Visual Travel Quotation',
     description: 'Visual travel quotation with itinerary, hotels, transport, investment and policies.',
     bestFor: 'Best for most custom holidays and family or couple journeys.',
-    targetPages: '~6 pages',
+    targetPages: '~6+ pages',
     accent: '#c86d51'
   }),
   minimal: Object.freeze({
@@ -26,7 +26,7 @@ export const QUOTATION_TEMPLATES = Object.freeze({
     shortDescription: 'Quick Professional Summary',
     description: 'Concise field-dossier format for fast review while retaining essential journey and commercial information.',
     bestFor: 'Best for quick review and concise commercial proposals.',
-    targetPages: '~3 pages',
+    targetPages: '~3+ pages',
     accent: '#8c6d48'
   })
 });

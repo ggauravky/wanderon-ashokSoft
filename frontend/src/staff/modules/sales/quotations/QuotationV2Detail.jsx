@@ -20,8 +20,10 @@ const card = 'rounded-xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_
 const formatDateTime = (value) => value ? new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Not available';
 const Row = ({ label, value }) => <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-0"><dt className="text-sm text-slate-500">{label}</dt><dd className="text-right text-sm font-medium text-slate-900">{value ?? 'Not available'}</dd></div>;
 const waitForPages = async (ref) => {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    if (ref.current?.querySelectorAll('[data-pdf-page="true"]').length) return ref.current;
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const layout = ref.current?.querySelector('[data-pdf-layout-state]');
+    if (layout?.dataset.pdfLayoutState === 'error') throw new Error(layout.dataset.pdfLayoutError || 'Quotation pagination failed.');
+    if (layout?.dataset.pdfLayoutState === 'ready' && ref.current?.querySelectorAll('[data-pdf-page="true"]').length) return ref.current;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return null;

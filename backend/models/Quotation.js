@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
 import {
   QUOTATION_ATTACHMENT_CATEGORIES,
+  QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES,
   QUOTATION_ATTACHMENT_VISIBILITIES,
   TRANSPORT_DOCUMENT_TYPES,
+  normalizeAttachmentPdfDisplayMode,
   normalizeAttachmentVisibility,
   normalizeQuotationAttachment,
   normalizeTransportDocumentType
@@ -38,6 +40,11 @@ const quotationAttachmentSchema = new mongoose.Schema(
       type: String,
       enum: QUOTATION_ATTACHMENT_VISIBILITIES,
       default: 'INTERNAL_ONLY'
+    },
+    pdfDisplayMode: {
+      type: String,
+      enum: QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES,
+      default: 'AUTO'
     },
     bookingReference: { type: String, default: '' },
     passengerName: { type: String, default: '' },
@@ -136,6 +143,11 @@ const transportDocumentSchema = new mongoose.Schema(
       type: String,
       enum: QUOTATION_ATTACHMENT_VISIBILITIES,
       default: 'CUSTOMER_VISIBLE'
+    },
+    pdfDisplayMode: {
+      type: String,
+      enum: QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES,
+      default: 'AUTO'
     },
     passengerName: { type: String, default: '' },
     bookingReference: { type: String, default: '' },
@@ -704,7 +716,8 @@ quotationSchema.pre('validate', function normalizeLegacyAttachmentEnums() {
     documents: (item.documents || []).map((document) => ({
       ...plain(document),
       type: normalizeTransportDocumentType(document.type),
-      visibility: normalizeAttachmentVisibility(document.visibility, 'CUSTOMER_VISIBLE')
+      visibility: normalizeAttachmentVisibility(document.visibility, 'CUSTOMER_VISIBLE'),
+      pdfDisplayMode: normalizeAttachmentPdfDisplayMode(document.pdfDisplayMode)
     }))
   }));
   this.activities = (this.activities || []).map((item) => ({

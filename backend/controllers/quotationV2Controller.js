@@ -1043,6 +1043,7 @@ export const addQuotationAttachment = async (req, res) => {
       publicId: input.publicId || '',
       secureUrl: input.secureUrl,
       visibility: input.visibility,
+      pdfDisplayMode: input.pdfDisplayMode,
       bookingReference: input.bookingReference || '',
       passengerName: input.passengerName || '',
       uploadedBy: req.user._id,

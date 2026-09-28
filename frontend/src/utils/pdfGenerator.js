@@ -8,6 +8,11 @@ export { preparePdfAssets, validatePdfLayout };
 export const exportPagedElementToPdf = async (element, options = {}) => {
   if (!element) throw new Error('Quotation PDF preview is not ready.');
   const { filename = 'WanderLuxe_Quotation.pdf', scale = 1.9, quality = 0.84, onProgress } = options;
+  const safeScale = Math.min(2, Math.max(1, Number(scale) || 1.9));
+  const layoutState = element.querySelector('[data-pdf-layout-state]');
+  if (layoutState?.dataset.pdfLayoutState === 'error') throw new Error(layoutState.dataset.pdfLayoutError || 'Quotation pagination failed.');
+  if (layoutState && layoutState.dataset.pdfLayoutState !== 'ready') throw new Error('Quotation pages are still being measured. Please retry in a moment.');
+  onProgress?.({ stage: 'prepare', message: 'Preparing proposal...' });
   const report = await preparePdfAssets(element, { onProgress });
   onProgress?.({ stage: 'layout', message: 'Validating quotation pages...' });
   const layout = validatePdfLayout(element);
@@ -26,7 +31,7 @@ export const exportPagedElementToPdf = async (element, options = {}) => {
   for (let i = 0; i < pages.length; i += 1) {
     onProgress?.({ stage: 'render', current: i + 1, total: pages.length, message: `Composing page ${i + 1} of ${pages.length}...` });
     const canvas = await html2canvas(pages[i], {
-      scale, useCORS: true, allowTaint: false, logging: false, backgroundColor: '#ffffff',
+      scale: safeScale, useCORS: true, allowTaint: false, logging: false, backgroundColor: '#ffffff',
       windowWidth: PAGE_WIDTH_PX,
       onclone: (cloned) => {
         const doc = cloned.querySelector('.quotation-pdf-document');
@@ -40,7 +45,7 @@ export const exportPagedElementToPdf = async (element, options = {}) => {
       pdf.addImage(canvas.toDataURL('image/jpeg', quality), 'JPEG', 0, 0, width, height, undefined, 'FAST');
     } finally { canvas.width = 0; canvas.height = 0; }
   }
-  onProgress?.({ stage: 'done', message: 'Downloading PDF...' });
+  onProgress?.({ stage: 'finalize', message: 'Finalizing PDF...' });
   pdf.save(filename);
   return { pages: pages.length, assets: report, bytes: pdf.output('arraybuffer').byteLength };
 };

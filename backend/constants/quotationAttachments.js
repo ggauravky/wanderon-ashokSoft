@@ -21,6 +21,13 @@ export const QUOTATION_ATTACHMENT_VISIBILITIES = Object.freeze([
   'CUSTOMER_VISIBLE_AFTER_BOOKING'
 ]);
 
+export const QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES = Object.freeze([
+  'AUTO',
+  'ALWAYS_PREVIEW',
+  'LINK_ONLY',
+  'HIDDEN'
+]);
+
 export const TRANSPORT_DOCUMENT_TYPES = Object.freeze([
   'FLIGHT_TICKET',
   'TRAIN_TICKET',
@@ -61,6 +68,13 @@ export const normalizeAttachmentVisibility = (value, fallback = 'INTERNAL_ONLY')
   fallback
 );
 
+export const normalizeAttachmentPdfDisplayMode = (value, fallback = 'AUTO') => normalizeWhitelisted(
+  value,
+  QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES,
+  'Invalid attachment PDF display mode.',
+  fallback
+);
+
 export const normalizeTransportDocumentType = (value, fallback = 'TRANSPORT_VOUCHER') => normalizeWhitelisted(
   value,
   TRANSPORT_DOCUMENT_TYPES,
@@ -71,7 +85,8 @@ export const normalizeTransportDocumentType = (value, fallback = 'TRANSPORT_VOUC
 export const normalizeQuotationAttachment = (attachment = {}) => ({
   ...attachment,
   category: normalizeAttachmentCategory(attachment.category),
-  visibility: normalizeAttachmentVisibility(attachment.visibility)
+  visibility: normalizeAttachmentVisibility(attachment.visibility),
+  pdfDisplayMode: normalizeAttachmentPdfDisplayMode(attachment.pdfDisplayMode)
 });
 
 const normalizeAttachmentList = (items) => Array.isArray(items)
@@ -82,7 +97,8 @@ const normalizeTransportDocumentList = (items) => Array.isArray(items)
   ? items.map((item) => ({
       ...item,
       type: normalizeTransportDocumentType(item.type),
-      visibility: normalizeAttachmentVisibility(item.visibility, 'CUSTOMER_VISIBLE')
+      visibility: normalizeAttachmentVisibility(item.visibility, 'CUSTOMER_VISIBLE'),
+      pdfDisplayMode: normalizeAttachmentPdfDisplayMode(item.pdfDisplayMode)
     }))
   : items;
 

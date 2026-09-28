@@ -13,6 +13,7 @@ const {
 } = await import('./services/quotationV2Service.js');
 const {
   QUOTATION_ATTACHMENT_CATEGORIES,
+  QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES,
   QUOTATION_ATTACHMENT_VISIBILITIES,
   normalizeQuotationAttachmentPayload
 } = await import('./constants/quotationAttachments.js');
@@ -110,17 +111,20 @@ test('public revision DTO always uses the immutable share template', () => {
 
 test('legacy attachment display labels normalize across every quotation attachment path', () => {
   const normalized = normalizeQuotationAttachmentPayload({
-    attachments: [{ category: 'TRAIN TICKET', visibility: 'customer visible after approval' }],
-    hotelOptions: [{ documents: [{ category: 'HOTEL VOUCHER', visibility: 'CUSTOMER VISIBLE' }] }],
-    transportOptions: [{ documents: [{ type: 'TRAIN TICKET', visibility: 'CUSTOMER VISIBLE AFTER APPROVAL' }] }],
+    attachments: [{ category: 'TRAIN TICKET', visibility: 'customer visible after approval', pdfDisplayMode: 'always preview' }],
+    hotelOptions: [{ documents: [{ category: 'HOTEL VOUCHER', visibility: 'CUSTOMER VISIBLE', pdfDisplayMode: 'link only' }] }],
+    transportOptions: [{ documents: [{ type: 'TRAIN TICKET', visibility: 'CUSTOMER VISIBLE AFTER APPROVAL', pdfDisplayMode: 'hidden' }] }],
     activities: [{ attachments: [{ category: 'ACTIVITY TICKET', visibility: 'CUSTOMER VISIBLE AFTER BOOKING' }] }],
     addOns: [{ attachments: [{ category: 'insurance', visibility: 'internal only' }] }]
   });
   assert.equal(normalized.attachments[0].category, 'TRAIN_TICKET');
   assert.equal(normalized.attachments[0].visibility, 'CUSTOMER_VISIBLE_AFTER_APPROVAL');
+  assert.equal(normalized.attachments[0].pdfDisplayMode, 'ALWAYS_PREVIEW');
   assert.equal(normalized.hotelOptions[0].documents[0].category, 'HOTEL_VOUCHER');
+  assert.equal(normalized.hotelOptions[0].documents[0].pdfDisplayMode, 'LINK_ONLY');
   assert.equal(normalized.transportOptions[0].documents[0].type, 'TRAIN_TICKET');
   assert.equal(normalized.transportOptions[0].documents[0].visibility, 'CUSTOMER_VISIBLE_AFTER_APPROVAL');
+  assert.equal(normalized.transportOptions[0].documents[0].pdfDisplayMode, 'HIDDEN');
   assert.equal(normalized.activities[0].attachments[0].visibility, 'CUSTOMER_VISIBLE_AFTER_BOOKING');
   assert.equal(normalized.addOns[0].attachments[0].category, 'INSURANCE');
 });
@@ -128,14 +132,18 @@ test('legacy attachment display labels normalize across every quotation attachme
 test('unknown attachment labels are rejected before Mongoose validation', () => {
   assert.throws(() => normalizeQuotationAttachmentPayload({ attachments: [{ category: 'TRAIN RECEIPT' }] }), /Invalid attachment category/);
   assert.throws(() => normalizeQuotationAttachmentPayload({ attachments: [{ visibility: 'EVERYONE' }] }), /Invalid attachment visibility/);
+  assert.throws(() => normalizeQuotationAttachmentPayload({ attachments: [{ pdfDisplayMode: 'INLINE' }] }), /Invalid attachment PDF display mode/);
 });
 
 test('quotation schema and shared constants accept every supported attachment enum', () => {
   const attachmentSchema = Quotation.schema.path('attachments').schema;
   assert.deepEqual(attachmentSchema.path('category').enumValues, [...QUOTATION_ATTACHMENT_CATEGORIES]);
   assert.deepEqual(attachmentSchema.path('visibility').enumValues, [...QUOTATION_ATTACHMENT_VISIBILITIES]);
+  assert.deepEqual(attachmentSchema.path('pdfDisplayMode').enumValues, [...QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES]);
   const transportVisibility = Quotation.schema.path('transportOptions').schema.path('documents').schema.path('visibility').enumValues;
   assert.deepEqual(transportVisibility, [...QUOTATION_ATTACHMENT_VISIBILITIES]);
+  const transportPdfMode = Quotation.schema.path('transportOptions').schema.path('documents').schema.path('pdfDisplayMode').enumValues;
+  assert.deepEqual(transportPdfMode, [...QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES]);
 });
 
 test('model validation repairs recognized spaced enum values on an existing draft', async () => {

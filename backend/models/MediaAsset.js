@@ -62,13 +62,8 @@ const mediaAssetSchema = new mongoose.Schema(
       destination: { type: Boolean, default: true },
       tripCard: { type: Boolean, default: true },
       hero: { type: Boolean, default: false },
-<<<<<<< Updated upstream
       hotel: { type: Boolean, default: false },
       gallery: { type: Boolean, default: true }
-=======
-      gallery: { type: Boolean, default: true },
-      hotel: { type: Boolean, default: false }
->>>>>>> Stashed changes
     },
     source: {
       sourceType: {

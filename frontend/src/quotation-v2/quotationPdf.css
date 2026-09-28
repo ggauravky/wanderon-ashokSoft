@@ -1,6 +1,22 @@
 @page { size: A4 portrait; margin: 0; }
 :root { --pdf-page-width: 794px; --pdf-page-height: 1123px; --pdf-page-pad-x: 58px; --pdf-content-top: 72px; --pdf-content-bottom: 62px; }
 
+.pdf-measurement-canvas { position: fixed; z-index: -1000; left: -200vw; top: 0; visibility: hidden; pointer-events: none; }
+.pdf-packed-blocks { display: flex; flex-direction: column; gap: 14px; }
+.pdf-packed-blocks.is-cover, .pdf-packed-blocks.is-cover .pdf-layout-block { height: 100%; }
+.pdf-layout-block { position: relative; flex: none; break-inside: avoid; }
+.pdf-layout-block .pdf-section-title { margin-bottom: 18px; }
+.pdf-layout-block .pdf-card-grid, .pdf-layout-block .pdf-itinerary-list, .pdf-layout-block .pdf-experience-list { margin-top: 0; }
+.pdf-layout-block--hotel .pdf-hotel-card, .pdf-layout-block--transport .pdf-transport-card { width: 100%; }
+.pdf-layout-block--document .pdf-document-card { margin-top: 0; }
+.pdf-layout-block--cover { overflow: hidden; }
+.pdf-introduction-copy { font-size: 14px; line-height: 1.85; }
+.pdf-advisor-approval { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.pdf-advisor-approval > * { margin-top: 0; }
+.pdf-debug-label { position: absolute; z-index: 20; top: -8px; right: 0; padding: 2px 5px; background: #ef4444; color: #fff; font: 8px/1 Arial,sans-serif; }
+.pdf-layout-block.is-debug { outline: 1px dashed #ef4444; }
+.pdf-layout-error { width: 794px; min-height: 1123px; padding: 80px; background: #fff1f2; color: #9f1239; font: 600 16px/1.6 Arial,sans-serif; }
+
 .quotation-pdf-document { width: var(--pdf-page-width); margin: 0 auto; color: #17211d; }
 .quotation-pdf-stack { display: flex; flex-direction: column; gap: 24px; width: var(--pdf-page-width); }
 .quotation-pdf-page { position: relative; width: var(--pdf-page-width); height: var(--pdf-page-height); box-sizing: border-box; overflow: hidden; background: #fff; box-shadow: 0 24px 80px rgba(15,23,42,.22); break-after: page; page-break-after: always; font-family: "Plus Jakarta Sans", Inter, Arial, sans-serif; }
@@ -45,7 +61,7 @@
 .pdf-inline-meta, .pdf-highlights { margin: 7px 0 0; font-size: 8.8px; line-height: 1.5; opacity: .65; }
 .pdf-card-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; margin-top: 20px; }
 .pdf-hotel-card, .pdf-transport-card { overflow: hidden; border: 1px solid rgba(100,116,139,.22); border-radius: 10px; break-inside: avoid; }
-.pdf-hotel-card.is-selected { box-shadow: inset 0 0 0 2px rgba(16,185,129,.4); }
+.pdf-hotel-card.is-selected { border-color: rgba(16,185,129,.62); border-width: 2px; }
 .pdf-hotel-image { width: 100%; height: 126px; object-fit: cover; }
 .pdf-hotel-body, .pdf-transport-card { padding: 14px; }
 .pdf-card-grid.is-signature { grid-template-columns: 1fr; }
@@ -88,7 +104,13 @@
 .pdf-document-facts div { display: flex; flex-direction: column; gap: 4px; }
 .pdf-document-facts span { font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .pdf-document-facts strong { font-size: 11px; }
-.pdf-document-preview { display: flex; align-items: center; justify-content: center; height: 578px; background: #eef1ed; border: 1px solid #d5ddd7; }
+.pdf-document-preview { display: flex; align-items: center; justify-content: center; height: 500px; background: #eef1ed; border: 1px solid #d5ddd7; }
+.pdf-document-card.is-landscape .pdf-document-preview { height: 380px; }
+.pdf-document-card.is-portrait .pdf-document-preview { height: 540px; }
+.pdf-document-card.is-tall .pdf-document-preview { height: 610px; }
+.pdf-document-card.is-square .pdf-document-preview { height: 500px; }
+.pdf-document-card.is-compact .pdf-document-preview { max-height: 440px; }
+.pdf-document-card.is-link-only { padding-bottom: 8px; }
 .pdf-document-preview img, .pdf-document-preview .pdf-image-fallback { width: 100%; height: 100%; object-fit: contain; }
 .pdf-document-placeholder { display: flex; align-items: center; flex-direction: column; gap: 12px; color: #486354; font-size: 11px; }
 .pdf-document-placeholder strong { font-size: 15px; text-transform: uppercase; }

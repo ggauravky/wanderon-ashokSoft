@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildQuotationPresentationModel } from './buildQuotationPresentationModel.js';
 import { chunkItinerary, chunkPolicyEntries, splitHotel } from './pagination.js';
+import { packPdfBlocks } from './measuredPagination.js';
+import { buildPdfSectionManifest, resolveDocumentPresentation, splitOversizedPdfBlock } from './pdfSectionManifest.js';
+import { resolveAttachmentMediaType } from './attachmentMedia.js';
 import { quotationPdfFileName } from './quotationV2.js';
 import { QUOTATION_TEMPLATE_KEYS, quotationTemplateOptions } from './templateRegistry.js';
 
@@ -138,4 +141,79 @@ test('document visibility follows approval and booking, with no internal or unsa
   assert.deepEqual(ids({ status: 'APPROVED' }), ['visible', 'approval']);
   assert.deepEqual(ids({ status: 'CONVERTED' }), ['visible', 'approval', 'booking']);
   assert.deepEqual(ids({ status: 'APPROVED', booked: true }), ['visible', 'approval', 'booking']);
+});
+
+test('measured pagination handles exact fits, just-overflow blocks, and empty input', () => {
+  const block = (id, measuredHeight, extra = {}) => ({ id, measuredHeight, ...extra });
+  assert.deepEqual(packPdfBlocks({ blocks: [], pageContentHeight: 100, gap: 10 }), []);
+  const exact = packPdfBlocks({ blocks: [block('a', 40), block('b', 50)], pageContentHeight: 100, gap: 10 });
+  assert.equal(exact.length, 1);
+  assert.deepEqual(exact[0].blocks.map((item) => item.id), ['a', 'b']);
+  const justOver = packPdfBlocks({ blocks: [block('a', 40), block('b', 51)], pageContentHeight: 100, gap: 10 });
+  assert.equal(justOver.length, 2);
+  assert.deepEqual(justOver.map((page) => page.blocks.map((item) => item.id)), [['a'], ['b']]);
+});
+
+test('measured pagination requires an explicit lossless splitter for oversized blocks', () => {
+  const oversized = {
+    id: 'long', measuredHeight: 140,
+    split: () => [{ id: 'long-a', measuredHeight: 70 }, { id: 'long-b', measuredHeight: 70 }]
+  };
+  const pages = packPdfBlocks({ blocks: [oversized], pageContentHeight: 100, gap: 10 });
+  assert.deepEqual(pages.map((page) => page.blocks.map((item) => item.id)), [['long-a'], ['long-b']]);
+  assert.throws(() => packPdfBlocks({ blocks: [{ id: 'unsafe', measuredHeight: 101 }], pageContentHeight: 100 }), /cannot fit/);
+});
+
+test('document display rules never override security and keep all four PDF modes deterministic', () => {
+  const quote = rawQuotation({
+    attachments: [
+      { id: 'auto', title: 'Flight ticket', category: 'FLIGHT_TICKET', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'AUTO', secureUrl: 'https://example.com/flight.pdf' },
+      { id: 'preview', title: 'Permit', category: 'PERMIT', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW', secureUrl: 'https://example.com/permit.pdf' },
+      { id: 'link', title: 'Insurance', category: 'INSURANCE', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'LINK_ONLY', secureUrl: 'https://example.com/insurance.pdf' },
+      { id: 'hidden', title: 'Hidden', category: 'OTHER', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'HIDDEN', secureUrl: 'https://example.com/hidden.pdf' },
+      { id: 'internal', title: 'Internal', category: 'FLIGHT_TICKET', visibility: 'INTERNAL_ONLY', pdfDisplayMode: 'ALWAYS_PREVIEW', secureUrl: 'https://example.com/internal.pdf' }
+    ], hotelOptions: [], transportOptions: []
+  });
+  const documents = buildQuotationPresentationModel(quote).allCustomerDocuments;
+  assert.deepEqual(documents.map((item) => item.id), ['auto', 'preview', 'link']);
+  assert.equal(resolveDocumentPresentation(documents[0], 'journey'), 'preview');
+  assert.equal(resolveDocumentPresentation(documents[0], 'minimal'), 'link');
+  assert.equal(resolveDocumentPresentation(documents[1], 'minimal'), 'preview');
+  assert.equal(resolveDocumentPresentation(documents[2], 'signature_luxe'), 'link');
+});
+
+test('central section manifest covers every required proposal section for every template', () => {
+  const quotation = rawQuotation({
+    tripRequirements: { ...rawQuotation().tripRequirements, personalNote: 'Welcome.', specialRequests: 'Quiet rooms.' },
+    inclusions: ['Breakfast'], exclusions: ['Flights'],
+    policies: { cancellationPolicy: 'Cancellation terms.', refundNotes: 'Refund terms.', termsAndConditions: 'General terms.' },
+    manualPricing: { ...rawQuotation().manualPricing, paymentSchedule: [{ label: 'Deposit', amount: 50000 }] }
+  });
+  const model = buildQuotationPresentationModel(quotation);
+  const expected = ['cover', 'introduction', 'overview', 'itinerary', 'hotels', 'transport', 'experiences', 'documents', 'inclusions', 'exclusions', 'pricing', 'payment-schedule', 'policies', 'closing'];
+  for (const key of QUOTATION_TEMPLATE_KEYS) {
+    const sections = new Set(buildPdfSectionManifest(model, key).map((item) => item.section));
+    expected.forEach((section) => assert.ok(sections.has(section), `${key} missing ${section}`));
+  }
+});
+
+test('section manifest keeps logical content whole until measured overflow requests a split', () => {
+  const longDescription = 'A measured itinerary paragraph. '.repeat(80);
+  const model = buildQuotationPresentationModel(rawQuotation({
+    itinerary: [{ day: 1, title: 'A genuinely long day', destination: 'Leh', description: longDescription }]
+  }));
+  const manifest = buildPdfSectionManifest(model, 'journey');
+  const itinerary = manifest.filter((item) => item.kind === 'itinerary');
+  assert.equal(itinerary.length, 1);
+  assert.equal(itinerary[0].content.description, longDescription.trim());
+  const fragments = splitOversizedPdfBlock({ ...itinerary[0], measuredHeight: 1400 }, 'journey');
+  assert.ok(fragments.length > 1);
+  assert.equal(fragments.map((item) => item.content.description).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(), longDescription.trim());
+});
+
+test('attachment media detection uses MIME first and falls back to safe file extensions', () => {
+  assert.equal(resolveAttachmentMediaType({ mimeType: 'image/png', secureUrl: 'https://example.com/file' }), 'image');
+  assert.equal(resolveAttachmentMediaType({ fileName: 'voucher.PDF' }), 'pdf');
+  assert.equal(resolveAttachmentMediaType({ secureUrl: 'https://example.com/ticket.webp?token=1' }), 'image');
+  assert.equal(resolveAttachmentMediaType({ fileName: 'unknown.docx' }), 'document');
 });

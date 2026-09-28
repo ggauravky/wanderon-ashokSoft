@@ -176,6 +176,7 @@ const publicAttachment = (attachment) => ({
   fileName: attachment.fileName,
   mimeType: attachment.mimeType,
   visibility: attachment.visibility,
+  pdfDisplayMode: attachment.pdfDisplayMode || 'AUTO',
   size: attachment.size,
   secureUrl: attachment.secureUrl,
   bookingReference: attachment.bookingReference || '',

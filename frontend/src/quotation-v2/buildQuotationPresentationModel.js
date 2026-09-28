@@ -1,3 +1,5 @@
+import { resolveAttachmentMediaType } from './attachmentMedia.js';
+
 const numeric = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const text = (value) => typeof value === 'string' ? value.trim() : '';
 const list = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
@@ -42,6 +44,8 @@ const safeAttachment = (item = {}, relation = null) => ({
   bookingReference: text(item.bookingReference),
   passengerName: text(item.passengerName),
   visibility: text(item.visibility),
+  pdfDisplayMode: text(item.pdfDisplayMode).toUpperCase() || 'AUTO',
+  mediaType: resolveAttachmentMediaType(item),
   relation
 });
 
@@ -136,14 +140,16 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const rawTransport = list(quotation.transportOptions).filter((item) => !(isAiCandidate(item, 'transport') && item.selected !== true));
   const hotels = rawHotels.map(safeHotel).sort((a, b) => priority(a) - priority(b));
   const transport = rawTransport.map(safeTransport).sort((a, b) => Number(b.selected) - Number(a.selected));
-  const activities = list(quotation.activities).filter((item) => !(isAiCandidate(item, 'activity') && item.selected !== true)).map((item, index) => ({
+  const rawActivities = list(quotation.activities).filter((item) => !(isAiCandidate(item, 'activity') && item.selected !== true));
+  const rawAddOns = list(quotation.addOns).filter((item) => item.selected === true);
+  const activities = rawActivities.map((item, index) => ({
     id: item.activityId || String(index), dayNumber: numeric(item.dayNumber), date: item.date || '', name: text(item.name),
     description: text(item.description), location: text(item.location), selected: item.selected !== false,
-    optional: item.isOptional === true
+    optional: item.isOptional === true, documents: []
   })).filter((item) => item.name);
-  const addOns = list(quotation.addOns).filter((item) => item.selected === true).map((item, index) => ({
+  const addOns = rawAddOns.map((item, index) => ({
     id: item.addonId || String(index), name: text(item.name), description: text(item.description), category: text(item.category),
-    selected: item.selected === true
+    selected: item.selected === true, documents: []
   })).filter((item) => item.name);
   const routeStops = unique(itinerary.map((day) => day.destination));
   const images = unique([
@@ -171,8 +177,9 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const addDocument = (item, relation, target) => {
     if (!settings.showAttachments || !attachmentAllowed(item, visibility)) return;
     const safe = safeAttachment(item, relation);
+    if (safe.pdfDisplayMode === 'HIDDEN') return;
     if (!safe.secureUrl) return;
-    const key = safe.id || safe.secureUrl;
+    const key = safe.id || item.publicId || safe.secureUrl;
     if (seenDocuments.has(key)) return;
     seenDocuments.add(key);
     target.push(safe);
@@ -188,13 +195,27 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
     if (!segment) return;
     list(item.documents).forEach((document) => addDocument(document, { kind: 'transport', id: segment.id, name: segment.title, route: [segment.pickup, segment.drop].filter(Boolean).join(' to '), schedule: segment.schedule }, segment.documents));
   });
+  rawActivities.forEach((item, index) => {
+    const activity = activities.find((entry) => entry.id === (item.activityId || String(index)));
+    if (!activity) return;
+    list(item.attachments).forEach((document) => addDocument(document, { kind: 'activity', id: activity.id, name: activity.name }, activity.documents));
+  });
+  rawAddOns.forEach((item, index) => {
+    const addOn = addOns.find((entry) => entry.id === (item.addonId || String(index)));
+    if (!addOn) return;
+    list(item.attachments).forEach((document) => addDocument(document, { kind: 'add_on', id: addOn.id, name: addOn.name }, addOn.documents));
+  });
   list(quotation.attachments).forEach((document) => {
     const hotel = document.sectionType === 'HOTEL' && hotels.find((item) => item.id === document.sectionId);
     const segment = document.sectionType === 'TRANSPORT' && transport.find((item) => item.id === document.sectionId);
+    const activity = document.sectionType === 'ACTIVITY' && activities.find((item) => item.id === document.sectionId);
+    const addOn = document.sectionType === 'ADD_ON' && addOns.find((item) => item.id === document.sectionId);
     const relation = hotel ? { kind: 'hotel', id: hotel.id, name: hotel.hotelName, city: hotel.city, checkIn: hotel.checkIn, checkOut: hotel.checkOut }
       : segment ? { kind: 'transport', id: segment.id, name: segment.title, route: [segment.pickup, segment.drop].filter(Boolean).join(' to '), schedule: segment.schedule }
-        : null;
-    addDocument(document, relation, hotel?.documents || segment?.documents || generalAttachments);
+        : activity ? { kind: 'activity', id: activity.id, name: activity.name }
+          : addOn ? { kind: 'add_on', id: addOn.id, name: addOn.name }
+            : null;
+    addDocument(document, relation, hotel?.documents || segment?.documents || activity?.documents || addOn?.documents || generalAttachments);
   });
   const highlights = unique([
     ...activities.filter((item) => item.selected).map((item) => item.name),

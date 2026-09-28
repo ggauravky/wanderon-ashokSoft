@@ -44,7 +44,7 @@ export const chunkTransport = (items, templateKey) => chunkByWeight(items, templ
   return 1 + Math.min(1.4, details / 500);
 });
 
-const splitText = (value, maxLength = 1150) => {
+export const splitText = (value, maxLength = 1150) => {
   const source = String(value || '').trim();
   if (!source || source.length <= maxLength) return source ? [source] : [];
   const sentences = source.split(/(?<=[.!?])\s+/).filter(Boolean);

@@ -33,12 +33,12 @@ export const stressQuotation = {
   customerSnapshot: { name: 'Alexandra-Josephine Sample Traveler With A Very Long Name', city: 'New Delhi' },
   tripRequirements: { title: longTitle, destination: 'Ladakh', origin: 'New Delhi', startDate: '2026-10-12', endDate: '2026-10-25', duration: '14 days / 13 nights', days: 14, nights: 13, adults: 2, totalTravelers: 2, coverImage: stayImage },
   itinerary: Array.from({ length: 14 }, (_, index) => ({ day: index + 1, title: `Day ${index + 1}: The high-altitude route and local discoveries`, destination: index < 4 ? 'Leh' : index < 9 ? 'Nubra Valley' : 'Pangong Lake', description: index === 3 ? longParagraph : 'A balanced day of travel, exploration, and time at leisure.', morning: 'Breakfast and departure with local assistance.', afternoon: 'Explore the route and settle into the next destination.', evening: 'Dinner at leisure.', activityHighlights: ['Scenic viewpoint'], coverMedia: { url: `${stayImage}?day=${index}`, altText: 'Ladakh mountain route' } })),
-  hotelOptions: [hotel(1), hotel(2), hotel(3)],
-  transportOptions: [transport(0), transport(1), transport(2)],
+  hotelOptions: [hotel(1), hotel(2), hotel(3), hotel(4), hotel(5)],
+  transportOptions: [transport(0), transport(1), transport(2), transport(3)],
   activities: Array.from({ length: 6 }, (_, index) => ({ activityId: `activity-${index}`, dayNumber: index + 1, name: `Local experience ${index + 1}`, location: 'Ladakh', description: 'An optional guided experience selected for this journey.', selected: true })),
-  addOns: [{ addonId: 'addon-1', name: 'Photography support', category: 'Photography', description: 'Local photo guidance.', selected: true }],
+  addOns: [{ addonId: 'addon-1', name: 'Photography support', category: 'Photography', description: 'Local photo guidance.', selected: true }, { addonId: 'addon-2', name: 'Private permit assistance', category: 'General', description: 'Customer-facing permit coordination.', selected: true }],
   attachments: [{ id: 'insurance', category: 'INSURANCE', title: 'Travel insurance document', mimeType: 'application/pdf', secureUrl: 'https://example.com/insurance.pdf', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL' }],
-  inclusions: Array.from({ length: 20 }, (_, index) => `Confirmed inclusion ${index + 1}`),
+  inclusions: Array.from({ length: 25 }, (_, index) => `Confirmed inclusion ${index + 1}`),
   exclusions: Array.from({ length: 20 }, (_, index) => `Expense not included ${index + 1}`),
   policies: { paymentTerms: 'The confirmed deposit is due at booking. '.repeat(30), cancellationPolicy: 'Cancellation requests are reviewed under the confirmed supplier terms. '.repeat(30), refundNotes: 'Refund eligibility is subject to the confirmed booking conditions. '.repeat(20), travelRequirements: 'Carry valid travel identification and any required permits.', importantInformation: 'Mountain weather and road conditions may affect timings.', termsAndConditions: 'Services and dates remain subject to written confirmation. '.repeat(35) },
   manualPricing: { finalCustomerPrice: 245000, depositAmount: 24500, balanceAmount: 220500, currency: 'INR', finalizedAt: '2026-09-26', paymentSchedule: [{ label: 'Deposit', amount: 24500, dueDate: '2026-10-01' }, { label: 'Balance', amount: 220500, dueDate: '2026-10-07' }] },
@@ -52,6 +52,54 @@ export const minimalQuotation = {
   tripRequirements: { title: 'A Quiet Weekend in the Hills', destination: 'Himachal Pradesh', duration: '2 days', days: 2, adults: 1 },
   itinerary: [{ day: 1, title: 'Arrival', destination: 'Himachal Pradesh', description: 'Arrive and settle in.' }, { day: 2, title: 'Return', destination: 'Himachal Pradesh', description: 'Depart at leisure.' }],
   hotelOptions: [], transportOptions: [], activities: [], addOns: [], attachments: [], manualPricing: {}, presentationSettings: {}
+};
+
+export const normalQuotation = {
+  ...stressQuotation,
+  quotationNumber: 'WL-Q-NORMAL',
+  status: 'APPROVED',
+  customerSnapshot: { name: 'Rahul Sharma', city: 'Delhi' },
+  tripRequirements: { ...stressQuotation.tripRequirements, title: 'Ladakh Explorer', origin: 'Delhi', days: 7, nights: 6, duration: '7 days / 6 nights', adults: 2, children: 1, seniors: 1, totalTravelers: 4, endDate: '2026-10-18' },
+  tripPreferences: { interests: ['Photography', 'Culture'], stayPreference: 'Boutique stays', dietaryPreference: 'Vegetarian' },
+  itinerary: stressQuotation.itinerary.slice(0, 7),
+  hotelOptions: stressQuotation.hotelOptions.slice(0, 3),
+  transportOptions: stressQuotation.transportOptions.slice(0, 3),
+  activities: stressQuotation.activities.slice(0, 5),
+  inclusions: stressQuotation.inclusions.slice(0, 15),
+  exclusions: stressQuotation.exclusions.slice(0, 12),
+  presentationSettings: { ...stressQuotation.presentationSettings, showTripPreferences: true }
+};
+
+export const fiveDayQuotation = {
+  ...normalQuotation,
+  quotationNumber: 'WL-Q-FIVE-DAY',
+  tripRequirements: { ...normalQuotation.tripRequirements, days: 5, nights: 4, duration: '5 days / 4 nights', endDate: '2026-10-16' },
+  itinerary: [
+    { day: 1, title: 'Arrive in Leh', destination: 'Leh', description: 'Meet the local team and settle into the hotel.' },
+    { day: 2, title: 'Leh heritage trail', destination: 'Leh', description: 'A compact guided walk through the old town.', morning: 'Breakfast and market walk.' },
+    { day: 3, title: 'Nubra Valley crossing', destination: 'Nubra Valley', description: longParagraph, morning: 'Cross Khardung La with scenic pauses.', afternoon: 'Village visit and local lunch.', evening: 'Check in and rest.', transferDetails: longParagraph.slice(0, 700), activityHighlights: ['Mountain pass', 'Village experience'] },
+    { day: 4, title: 'Nubra discoveries', destination: 'Nubra Valley', description: 'Explore the valley with a flexible private vehicle.', morning: 'Sand dunes.', afternoon: 'Monastery visit.' },
+    { day: 5, title: 'Return to Leh', destination: 'Leh', description: 'Drive back to Leh and conclude the journey.' }
+  ]
+};
+
+export const ticketHeavyQuotation = {
+  ...normalQuotation,
+  quotationNumber: 'WL-Q-TICKETS',
+  status: 'CONVERTED',
+  bookingId: 'booking-ticket-heavy',
+  attachments: [
+    { id: 'portrait-jpg', category: 'FLIGHT_TICKET', title: 'Portrait flight ticket', fileName: 'flight-ticket.jpg', mimeType: 'image/jpeg', secureUrl: 'https://example.com/portrait-ticket.jpg', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW', passengerName: 'Rahul Sharma', bookingReference: 'FL-RAHUL-01' },
+    { id: 'landscape-png', category: 'HOTEL_VOUCHER', title: 'Landscape hotel voucher', fileName: 'hotel-voucher.png', mimeType: 'image/png', secureUrl: 'https://example.com/landscape-ticket.png', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'AUTO', bookingReference: 'HTL-991' },
+    { id: 'tall-webp', category: 'TRAIN_TICKET', title: 'Tall train ticket screenshot', fileName: 'train-ticket.webp', mimeType: '', secureUrl: 'https://example.com/tall-ticket.webp', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL', pdfDisplayMode: 'ALWAYS_PREVIEW', passengerName: 'Rahul Sharma', bookingReference: 'PNR-TALL-42' },
+    { id: 'flight-pdf', category: 'FLIGHT_TICKET', title: 'Flight ticket PDF', fileName: 'flight.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/ticket.pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW' },
+    { id: 'voucher-pdf', category: 'HOTEL_VOUCHER', title: 'Hotel voucher PDF', fileName: 'voucher.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/voucher.pdf', visibility: 'CUSTOMER_VISIBLE_AFTER_BOOKING', pdfDisplayMode: 'ALWAYS_PREVIEW' },
+    { id: 'broken-image', category: 'BUS_TICKET', title: 'Unavailable bus ticket image', fileName: 'broken.jpg', mimeType: 'image/jpeg', secureUrl: 'https://example.com/broken-image.jpg', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW' },
+    { id: 'broken-pdf', category: 'GENERAL', title: 'Unavailable PDF', fileName: 'broken.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/broken.pdf?invalid=1', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW' },
+    { id: 'link-only', category: 'PERMIT', title: 'Permit reference', fileName: 'permit.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/permit.pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'LINK_ONLY' },
+    { id: 'hidden', category: 'INSURANCE', title: 'Hidden from PDF', fileName: 'hidden.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/hidden.pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'HIDDEN' },
+    { id: 'internal', category: 'INVOICE', title: 'Internal supplier invoice', fileName: 'internal.pdf', mimeType: 'application/pdf', secureUrl: 'https://example.com/internal.pdf', visibility: 'INTERNAL_ONLY', pdfDisplayMode: 'ALWAYS_PREVIEW' }
+  ]
 };
 
 export const brokenMediaQuotation = {

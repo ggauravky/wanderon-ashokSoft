@@ -10,7 +10,7 @@ export function TemplateChoiceGrid({ quotation, selectedKey, onSelect, onPreview
     {quotationTemplateOptions().map((template) => <article key={template.key} className={`template-choice-card ${selectedKey === template.key ? 'is-selected' : ''}`}>
       <button type="button" role="radio" aria-checked={selectedKey === template.key} onClick={() => onSelect(template.key)} className="template-choice-select">
         {!compact && <div className={`template-cover-mini is-${template.key}`}>{model.journey.coverImage ? <PdfImage src={model.journey.coverImage} alt="" /> : <div className="template-cover-shape" />}<div><small>WANDERLUXE</small><strong>{model.journey.title}</strong><span>{model.journey.destination}</span></div></div>}
-        <div className="template-choice-copy"><div><span>{template.detail}</span><strong>{template.name}</strong></div><em>{template.targetPages}</em><p>{template.shortDescription}</p>{!compact && <small>{template.bestFor || template.description}</small>}</div>
+        <div className="template-choice-copy"><div><span>{template.detail}</span><strong>{template.name}</strong></div><em>Typically {template.targetPages}</em><p>{template.shortDescription}</p>{!compact && <small>{template.bestFor || template.description}</small>}</div>
       </button>
       {onPreview && <button type="button" onClick={() => onPreview(template.key)} className="template-choice-preview"><Eye size={15} />Preview {template.name}</button>}
     </article>)}
