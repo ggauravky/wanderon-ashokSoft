@@ -21,9 +21,12 @@ export const normalizeImageUploadResult = (response = {}) => {
     // canonical camel-case contract.
     secure_url: secureUrl,
     public_id: publicId,
+    source: String(raw?.source || '').trim(),
+    provider: String(raw?.provider || (raw?.source === 'local_fallback' ? 'local' : publicId ? 'cloudinary' : 'external')).trim(),
     width: Number(raw?.width) || 0,
     height: Number(raw?.height) || 0,
     bytes: Number(raw?.bytes) || 0,
-    format: String(raw?.format || '').trim()
+    format: String(raw?.format || '').trim().toLowerCase(),
+    resourceType: String(raw?.resourceType || raw?.resource_type || '').trim()
   };
 };

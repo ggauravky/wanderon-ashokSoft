@@ -3,17 +3,21 @@ import { v2 as cloudinary } from 'cloudinary';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import {
+  assertMediaStorageAvailable,
+  getMediaStorageStatus,
+  isCloudinaryConfigured,
+  isProductionLikeRuntime,
+  normalizeUploadedMedia
+} from './mediaStoragePolicy.js';
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProductionLike = isProductionLikeRuntime();
 
 // Local storage is a development-only convenience.
-const LOCAL_UPLOAD_DIR = path.resolve('./uploads');
-if (!isProduction && !fs.existsSync(LOCAL_UPLOAD_DIR)) {
+export const LOCAL_UPLOAD_DIR = path.resolve('./uploads');
+if (!isProductionLike && !fs.existsSync(LOCAL_UPLOAD_DIR)) {
   fs.mkdirSync(LOCAL_UPLOAD_DIR, { recursive: true });
 }
-
-const isCloudinaryConfigured = () =>
-  !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
 
 // Configure Cloudinary SDK
 if (isCloudinaryConfigured()) {
@@ -23,21 +27,15 @@ if (isCloudinaryConfigured()) {
     api_secret: process.env.CLOUDINARY_API_SECRET,
     secure: true
   });
-  console.log('☁️  Cloudinary SDK configured and ready.');
+  console.log('Cloudinary media storage configured.');
 } else {
-  console.warn(isProduction
-    ? 'Cloudinary credentials are not configured. Media mutations will fail closed.'
-    : 'Cloudinary credentials are not set. Using development-only local upload storage.');
+  console.warn(isProductionLike
+    ? 'Cloudinary media storage unavailable; uploads disabled.'
+    : 'Cloudinary media storage unavailable; using development-only local uploads.');
 }
 
-const assertMediaStorageAvailable = () => {
-  if (!isCloudinaryConfigured() && isProduction) {
-    throw new Error('Media storage is not configured.');
-  }
-};
-
 // ─── Local Fallback Save ────────────────────────────────────────────
-const saveLocalFallback = (buffer, originalName, subfolder = 'misc') => {
+const saveLocalFallback = (buffer, originalName, subfolder = 'misc', resourceType = 'image') => {
   const ext = path.extname(originalName) || '.bin';
   const filename = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}${ext}`;
   const subDir = path.join(LOCAL_UPLOAD_DIR, subfolder);
@@ -45,15 +43,16 @@ const saveLocalFallback = (buffer, originalName, subfolder = 'misc') => {
   const filepath = path.join(subDir, filename);
   fs.writeFileSync(filepath, buffer);
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
-  return {
+  return normalizeUploadedMedia({
     source: 'local_fallback',
     public_id: `local/${subfolder}/${filename}`,
     secure_url: `${backendUrl}/uploads/${subfolder}/${filename}`,
     url: `${backendUrl}/uploads/${subfolder}/${filename}`,
     format: ext.replace('.', ''),
-    resource_type: subfolder === 'videos' ? 'video' : 'image',
+    bytes: buffer.length,
+    resource_type: resourceType,
     original_filename: originalName
-  };
+  }, { originalname: originalName, size: buffer.length });
 };
 
 // ─── Upload Image ────────────────────────────────────────────────────
@@ -77,7 +76,7 @@ export const uploadImage = async (buffer, originalName = 'image', folder = 'wand
       },
       (error, result) => {
         if (error) return reject(new Error(`Cloudinary Image Upload Error: ${error.message}`));
-        resolve({
+        resolve(normalizeUploadedMedia({
           source: 'cloudinary',
           public_id: result.public_id,
           secure_url: result.secure_url,
@@ -88,7 +87,7 @@ export const uploadImage = async (buffer, originalName = 'image', folder = 'wand
           bytes: result.bytes,
           resource_type: 'image',
           original_filename: originalName
-        });
+        }, { originalname: originalName }));
       }
     );
     uploadStream.end(buffer);
@@ -99,7 +98,7 @@ export const uploadImage = async (buffer, originalName = 'image', folder = 'wand
 export const uploadVideo = async (buffer, originalName = 'video', folder = 'wanderluxe/videos') => {
   assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
-    return saveLocalFallback(buffer, originalName, 'videos');
+    return saveLocalFallback(buffer, originalName, 'videos', 'video');
   }
 
   return new Promise((resolve, reject) => {
@@ -114,7 +113,7 @@ export const uploadVideo = async (buffer, originalName = 'video', folder = 'wand
       },
       (error, result) => {
         if (error) return reject(new Error(`Cloudinary Video Upload Error: ${error.message}`));
-        resolve({
+        resolve(normalizeUploadedMedia({
           source: 'cloudinary',
           public_id: result.public_id,
           secure_url: result.secure_url,
@@ -126,7 +125,7 @@ export const uploadVideo = async (buffer, originalName = 'video', folder = 'wand
           bytes: result.bytes,
           resource_type: 'video',
           original_filename: originalName
-        });
+        }, { originalname: originalName }));
       }
     );
     uploadStream.end(buffer);
@@ -142,7 +141,7 @@ export const uploadBase64Media = async (base64Data, folder = 'wanderluxe/misc', 
     const ext = matches ? matches[1].split('/')[1] : 'bin';
     const rawBuffer = Buffer.from(matches ? matches[2] : base64Data, 'base64');
     const subfolder = resourceType === 'video' ? 'videos' : 'images';
-    return saveLocalFallback(rawBuffer, `base64_upload.${ext}`, subfolder);
+    return saveLocalFallback(rawBuffer, `base64_upload.${ext}`, subfolder, resourceType);
   }
 
   return new Promise((resolve, reject) => {
@@ -156,7 +155,7 @@ export const uploadBase64Media = async (base64Data, folder = 'wanderluxe/misc', 
       },
       (error, result) => {
         if (error) return reject(new Error(`Cloudinary Base64 Upload Error: ${error.message}`));
-        resolve({
+        resolve(normalizeUploadedMedia({
           source: 'cloudinary',
           public_id: result.public_id,
           secure_url: result.secure_url,
@@ -164,7 +163,7 @@ export const uploadBase64Media = async (base64Data, folder = 'wanderluxe/misc', 
           format: result.format,
           bytes: result.bytes,
           resource_type: resourceType
-        });
+        }));
       }
     );
   });
@@ -196,7 +195,7 @@ export const deleteMedia = async (publicId, resourceType = 'image') => {
 export const uploadDocument = async (buffer, originalName = 'document.pdf', folder = 'wanderluxe/documents', mimeType = 'application/pdf') => {
   assertMediaStorageAvailable();
   if (!isCloudinaryConfigured()) {
-    return saveLocalFallback(buffer, originalName, 'documents');
+    return saveLocalFallback(buffer, originalName, 'documents', 'document');
   }
 
   const isPdf = mimeType === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf');
@@ -213,7 +212,7 @@ export const uploadDocument = async (buffer, originalName = 'document.pdf', fold
       },
       (error, result) => {
         if (error) return reject(new Error(`Cloudinary Document Upload Error: ${error.message}`));
-        resolve({
+        resolve(normalizeUploadedMedia({
           source: 'cloudinary',
           public_id: result.public_id,
           secure_url: result.secure_url,
@@ -222,7 +221,7 @@ export const uploadDocument = async (buffer, originalName = 'document.pdf', fold
           bytes: result.bytes,
           resource_type: result.resource_type || resourceType,
           original_filename: originalName
-        });
+        }, { originalname: originalName }));
       }
     );
     uploadStream.end(buffer);
@@ -239,4 +238,6 @@ export const getOptimizedUrl = (publicId, { width, height, quality = 'auto', for
   });
 };
 
-export default { uploadImage, uploadVideo, uploadDocument, uploadBase64Media, deleteMedia, getOptimizedUrl };
+export { getMediaStorageStatus, isCloudinaryConfigured, normalizeUploadedMedia };
+
+export default { uploadImage, uploadVideo, uploadDocument, uploadBase64Media, deleteMedia, getOptimizedUrl, getMediaStorageStatus, normalizeUploadedMedia };

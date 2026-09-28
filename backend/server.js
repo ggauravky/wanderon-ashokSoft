@@ -25,6 +25,8 @@ import hotelRoutes from './routes/hotelRoutes.js';
 import operationsRoutes from './routes/operationsRoutes.js';
 import { razorpayWebhookHandler } from './controllers/webhookController.js';
 import { getAllowedOrigins, validateRuntimeConfig } from './config/environment.js';
+import { LOCAL_UPLOAD_DIR } from './utils/cloudinaryService.js';
+import { isProductionLikeRuntime } from './utils/mediaStoragePolicy.js';
 
 const environment = process.env.NODE_ENV || 'development';
 
@@ -72,6 +74,7 @@ app.post(
 );
 
 app.use(express.json());
+if (!isProductionLikeRuntime()) app.use('/uploads', express.static(LOCAL_UPLOAD_DIR));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');

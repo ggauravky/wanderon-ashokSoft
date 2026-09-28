@@ -71,6 +71,7 @@ File location: `backend/.env` (derived from `backend/.env.example`)
 | Variable | Dev Required? | Prod Required? | Type | Default / Example | Purpose & Failure Impact |
 | :--- | :---: | :---: | :---: | :--- | :--- |
 | `FRONTEND_URL` | Yes | Yes | Public | `http://localhost:5173` | Canonical URL of the client app. Whitelisted for CORS; used in verification emails and WhatsApp links. |
+| `BACKEND_URL` | Yes | Yes | Public | `http://localhost:5000` | Canonical backend origin. Development local-upload URLs must match this exact origin and `/uploads/` path. |
 | `ALLOWED_ORIGINS` | No | Yes | Public | `http://localhost:5173` | Comma-separated list of approved origin domains allowed by CORS middleware. |
 | `ALLOW_VERCEL_PREVIEWS` | No | No | Public | `false` | When set to `'true'`, allows dynamic Vercel preview deployment URLs (`https://*.vercel.app`) to access the API. |
 
@@ -91,6 +92,7 @@ File location: `backend/.env` (derived from `backend/.env.example`)
 | `QUOTATION_AI_MODEL` | Feature | Optional | No | `gemini-3.1-flash-lite` | Low-cost quotation-only primary model. The general AI Planner continues to use `GEMINI_MODEL`. |
 | `QUOTATION_AI_FALLBACK_MODEL` | Feature | Optional | No | `gemini-3.5-flash-lite` | Quotation-only fallback used for retryable model/provider failures. |
 | `DEMO_QUOTATION_STAFF_EMAIL` | Development | Optional | No | `staff@example.com` | Existing active Admin, Super Admin, or Sales account used by the idempotent local demo seed. The seed refuses production. |
+| `ALLOW_DEMO_SEED` | No | Required only to seed production | No | `false` | Explicit safety gate for the two submission-demo seeds in production or Render. Leave false during normal runtime. |
 
 ### 6. Cloudinary Media Storage
 
@@ -98,7 +100,7 @@ File location: `backend/.env` (derived from `backend/.env.example`)
 | :--- | :---: | :---: | :---: | :--- | :--- |
 | `CLOUDINARY_CLOUD_NAME` | Feature | **YES** | Public | `<cloud-name>` | Cloudinary account cloud identifier. |
 | `CLOUDINARY_API_KEY` | Feature | **YES** | Public/Key | `<api-key>` | Cloudinary public API key. |
-| `CLOUDINARY_API_SECRET` | Feature | **YES** | **Secret** | `<api-secret>` | Cloudinary API secret. In development, image uploads fall back to local disk (`./uploads`) if unconfigured. In production, upload mutations fail closed. |
+| `CLOUDINARY_API_SECRET` | Feature | **YES** | **Secret** | `<api-secret>` | Cloudinary API secret. In development, uploads may use the explicitly served local `/uploads` fallback. Production and Render fail closed with `MEDIA_STORAGE_UNAVAILABLE` when Cloudinary is incomplete. |
 
 ### 7. Brevo Transactional Email
 
@@ -159,6 +161,7 @@ JWT_SECRET=4f7b2a9e1d8c3f5a0b6e9d2c8f1a4b7e3d6c9f2a5b8e1d4c7f0a3b6e9d2c5f8a
 
 # CORS & Client
 FRONTEND_URL=http://localhost:5173
+BACKEND_URL=http://localhost:5000
 ALLOWED_ORIGINS=http://localhost:5173
 ALLOW_VERCEL_PREVIEWS=false
 
@@ -173,6 +176,7 @@ GEMINI_MODEL=gemini-3.8-flash
 QUOTATION_AI_MODEL=gemini-3.1-flash-lite
 QUOTATION_AI_FALLBACK_MODEL=gemini-3.5-flash-lite
 DEMO_QUOTATION_STAFF_EMAIL=
+ALLOW_DEMO_SEED=false
 
 # Feature: Cloudinary (Optional in dev - falls back to ./uploads)
 CLOUDINARY_CLOUD_NAME=

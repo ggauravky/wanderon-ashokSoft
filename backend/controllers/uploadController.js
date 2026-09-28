@@ -1,5 +1,16 @@
 import { uploadImage, uploadVideo, uploadDocument, uploadBase64Media, deleteMedia } from '../utils/cloudinaryService.js';
 
+const uploadFailure = (res, error, fallback) => {
+  const unavailable = error?.code === 'MEDIA_STORAGE_UNAVAILABLE';
+  return res.status(unavailable ? 503 : (error?.status || 500)).json({
+    success: false,
+    ...(error?.code ? { code: error.code } : {}),
+    message: unavailable
+      ? 'Media upload storage is not configured. Contact the administrator.'
+      : (error?.message || fallback)
+  });
+};
+
 // @desc    Upload single or multiple documents / tickets (PDF or Image)
 // @route   POST /api/upload/document
 // @access  Private
@@ -33,7 +44,7 @@ export const uploadDocumentController = async (req, res) => {
     });
   } catch (error) {
     console.error('Document Upload Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to upload document(s)' });
+    return uploadFailure(res, error, 'Failed to upload document(s)');
   }
 };
 
@@ -67,7 +78,7 @@ export const uploadImageController = async (req, res) => {
     });
   } catch (error) {
     console.error('Image Upload Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to upload image(s)' });
+    return uploadFailure(res, error, 'Failed to upload image(s)');
   }
 };
 
@@ -91,7 +102,7 @@ export const uploadVideoController = async (req, res) => {
     });
   } catch (error) {
     console.error('Video Upload Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to upload video' });
+    return uploadFailure(res, error, 'Failed to upload video');
   }
 };
 
@@ -120,7 +131,7 @@ export const uploadBase64Controller = async (req, res) => {
     });
   } catch (error) {
     console.error('Base64 Upload Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to upload media' });
+    return uploadFailure(res, error, 'Failed to upload media');
   }
 };
 
@@ -145,6 +156,6 @@ export const deleteMediaController = async (req, res) => {
     });
   } catch (error) {
     console.error('Delete Media Error:', error);
-    res.status(500).json({ message: error.message || 'Failed to delete media' });
+    return uploadFailure(res, error, 'Failed to delete media');
   }
 };

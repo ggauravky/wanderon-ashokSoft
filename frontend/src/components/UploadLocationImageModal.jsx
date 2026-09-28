@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
-import { 
-  X, Upload, Image as ImageIcon, MapPin, Tag, Check, AlertCircle, 
-  Sparkles, RefreshCw, FileText, Camera
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Upload, Check, AlertCircle, RefreshCw, Camera } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { uploadImageApi, createMediaAssetApi } from '../services/api.js';
+import { validateImageUploadFile } from '../utils/uploadResult.js';
 
 export default function UploadLocationImageModal({
   isOpen,
@@ -23,25 +21,37 @@ export default function UploadLocationImageModal({
   const [locality, setLocality] = useState(initialLocationName || '');
   const [poi, setPoi] = useState(initialLocationName || '');
   const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [country, setCountry] = useState('India');
+  const [state] = useState('');
+  const [country] = useState('India');
   const [title, setTitle] = useState(initialLocationName ? `${initialLocationName} View` : '');
-  const [caption, setCaption] = useState('');
-  const [altText, setAltText] = useState('');
+  const [caption] = useState('');
+  const [altText] = useState('');
   const [credit, setCredit] = useState('WanderLuxe Archival Collection');
   const [tags, setTags] = useState('');
   const [featured, setFeatured] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [pendingUpload, setPendingUpload] = useState(null);
+
+  useEffect(() => () => {
+    if (filePreview.startsWith('blob:')) URL.revokeObjectURL(filePreview);
+  }, [filePreview]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected) {
+      const validationError = validateImageUploadFile(selected);
+      if (validationError) {
+        setErrorMsg(validationError);
+        return;
+      }
       if (filePreview && filePreview.startsWith('blob:')) {
-        try { URL.revokeObjectURL(filePreview); } catch (_) {}
+        try { URL.revokeObjectURL(filePreview); } catch {}
       }
       setFile(selected);
+      setPendingUpload(null);
+      setErrorMsg('');
       setFilePreview(URL.createObjectURL(selected));
       if (!title) {
         const cleanName = selected.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
@@ -58,6 +68,9 @@ export default function UploadLocationImageModal({
     let publicId = '';
     let width = 1600;
     let height = 900;
+    let provider = 'external';
+    let format = '';
+    let bytes = 0;
 
     if (uploadMode === 'file' || purpose === 'hotel') {
       if (!file) {
@@ -67,9 +80,16 @@ export default function UploadLocationImageModal({
 
       try {
         setUploading(true);
-        const uploadRes = await uploadImageApi(file, purpose === 'hotel' ? 'wanderluxe/hotels' : 'wanderluxe/locations');
+        const fileKey = `${file.name}:${file.size}:${file.lastModified}`;
+        const uploadRes = pendingUpload?.fileKey === fileKey
+          ? pendingUpload.result
+          : await uploadImageApi(file, purpose === 'hotel' ? 'wanderluxe/hotels' : 'wanderluxe/locations');
+        setPendingUpload({ fileKey, result: uploadRes });
         finalImageUrl = uploadRes.secure_url || uploadRes.url;
         publicId = uploadRes.public_id || '';
+        provider = uploadRes.provider || (uploadRes.source === 'local_fallback' ? 'local' : 'cloudinary');
+        format = uploadRes.format || file.name.split('.').pop()?.toLowerCase() || '';
+        bytes = uploadRes.bytes || file.size || 0;
         if (uploadRes.width) width = uploadRes.width;
         if (uploadRes.height) height = uploadRes.height;
       } catch (uploadErr) {
@@ -82,6 +102,7 @@ export default function UploadLocationImageModal({
         setErrorMsg('Please provide a valid image URL.');
         return;
       }
+      try { format = new URL(finalImageUrl).pathname.split('.').pop()?.toLowerCase() || ''; } catch { format = ''; }
     }
 
     if (!finalImageUrl) {
@@ -108,12 +129,13 @@ export default function UploadLocationImageModal({
         caption: caption.trim() || title.trim(),
         altText: altText.trim() || `${poi || locality || title}, ${destination}`,
         storage: {
-          provider: 'cloudinary',
+          provider,
           secureUrl: finalImageUrl,
           publicId,
           width,
           height,
-          format: 'webp'
+          format: format || 'jpg',
+          bytes
         },
         geography: {
           country: country.trim() || 'India',
@@ -132,8 +154,9 @@ export default function UploadLocationImageModal({
           poi: poi.trim()
         },
         source: {
-          sourceType: 'ADMIN_UPLOAD',
-          attribution: credit.trim() || 'WanderLuxe Archival Collection'
+          sourceType: uploadMode === 'url' && purpose !== 'hotel' ? 'AUTHORIZED_EXTERNAL_SOURCE' : 'ADMIN_UPLOAD',
+          attribution: credit.trim() || 'WanderLuxe Archival Collection',
+          sourceUrl: uploadMode === 'url' && purpose !== 'hotel' ? finalImageUrl : ''
         },
         tags: tagArray,
         usage: purpose === 'hotel' ? { hotel: true, gallery: true, hero: true, itinerary: false, destination: false, tripCard: false } : undefined,
@@ -147,7 +170,7 @@ export default function UploadLocationImageModal({
       }
       onClose();
     } catch (createErr) {
-      setErrorMsg('Failed to register media asset in database: ' + createErr.message);
+      setErrorMsg(`Failed to register media asset in database: ${createErr.message}. The completed upload is retained for a safe retry while this window stays open.`);
     } finally {
       setUploading(false);
     }

@@ -2,9 +2,12 @@ import mongoose from 'mongoose';
 import MediaAsset, { generateLocationKeys } from '../models/MediaAsset.js';
 import Trip from '../models/Trip.js';
 import Quotation from '../models/Quotation.js';
+import Hotel from '../models/Hotel.js';
 import { resolveItineraryMedia } from '../services/mediaResolverService.js';
 import { getDestinations } from '../services/travelKnowledgeService.js';
 import { CANONICAL_MEDIA_ASSETS } from '../data/canonicalMediaAssets.js';
+import { deleteMedia, getMediaStorageStatus } from '../utils/cloudinaryService.js';
+import { escapeRegexValue, isSafeMediaUrl, mediaUrlValidationMessage } from '../utils/mediaStoragePolicy.js';
 
 let memoryMediaAssets = [...CANONICAL_MEDIA_ASSETS];
 const isDbConnected = () => mongoose.connection.readyState === 1;
@@ -20,6 +23,9 @@ export const listMediaAssets = async (req, res) => {
       tag,
       search,
       usage,
+      type,
+      category,
+      source,
       featured,
       orientation,
       active = 'true',
@@ -28,6 +34,9 @@ export const listMediaAssets = async (req, res) => {
     } = req.query;
 
     if (!isDbConnected()) {
+      if (req.mediaAdminRequest) {
+        return res.status(503).json({ success: false, message: 'Media Library is temporarily unavailable.' });
+      }
       let filtered = [...memoryMediaAssets];
       if (active !== 'all') {
         filtered = filtered.filter(a => a.active === (active === 'true'));
@@ -36,9 +45,12 @@ export const listMediaAssets = async (req, res) => {
         filtered = filtered.filter(a => a.featured);
       }
       if (destination) {
-        const dRegex = new RegExp(destination, 'i');
+        const dRegex = new RegExp(escapeRegexValue(destination), 'i');
         filtered = filtered.filter(a => dRegex.test(a.geography?.destination || ''));
       }
+      if (type) filtered = filtered.filter((asset) => asset.type === String(type).toUpperCase());
+      if (category) filtered = filtered.filter((asset) => (asset.categories || []).includes(category));
+      if (source) filtered = filtered.filter((asset) => asset.source?.sourceType === source);
       if (orientation) {
         filtered = filtered.filter(a => a.orientation === orientation.toUpperCase());
       }
@@ -66,6 +78,7 @@ export const listMediaAssets = async (req, res) => {
     }
 
     const filter = {};
+    const andFilters = [];
 
     if (active !== 'all') {
       filter.active = active === 'true';
@@ -76,15 +89,16 @@ export const listMediaAssets = async (req, res) => {
     }
 
     if (destination) {
-      filter['geography.destination'] = { $regex: new RegExp(destination, 'i') };
+      filter['geography.destination'] = { $regex: new RegExp(escapeRegexValue(destination), 'i') };
     }
 
     if (location) {
-      filter.$or = [
-        { 'geography.locality': { $regex: new RegExp(location, 'i') } },
-        { 'geography.poi': { $regex: new RegExp(location, 'i') } },
+      const locationRegex = new RegExp(escapeRegexValue(location), 'i');
+      andFilters.push({ $or: [
+        { 'geography.locality': { $regex: locationRegex } },
+        { 'geography.poi': { $regex: locationRegex } },
         { locationKeys: { $in: [location.toLowerCase().trim()] } }
-      ];
+      ] });
     }
 
     if (tag) {
@@ -96,33 +110,48 @@ export const listMediaAssets = async (req, res) => {
     }
 
     if (usage) {
-      filter[`usage.${usage}`] = true;
+      const allowedUsage = new Set(['itinerary', 'destination', 'tripCard', 'hero', 'hotel', 'gallery']);
+      if (allowedUsage.has(usage)) filter[`usage.${usage}`] = true;
     }
 
+    if (type) filter.type = String(type).toUpperCase();
+    if (category) filter.categories = String(category).trim();
+    if (source) filter['source.sourceType'] = String(source).trim().toUpperCase();
+
     if (search) {
-      const qRegex = new RegExp(search.trim(), 'i');
-      filter.$or = [
+      const qRegex = new RegExp(escapeRegexValue(search), 'i');
+      andFilters.push({ $or: [
         { title: qRegex },
         { altText: qRegex },
         { caption: qRegex },
         { 'geography.destination': qRegex },
         { 'geography.poi': qRegex },
         { locationKeys: { $in: [search.toLowerCase().trim()] } }
-      ];
+      ] });
     }
+    if (andFilters.length) filter.$and = andFilters;
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.max(1, Math.min(100, parseInt(limit, 10) || 24));
     const skip = (pageNum - 1) * limitNum;
 
-    const [assets, total] = await Promise.all([
+    const tasks = [
       MediaAsset.find(filter)
         .sort({ featured: -1, createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .lean(),
       MediaAsset.countDocuments(filter)
-    ]);
+    ];
+    if (req.mediaAdminRequest) {
+      tasks.push(
+        MediaAsset.distinct('geography.destination', filter),
+        MediaAsset.distinct('categories', filter),
+        MediaAsset.distinct('source.sourceType', filter),
+        MediaAsset.distinct('type', filter)
+      );
+    }
+    const [assets, total, destinations = [], categories = [], sources = [], types = []] = await Promise.all(tasks);
 
     res.json({
       success: true,
@@ -132,12 +161,25 @@ export const listMediaAssets = async (req, res) => {
         limit: limitNum,
         total,
         pages: Math.ceil(total / limitNum)
-      }
+      },
+      ...(req.mediaAdminRequest ? {
+        facets: {
+          destinations: destinations.filter(Boolean).sort(),
+          categories: categories.filter(Boolean).sort(),
+          sources: sources.filter(Boolean).sort(),
+          types: types.filter(Boolean).sort()
+        }
+      } : {})
     });
   } catch (error) {
     console.error('List Media Assets Error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to list media assets' });
   }
+};
+
+export const listAdminMediaAssets = async (req, res) => {
+  req.mediaAdminRequest = true;
+  return listMediaAssets(req, res);
 };
 
 // @desc    Get single media asset by ID with usage details
@@ -162,14 +204,18 @@ export const getMediaAssetById = async (req, res) => {
     }
 
     // Lookup usages in active trips and quotations
-    const [tripsUsing, quotationsUsing] = await Promise.all([
+    const [tripsUsing, quotationsUsing, hotelsUsing] = await Promise.all([
       Trip.find(
         { 'itinerary.coverMediaAssetId': asset._id },
         { title: 1, slug: 1, 'itinerary.day': 1, 'itinerary.title': 1 }
       ).limit(10).lean(),
       Quotation.find(
-        { 'itineraryDays.coverMediaAssetId': asset._id },
+        { 'itinerary.coverMediaAssetId': asset._id },
         { quotationNumber: 1, status: 1, 'tripRequirements.title': 1 }
+      ).limit(10).lean(),
+      Hotel.find(
+        { $or: [{ 'media.hero.assetId': asset._id }, { 'media.gallery.assetId': asset._id }, { 'roomTypes.media.assetId': asset._id }] },
+        { hotelCode: 1, name: 1, status: 1, 'location.city': 1 }
       ).limit(10).lean()
     ]);
 
@@ -181,37 +227,15 @@ export const getMediaAssetById = async (req, res) => {
           tripCount: tripsUsing.length,
           trips: tripsUsing.map(t => ({ id: t._id, title: t.title, slug: t.slug })),
           quotationCount: quotationsUsing.length,
-          quotations: quotationsUsing.map(q => ({ id: q._id, number: q.quotationNumber, status: q.status }))
+          quotations: quotationsUsing.map(q => ({ id: q._id, number: q.quotationNumber, status: q.status })),
+          hotelCount: hotelsUsing.length,
+          hotels: hotelsUsing.map((hotel) => ({ id: hotel._id, code: hotel.hotelCode, name: hotel.name, status: hotel.status, city: hotel.location?.city || '' }))
         }
       }
     });
   } catch (error) {
     console.error('Get Media Asset Error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch media asset' });
-  }
-};
-
-const isSafeRemoteUrl = (string) => {
-  try {
-    const u = new URL(string);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-    const host = u.hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '::1' ||
-      host === '169.254.169.254' ||
-      host.startsWith('10.') ||
-      host.startsWith('192.168.') ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal')
-    ) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
   }
 };
 
@@ -242,41 +266,16 @@ export const createMediaAsset = async (req, res) => {
       });
     }
 
-    if (!isSafeRemoteUrl(storage.secureUrl)) {
+    if (!isSafeMediaUrl(storage.secureUrl)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or unsafe image URL: only secure public HTTP/HTTPS URLs are permitted.'
+        message: mediaUrlValidationMessage()
       });
     }
 
     const locationKeys = generateLocationKeys(geography, title, tags);
 
-    if (!isDbConnected()) {
-      const newAsset = {
-        _id: 'med_' + Date.now(),
-        title,
-        altText,
-        caption,
-        storage,
-        geography,
-        locationKeys,
-        tags: Array.isArray(tags) ? tags.map(t => t.toLowerCase().trim()).filter(Boolean) : [],
-        categories,
-        orientation,
-        usage,
-        source,
-        featured: Boolean(featured),
-        active: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-      memoryMediaAssets.unshift(newAsset);
-      return res.status(201).json({
-        success: true,
-        message: 'Media asset created successfully.',
-        data: newAsset
-      });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media Library is temporarily unavailable.' });
 
     const asset = new MediaAsset({
       title,
@@ -312,6 +311,7 @@ export const createMediaAsset = async (req, res) => {
 // @access  Private (Admin)
 export const updateMediaAsset = async (req, res) => {
   try {
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media Library is temporarily unavailable.' });
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid media asset ID' });
@@ -358,10 +358,7 @@ export const deleteMediaAsset = async (req, res) => {
     const { id } = req.params;
     const { permanent = false } = req.query;
 
-    if (!isDbConnected()) {
-      memoryMediaAssets = memoryMediaAssets.filter(a => String(a._id) !== String(id));
-      return res.json({ success: true, message: 'Media asset deleted successfully.' });
-    }
+    if (!isDbConnected()) return res.status(503).json({ success: false, message: 'Media Library is temporarily unavailable.' });
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, message: 'Invalid media asset ID' });
@@ -372,19 +369,24 @@ export const deleteMediaAsset = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Media asset not found' });
     }
 
-    // Check usage in published trips
-    const usageCount = await Trip.countDocuments({
-      'itinerary.coverMediaAssetId': asset._id
-    });
+    const [tripUsageCount, quotationUsageCount, hotelUsageCount] = await Promise.all([
+      Trip.countDocuments({ 'itinerary.coverMediaAssetId': asset._id }),
+      Quotation.countDocuments({ 'itinerary.coverMediaAssetId': asset._id }),
+      Hotel.countDocuments({ $or: [{ 'media.hero.assetId': asset._id }, { 'media.gallery.assetId': asset._id }, { 'roomTypes.media.assetId': asset._id }] })
+    ]);
+    const usageCount = tripUsageCount + quotationUsageCount + hotelUsageCount;
 
     if (usageCount > 0 && permanent === 'true') {
       return res.status(400).json({
         success: false,
-        message: `This image is actively used by ${usageCount} trip itinerary day(s). Please replace or reassign references before permanently deleting.`
+        message: `This media asset is referenced by ${tripUsageCount} trip(s), ${quotationUsageCount} quotation(s), and ${hotelUsageCount} Hotel Catalog record(s). Replace those references before permanently deleting it.`
       });
     }
 
     if (permanent === 'true') {
+      if (asset.storage?.publicId && ['cloudinary', 'local'].includes(asset.storage.provider)) {
+        await deleteMedia(asset.storage.publicId, asset.type === 'VIDEO' ? 'video' : 'image');
+      }
       await MediaAsset.findByIdAndDelete(id);
       return res.json({ success: true, message: 'Media asset permanently deleted.' });
     }
@@ -558,6 +560,17 @@ export const getMediaCoverageReport = async (req, res) => {
 // @access  Private (Admin)
 export const getMediaHealth = async (req, res) => {
   try {
+    const storage = getMediaStorageStatus();
+    if (!isDbConnected()) {
+      return res.json({
+        success: true,
+        data: {
+          status: 'UNAVAILABLE', databaseConnected: false,
+          totalAssets: 0, activeCount: 0, inactiveCount: 0, brokenAssetsCount: 0,
+          storage
+        }
+      });
+    }
     const [totalAssets, activeCount, inactiveCount, withoutUrl] = await Promise.all([
       MediaAsset.countDocuments(),
       MediaAsset.countDocuments({ active: true }),
@@ -569,10 +582,12 @@ export const getMediaHealth = async (req, res) => {
       success: true,
       data: {
         status: withoutUrl === 0 ? 'HEALTHY' : 'WARNING',
+        databaseConnected: true,
         totalAssets,
         activeCount,
         inactiveCount,
-        brokenAssetsCount: withoutUrl
+        brokenAssetsCount: withoutUrl,
+        storage
       }
     });
   } catch (error) {
@@ -583,6 +598,7 @@ export const getMediaHealth = async (req, res) => {
 
 export default {
   listMediaAssets,
+  listAdminMediaAssets,
   getMediaAssetById,
   createMediaAsset,
   updateMediaAsset,

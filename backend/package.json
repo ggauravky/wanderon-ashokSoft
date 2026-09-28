@@ -29,6 +29,10 @@
     "test:gemini": "node scripts/testGeminiIntegration.js",
     "seed:quotation-ai-demo": "node scripts/seedQuotationAiDemo.js",
     "cleanup:quotation-ai-demo": "node scripts/seedQuotationAiDemo.js --cleanup",
+    "seed:hostels:demo": "node scripts/seedHostelCatalogDemo.js",
+    "seed:quotation:max": "node scripts/seedMaximumQuotationDemo.js",
+    "seed:submission-demo": "npm run seed:hostels:demo && npm run seed:quotation:max",
+    "test:media": "node --test test_media_admin.js",
     "test:razorpay": "node scripts/testRazorpayIntegration.js",
     "test:payment-reliability": "node test_payment_reliability.js",
     "payment:inspect": "node scripts/inspectBookingPayment.js"

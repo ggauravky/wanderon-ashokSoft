@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   listMediaAssets,
+  listAdminMediaAssets,
   getMediaAssetById,
   createMediaAsset,
   updateMediaAsset,
@@ -20,6 +21,7 @@ router.post('/resolve-itinerary', resolveItineraryMediaController);
 // Protected Admin Operations
 router.get('/coverage', protect, adminOnly, getMediaCoverageReport);
 router.get('/health', protect, adminOnly, getMediaHealth);
+router.get('/admin', protect, adminOnly, listAdminMediaAssets);
 router.post('/', protect, adminOnly, createMediaAsset);
 router.get('/:id', protect, getMediaAssetById);
 router.put('/:id', protect, adminOnly, updateMediaAsset);

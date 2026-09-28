@@ -105,7 +105,7 @@ const loadAuthorized = async (req, res, { edit = false } = {}) => {
   return quotation;
 };
 
-const generateQuotationNumber = async () => {
+export const generateQuotationNumber = async () => {
   const prefix = `WLX-Q-${new Date().getFullYear()}-`;
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const candidate = `${prefix}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
