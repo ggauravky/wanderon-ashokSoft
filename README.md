@@ -4,6 +4,8 @@
 
 WanderLuxe is a full-stack modern travel platform featuring curated experiential itineraries, an enterprise custom quotation builder (Quotation V2), end-to-end Razorpay payments with instant verification, an Operations execution, coordination, Incident, and Vendor workspace, and an AI-driven itinerary planner powered by Google Gemini. Successful AI plans are persisted as first-class Itinerary records and can become deduplicated Sales enquiries in the dedicated AI Planner Leads workspace.
 
+Admin can manage accommodation properties under **Staff > Administration > Hotels**. Sales can search active catalog hotels from Quotation V2, choose a room and meal plan, and save a server-verified property snapshot. Hotel properties remain separate from Operations Vendors; a hotel may optionally link to a HOTEL-type supplier. Catalog rates are internal and never applied for Sales. See [Hotel Catalog Integration Report](HOTEL_CATALOG_INTEGRATION_REPORT.md) for workflow and release QA.
+
 Quotation Smart Builder accepts saved, lead-linked, shared, uploaded, or pasted AI itineraries through one factual import pipeline. Optional Gemini copy generation is centralized on the current `@google/genai` SDK; run `cd backend && npm run test:gemini` to validate deployed provider configuration.
 
 ---

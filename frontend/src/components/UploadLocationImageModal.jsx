@@ -11,7 +11,8 @@ export default function UploadLocationImageModal({
   onClose,
   onAssetCreated,
   initialDestination = '',
-  initialLocationName = ''
+  initialLocationName = '',
+  purpose = 'location'
 }) {
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState('');
@@ -58,7 +59,7 @@ export default function UploadLocationImageModal({
     let width = 1600;
     let height = 900;
 
-    if (uploadMode === 'file') {
+    if (uploadMode === 'file' || purpose === 'hotel') {
       if (!file) {
         setErrorMsg('Please select an image file to upload.');
         return;
@@ -66,7 +67,7 @@ export default function UploadLocationImageModal({
 
       try {
         setUploading(true);
-        const uploadRes = await uploadImageApi(file, 'wanderluxe/locations');
+        const uploadRes = await uploadImageApi(file, purpose === 'hotel' ? 'wanderluxe/hotels' : 'wanderluxe/locations');
         finalImageUrl = uploadRes.secure_url || uploadRes.url;
         publicId = uploadRes.public_id || '';
         if (uploadRes.width) width = uploadRes.width;
@@ -135,6 +136,7 @@ export default function UploadLocationImageModal({
           attribution: credit.trim() || 'WanderLuxe Archival Collection'
         },
         tags: tagArray,
+        usage: purpose === 'hotel' ? { hotel: true, gallery: true, hero: true, itinerary: false, destination: false, tripCard: false } : undefined,
         featured,
         active: true
       };
@@ -194,7 +196,7 @@ export default function UploadLocationImageModal({
           )}
 
           {/* Mode Switcher */}
-          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+          {purpose !== 'hotel' && <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
             <button
               type="button"
               onClick={() => setUploadMode('file')}
@@ -213,10 +215,10 @@ export default function UploadLocationImageModal({
             >
               Enter Direct Image URL
             </button>
-          </div>
+          </div>}
 
           {/* File Upload Zone */}
-          {uploadMode === 'file' ? (
+          {uploadMode === 'file' || purpose === 'hotel' ? (
             <div>
               <label className="block text-xs font-black uppercase text-slate-700 mb-1">Select Image *</label>
               <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-4 text-center bg-slate-50 transition-colors cursor-pointer relative">

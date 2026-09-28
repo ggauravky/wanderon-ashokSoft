@@ -51,6 +51,15 @@ const quotationAttachmentSchema = new mongoose.Schema(
 const hotelOptionSchema = new mongoose.Schema(
   {
     ...candidateReviewFields,
+    sourceKind: { type: String, enum: ['MANUAL', 'AI_PLANNER', 'HOTEL_CATALOG'], default: 'MANUAL' },
+    catalogHotelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel', default: null },
+    catalogHotelCode: { type: String, default: '' },
+    catalogVersion: { type: Number, default: null },
+    catalogRoomTypeId: { type: String, default: '' },
+    catalogMealPlan: { type: String, default: '' },
+    catalogRatePlanId: { type: String, default: '' },
+    catalogChanged: { type: Boolean, default: false },
+    availabilityStatus: { type: String, enum: ['UNCONFIRMED', 'REQUESTED', 'CONFIRMED', 'UNAVAILABLE'], default: 'UNCONFIRMED' },
     optionId: { type: String, required: true },
     segmentId: { type: String, default: 'seg_default' },
     segmentName: { type: String, default: 'Primary Stay' },

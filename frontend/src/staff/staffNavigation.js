@@ -50,6 +50,16 @@ export const STAFF_MODULES = Object.freeze([
     navigationOnly: true
   }),
   Object.freeze({
+    id: 'admin_hotels',
+    label: 'Hotels',
+    path: '/staff/admin/hotels',
+    icon: 'admin_hotels',
+    roles: Object.freeze(['super_admin', 'admin']),
+    section: 'administration',
+    description: 'Manage accommodation properties used in quotations.',
+    navigationOnly: true
+  }),
+  Object.freeze({
     id: 'admin_bookings',
     label: 'Bookings',
     path: '/staff/admin/bookings',

@@ -58,6 +58,8 @@ const SalesBookingsWorkspace = lazy(() => import('./staff/modules/sales/bookings
 const SalesBookingDetail = lazy(() => import('./staff/modules/sales/bookings/SalesBookingDetail'));
 const TripsWorkspace = lazy(() => import('./staff/modules/admin/trips/TripsWorkspace'));
 const TripEditor = lazy(() => import('./staff/modules/admin/trips/TripEditor'));
+const HotelsWorkspace = lazy(() => import('./staff/modules/admin/hotels/HotelsWorkspace'));
+const HotelEditor = lazy(() => import('./staff/modules/admin/hotels/HotelEditor'));
 const AdminBookingsWorkspace = lazy(() => import('./staff/modules/admin/bookings/AdminBookingsWorkspace'));
 const AdminBookingDetail = lazy(() => import('./staff/modules/admin/bookings/AdminBookingDetail'));
 const MediaWorkspace = lazy(() => import('./staff/modules/admin/media/MediaWorkspace'));
@@ -154,6 +156,10 @@ function App() {
             <Route path="admin/trips/:id/edit" element={
               <StaffModuleRoute moduleId="trips"><TripEditor /></StaffModuleRoute>
             } />
+            <Route path="admin/hotels" element={<StaffModuleRoute moduleId="admin_hotels"><HotelsWorkspace /></StaffModuleRoute>} />
+            <Route path="admin/hotels/new" element={<StaffModuleRoute moduleId="admin_hotels"><HotelEditor /></StaffModuleRoute>} />
+            <Route path="admin/hotels/:id" element={<StaffModuleRoute moduleId="admin_hotels"><HotelEditor readOnly /></StaffModuleRoute>} />
+            <Route path="admin/hotels/:id/edit" element={<StaffModuleRoute moduleId="admin_hotels"><HotelEditor /></StaffModuleRoute>} />
             <Route path="admin/bookings" element={
               <StaffModuleRoute moduleId="admin_bookings"><AdminBookingsWorkspace /></StaffModuleRoute>
             } />

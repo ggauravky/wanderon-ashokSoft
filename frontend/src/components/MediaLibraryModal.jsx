@@ -13,7 +13,9 @@ export default function MediaLibraryModal({
   initialDestination = '',
   initialLocation = '',
   currentSelectedAssetId = null,
-  onOpenUpload = null
+  onOpenUpload = null,
+  purpose = 'itinerary',
+  keepOpenOnUpload = false
 }) {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -91,9 +93,9 @@ export default function MediaLibraryModal({
               <ImageIcon size={20} />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black tracking-tight">Location Media Library</h2>
+              <h2 className="text-base sm:text-lg font-black tracking-tight">{purpose === 'hotel' ? 'Hotel Media Library' : 'Location Media Library'}</h2>
               <p className="text-xs text-slate-400 font-medium">
-                Select real, database-driven photography for this itinerary day
+                {purpose === 'hotel' ? 'Choose an approved image for this property' : 'Select real, database-driven photography for this itinerary day'}
               </p>
             </div>
           </div>
@@ -103,7 +105,7 @@ export default function MediaLibraryModal({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  if (!keepOpenOnUpload) onClose();
                   onOpenUpload();
                 }}
                 className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -187,7 +189,7 @@ export default function MediaLibraryModal({
                 <button
                   type="button"
                   onClick={() => {
-                    onClose();
+                    if (!keepOpenOnUpload) onClose();
                     onOpenUpload();
                   }}
                   className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black hover:bg-emerald-700 transition-colors cursor-pointer"

@@ -23,7 +23,8 @@ import {
   Siren,
   IndianRupee,
   ChartNoAxesCombined,
-  WandSparkles
+  WandSparkles,
+  Building2
 } from 'lucide-react';
 import { getStaffSectionLabel } from '../staffAccess';
 
@@ -32,6 +33,7 @@ const ICONS = {
   admin: ShieldCheck,
   admin_team_analytics: BarChart3,
   trips: Map,
+  admin_hotels: Building2,
   admin_bookings: BookOpen,
   admin_media: Image,
   admin_pages: FileText,

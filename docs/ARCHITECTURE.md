@@ -213,6 +213,14 @@ WanderLuxe includes a bespoke enterprise quotation engine for custom luxury itin
 4. **Recipient Verification**: Public quotation links require phone/email OTP verification (powered by Brevo) before customer view and approval.
 5. **Conversion Engine**: Approved quotations convert into confirmed `Booking` documents with exact pricing snapshots.
 
+### Accommodation catalog
+
+`Hotel` is a property catalog, independent from the Operations `Vendor` supplier directory. It stores identity, structured location and stay facts, amenities, stable room-type IDs, offered meal plans, Media Library asset references, and Admin-only contacts and reference rates. `vendorId` is an optional link to an existing HOTEL-type Vendor; creating a Hotel never creates a Vendor. `catalogVersion` increments on Admin edits and status changes. DRAFT/INACTIVE/ARCHIVED properties are not selectable by Sales.
+
+`/api/hotels` requires a current staff session. Admin and Super Admin can list every status and create, edit, activate, deactivate, or archive; Sales can only list and open ACTIVE hotels and receives an explicit safe DTO without rate plans, contacts, internal notes, or vendor details. Search is paginated and escaped; database disconnection returns 503. Images are references to active IMAGE `MediaAsset` records and their URLs are rebuilt by the server.
+
+Quotation V2 still stores `hotelOptions[]` as snapshots. When a new catalog option is saved, the server verifies the Hotel and room/meal selection, replaces client-supplied property facts with catalog facts, sets `sourceKind=HOTEL_CATALOG` and `availabilityStatus=UNCONFIRMED`, and starts component prices at zero. Admin may explicitly request a valid date-bound rate plan; Sales cannot. An existing option retains its saved property/media snapshot through normal draft saves. Explicit `refreshFromCatalog` rebuilds property facts and keeps stay notes and commercial values. Shared revisions, PDFs, Booking snapshots, and Operations handoff continue reading the immutable quotation revision, never the live Hotel record.
+
 ---
 
 ## Payment & Booking Engine

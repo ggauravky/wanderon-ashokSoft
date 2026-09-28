@@ -30,6 +30,7 @@ import { checkGeminiHealth, getGeminiStatus, publicAiError } from '../services/g
 import { cloneQuotationAiSampleItinerary } from '../fixtures/quotationAiSampleItinerary.js';
 import { sendQuotationVerificationEmail } from '../services/quotationEmailService.js';
 import { syncLeadConversionFromBooking } from '../services/leadConversionService.js';
+import { resolveCatalogHotelOptions } from '../services/hotelCatalogService.js';
 import {
   normalizeQuotationAttachment,
   normalizeQuotationAttachmentPayload
@@ -61,7 +62,7 @@ const failAi = (res, error) => {
 };
 
 const quotationFailure = (res, error, fallback) => {
-  if (error?.status === 422) return fail(res, 422, error.message);
+  if (error?.status && [403, 404, 409, 422].includes(error.status)) return fail(res, error.status, error.message);
   if (error?.name === 'ValidationError') {
     const invalidAttachment = Object.keys(error.errors || {}).some((path) => /attachments|documents/.test(path));
     return fail(res, 422, invalidAttachment ? 'Please correct the attachment category or visibility.' : 'Quotation details contain an invalid value.');
@@ -189,7 +190,13 @@ const protectCandidateReviewMetadata = (quotation, input, { allowCommercial = fa
         sourceDayNumbers: clone(saved.sourceDayNumbers || []),
         reviewedBy: saved.reviewedBy || null,
         reviewedAt: saved.reviewedAt || null
-      } : { ...item, sourceKind: 'MANUAL', reviewStatus: 'REVIEWED', sourceLabel: '', sourceDayNumbers: [], reviewedBy: null, reviewedAt: null };
+      } : {
+        ...item, sourceKind: 'MANUAL', reviewStatus: 'REVIEWED',
+        sourceLabel: field === 'hotelOptions' && existing.get(String(item?.replacesAiOptionId))?.sourceKind === 'AI_PLANNER' ? 'Matched from AI stay suggestion' : '',
+        sourceDayNumbers: field === 'hotelOptions' && existing.get(String(item?.replacesAiOptionId))?.sourceKind === 'AI_PLANNER'
+          ? clone(existing.get(String(item.replacesAiOptionId)).sourceDayNumbers || []) : [],
+        reviewedBy: null, reviewedAt: null
+      };
       if (!allowCommercial) {
         commercialCandidateFields.forEach((commercialField) => {
           protectedItem[commercialField] = asNumber(saved?.[commercialField], 0);
@@ -327,6 +334,7 @@ export const createQuotationV2 = async (req, res) => {
   try {
     if (!ensureDatabase(res)) return;
     const payload = protectCandidateReviewMetadata(null, normalizeQuotationAttachmentPayload(req.body || {}), { allowCommercial: isCommercialAdmin(req.user) });
+    payload.hotelOptions = await resolveCatalogHotelOptions(payload.hotelOptions || [], [], { admin: isCommercialAdmin(req.user) });
     const linkedLead = payload.leadId ? await loadAuthorizedLeadForStaff(payload.leadId, req.user) : null;
     if (payload.sourceItineraryId) {
       if (linkedLead && String(payload.sourceItineraryId) !== String(linkedLead.sourceItineraryId || '')) {
@@ -588,6 +596,7 @@ export const updateQuotationV2 = async (req, res) => {
       return fail(res, 403, 'Only Admin or Super Admin can edit commercial pricing.');
     }
     const normalizedInput = protectCandidateReviewMetadata(quotation, normalizeQuotationAttachmentPayload(req.body || {}), { allowCommercial: isCommercialAdmin(req.user) });
+    if (Array.isArray(normalizedInput.hotelOptions)) normalizedInput.hotelOptions = await resolveCatalogHotelOptions(normalizedInput.hotelOptions, quotation.hotelOptions || [], { admin: isCommercialAdmin(req.user) });
     applyEditableFields(quotation, normalizedInput);
     if (isCommercialAdmin(req.user) && req.body?.manualPricing) {
       const commercial = req.body.manualPricing;

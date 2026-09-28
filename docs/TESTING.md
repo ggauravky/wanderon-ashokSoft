@@ -40,6 +40,7 @@ WanderLuxe test scripts are categorized into five distinct tiers based on side e
 | `frontend/` | `npm run test:staff-foundation` | **A** | Verify RBAC navigation rules and staff module guards | No | No |
 | `frontend/` | `npm run preview` | **B** | Serve compiled production build locally | No | No |
 | `backend/` | `npm run test:quotation-v2` | **A** | Unit test Quotation V2 engine, hashing, and DTOs | No | No |
+| `backend/` | `npm run test:hotel-catalog` | **A** | Hotel schema, safe DTO, Media Library trust, snapshot, refresh, rate tests | No | No |
 | `backend/` | `npm run test:ai-planner-sales-phase1` | **A** | Verify itinerary persistence contracts, guest tokens, Sales queue isolation, and dossier sanitization | No | No |
 | `backend/` | `npm run test:payment-reliability` | **A** | Verify Razorpay HMAC SHA-256 signatures & math | No | No |
 | `backend/` | `npm run test:razorpay` | **C** | Test Razorpay test credentials & API connectivity | No | Optional |
@@ -233,6 +234,7 @@ cd ../backend
 npm run test:ai-planner-sales-phase1
 npm run test:ai-planner-sales-phase2
 npm run test:quotation-v2
+npm run test:hotel-catalog
 npm run test:payment-reliability
 
 # 3. Data Integrity
@@ -241,5 +243,7 @@ node scripts/validateTravelData.js
 ```
 
 The Phase 2 suite covers deterministic Lead-to-Quotation mapping, exact and flexible dates, separate senior counts, stay segmentation, review-only candidates, zero commercial pricing, source comparison, public filtering, revision propagation, and additive schema contracts. Complete the relevant manual Lead, candidate-review, source-change, PDF/share, and Booking/Operations journeys against a connected development database before release.
+
+Hotel Catalog release QA requires a connected development MongoDB and Admin/Sales accounts: create a draft with rooms, meal plans, and Media Library hero; activate it; verify Sales can search but not write or see rates; add it to a quotation; save and reload; change its hero in Admin and confirm the old quotation image persists until explicit refresh; finalize and preview a PDF; convert to Booking and confirm the revision snapshot; replace an AI stay suggestion through the catalog picker. The offline suite does not substitute for these live workflows.
 
 If all steps pass without errors, your branch is ready for manual review.

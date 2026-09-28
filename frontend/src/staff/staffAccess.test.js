@@ -11,7 +11,7 @@ import {
 const visibleLabels = (role) => getVisibleStaffModules(role).map((module) => module.label);
 
 test('administrators see every department workspace', () => {
-  const expected = ['Overview', 'Admin Overview', 'Team Analytics', 'Trips', 'Bookings', 'Media Library', 'Pages', 'Users & Roles', 'Creator Approvals', 'Payouts', 'Discounts', 'Operations Overview', 'Trip Execution', 'Tasks', 'Issues & Emergencies', 'Vendors', 'Costs & Settlements', 'Reports', 'Sales Overview', 'Expert Requests', 'AI Planner Leads', 'Quotations', 'Bookings', 'Marketing Overview', 'Lead & Conversion Analytics', 'Campaigns', 'Banners & Promotions'];
+  const expected = ['Overview', 'Admin Overview', 'Team Analytics', 'Trips', 'Hotels', 'Bookings', 'Media Library', 'Pages', 'Users & Roles', 'Creator Approvals', 'Payouts', 'Discounts', 'Operations Overview', 'Trip Execution', 'Tasks', 'Issues & Emergencies', 'Vendors', 'Costs & Settlements', 'Reports', 'Sales Overview', 'Expert Requests', 'AI Planner Leads', 'Quotations', 'Bookings', 'Marketing Overview', 'Lead & Conversion Analytics', 'Campaigns', 'Banners & Promotions'];
   assert.deepEqual(visibleLabels('admin'), expected);
   assert.deepEqual(visibleLabels('super_admin'), expected);
 });
@@ -57,7 +57,7 @@ test('all department links stay inside the canonical staff application', () => {
     .filter((module) => module.id !== 'overview')
     .map((module) => module.path);
 
-  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/team-analytics', '/staff/admin/trips', '/staff/admin/bookings', '/staff/admin/media', '/staff/admin/pages', '/staff/admin/users', '/staff/admin/creators', '/staff/admin/payouts', '/staff/admin/discounts', '/staff/operations', '/staff/operations/trips', '/staff/operations/tasks', '/staff/operations/issues', '/staff/operations/vendors', '/staff/operations/settlements', '/staff/operations/reports', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/ai-planner-leads', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/marketing', '/staff/marketing/lead-analytics', '/staff/marketing/campaigns', '/staff/marketing/banners']);
+  assert.deepEqual(workspacePaths, ['/staff/admin', '/staff/admin/team-analytics', '/staff/admin/trips', '/staff/admin/hotels', '/staff/admin/bookings', '/staff/admin/media', '/staff/admin/pages', '/staff/admin/users', '/staff/admin/creators', '/staff/admin/payouts', '/staff/admin/discounts', '/staff/operations', '/staff/operations/trips', '/staff/operations/tasks', '/staff/operations/issues', '/staff/operations/vendors', '/staff/operations/settlements', '/staff/operations/reports', '/staff/sales', '/staff/sales/expert-requests', '/staff/sales/ai-planner-leads', '/staff/sales/quotations', '/staff/sales/bookings', '/staff/marketing', '/staff/marketing/lead-analytics', '/staff/marketing/campaigns', '/staff/marketing/banners']);
 });
 
 test('role labels normalize existing backend values', () => {
@@ -72,6 +72,7 @@ test('role labels normalize existing backend values', () => {
 test('nested staff routes select the most specific navigation module', () => {
   const modules = getVisibleStaffModules('admin');
   assert.equal(getActiveStaffModule(modules, '/staff/admin/trips/new')?.id, 'trips');
+  assert.equal(getActiveStaffModule(modules, '/staff/admin/hotels/new')?.id, 'admin_hotels');
   assert.equal(getActiveStaffModule(modules, '/staff/sales/quotations/quote-1/edit')?.id, 'quotations');
   assert.equal(getActiveStaffModule(modules, '/staff/sales/ai-planner-leads/lead-1')?.id, 'ai_planner_leads');
   assert.equal(getActiveStaffModule(modules, '/staff/marketing/campaigns/new')?.id, 'marketing_campaigns');
