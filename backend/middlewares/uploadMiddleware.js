@@ -1,4 +1,8 @@
 import multer from 'multer';
+import {
+  QUOTATION_DOCUMENT_MAX_BYTES,
+  validateQuotationDocumentUpload
+} from '../constants/quotationDocumentUpload.js';
 
 // Use memory storage so we can pipe buffers to Cloudinary directly
 const storage = multer.memoryStorage();
@@ -38,22 +42,8 @@ const mediaFilter = (req, file, cb) => {
 
 // Document / Ticket MIME & extension validator (PDF + standard images)
 const documentFilter = (req, file, cb) => {
-  const allowedMimeTypes = [
-    'application/pdf',
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'image/webp'
-  ];
-  
-  const ext = (file.originalname || '').toLowerCase().split('.').pop();
-  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
-
-  if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`Invalid document type (${file.mimetype}). Allowed formats: PDF, JPG, PNG, WEBP.`), false);
-  }
+  const result = validateQuotationDocumentUpload(file);
+  cb(result.valid ? null : new Error(result.message), result.valid);
 };
 
 // Single image upload (max 10 MB)
@@ -74,14 +64,14 @@ export const uploadMultipleImages = multer({
 export const uploadSingleDocument = multer({
   storage,
   fileFilter: documentFilter,
-  limits: { fileSize: 15 * 1024 * 1024 }
+  limits: { fileSize: QUOTATION_DOCUMENT_MAX_BYTES }
 }).single('document');
 
 // Multiple documents/tickets upload (max 10 files, 15 MB each)
 export const uploadMultipleDocuments = multer({
   storage,
   fileFilter: documentFilter,
-  limits: { fileSize: 15 * 1024 * 1024 }
+  limits: { fileSize: QUOTATION_DOCUMENT_MAX_BYTES }
 }).array('documents', 10);
 
 // Single video upload (max 100 MB)

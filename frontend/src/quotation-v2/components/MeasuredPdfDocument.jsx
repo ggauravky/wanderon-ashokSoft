@@ -49,7 +49,11 @@ export default function MeasuredPdfDocument({ model, templateKey, blocks, debug 
           const height = measured.get(item.id) || cacheRef.current.get(cacheKey);
           if (!height) throw new Error(`Unable to measure PDF block ${item.id}.`);
           cacheRef.current.set(cacheKey, height);
-          return { ...item, measuredHeight: height };
+          return {
+            ...item,
+            measuredHeight: height,
+            split: () => splitOversizedPdfBlock(item, templateKey)
+          };
         });
         const oversized = prepared.filter((item) => !item.cover && item.measuredHeight > SAFE_CONTENT_HEIGHT_PX);
         if (oversized.length) {

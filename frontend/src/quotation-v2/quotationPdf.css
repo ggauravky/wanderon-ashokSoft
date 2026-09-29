@@ -29,7 +29,8 @@
 .pdf-running-header span:last-child, .pdf-running-footer span:last-child { text-align: right; }
 .pdf-running-footer { bottom: 24px; padding-top: 10px; border-top: 1px solid currentColor; }
 .pdf-running-footer span:nth-child(2) { text-align: center; text-transform: none; letter-spacing: 0; }
-.pdf-watermark { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(-28deg); font-size: 94px; font-weight: 800; letter-spacing: .3em; color: currentColor; opacity: .045; white-space: nowrap; pointer-events: none; }
+.pdf-watermark { position: absolute; z-index: 3; inset: 0; overflow: hidden; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.pdf-watermark span { transform: rotate(-28deg); font-size: 80px; font-weight: 800; letter-spacing: .25em; color: currentColor; opacity: .045; white-space: nowrap; }
 .pdf-image-fallback { display: flex; align-items: center; justify-content: center; background: radial-gradient(circle at 20% 20%, rgba(255,255,255,.18), transparent 36%), linear-gradient(135deg,#315c4d,#0b2b23); color: rgba(255,255,255,.72); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
 .pdf-kicker, .pdf-card-kicker { font-size: 9px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
 .pdf-title { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 44px; line-height: 1.02; font-weight: 600; }

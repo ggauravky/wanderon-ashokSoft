@@ -4,6 +4,7 @@ import { buildQuotationPresentationModel } from './buildQuotationPresentationMod
 import { chunkItinerary, chunkPolicyEntries, splitHotel } from './pagination.js';
 import { packPdfBlocks } from './measuredPagination.js';
 import { buildPdfSectionManifest, resolveDocumentPresentation, splitOversizedPdfBlock } from './pdfSectionManifest.js';
+import { PDF_CONTENT_PROFILES, buildTemplatePdfModel } from './pdfContentProfiles.js';
 import { resolveAttachmentMediaType } from './attachmentMedia.js';
 import { quotationPdfFileName } from './quotationV2.js';
 import { QUOTATION_TEMPLATE_KEYS, quotationTemplateOptions } from './templateRegistry.js';
@@ -202,11 +203,11 @@ test('section manifest keeps logical content whole until measured overflow reque
   const model = buildQuotationPresentationModel(rawQuotation({
     itinerary: [{ day: 1, title: 'A genuinely long day', destination: 'Leh', description: longDescription }]
   }));
-  const manifest = buildPdfSectionManifest(model, 'journey');
+  const manifest = buildPdfSectionManifest(model, 'signature_luxe');
   const itinerary = manifest.filter((item) => item.kind === 'itinerary');
   assert.equal(itinerary.length, 1);
   assert.equal(itinerary[0].content.description, longDescription.trim());
-  const fragments = splitOversizedPdfBlock({ ...itinerary[0], measuredHeight: 1400 }, 'journey');
+  const fragments = splitOversizedPdfBlock({ ...itinerary[0], measuredHeight: 1400 }, 'signature_luxe');
   assert.ok(fragments.length > 1);
   assert.equal(fragments.map((item) => item.content.description).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(), longDescription.trim());
 });
@@ -217,3 +218,114 @@ test('attachment media detection uses MIME first and falls back to safe file ext
   assert.equal(resolveAttachmentMediaType({ secureUrl: 'https://example.com/ticket.webp?token=1' }), 'image');
   assert.equal(resolveAttachmentMediaType({ fileName: 'unknown.docx' }), 'document');
 });
+
+test('content profile differentiates narrative density while keeping facts identical', () => {
+  const raw = rawQuotation({
+    itinerary: [
+      { day: 1, title: 'Day 1 Adventure', destination: 'Leh', description: 'First sentence. Second sentence. Third long sentence about mountains.' },
+      { day: 2, title: 'Day 2 Exploration', destination: 'Nubra', description: 'Morning departure. Scenic pass crossing. Evening rest.' }
+    ]
+  });
+  const baseModel = buildQuotationPresentationModel(raw);
+
+  const sigModel = buildTemplatePdfModel(baseModel, 'signature_luxe');
+  const jrnModel = buildTemplatePdfModel(baseModel, 'journey');
+  const dosModel = buildTemplatePdfModel(baseModel, 'minimal');
+
+  // Customer facts remain identical
+  assert.equal(sigModel.customer.name, dosModel.customer.name);
+  assert.equal(sigModel.pricing.finalCustomerPrice, dosModel.pricing.finalCustomerPrice);
+  assert.equal(sigModel.itinerary.length, dosModel.itinerary.length);
+
+  // Itinerary descriptions differentiate
+  assert.equal(sigModel.itinerary[0].description, baseModel.itinerary[0].description);
+  assert.ok(jrnModel.itinerary[0].description.length < sigModel.itinerary[0].description.length);
+  assert.ok(dosModel.itinerary[0].summaryText || dosModel.itinerary[0].description);
+  assert.equal(dosModel.itinerary[0].morning, '');
+});
+
+test('section manifest produces differentiated block structures across templates', () => {
+  const raw = rawQuotation({
+    itinerary: [
+      { day: 1, title: 'Day 1', destination: 'Leh', description: 'Day 1 plan.' },
+      { day: 2, title: 'Day 2', destination: 'Nubra', description: 'Day 2 plan.' }
+    ],
+    hotelOptions: [
+      { optionId: 'h-1', hotelName: 'Resort 1', selected: true, totalPrice: 10000, nights: 2 },
+      { optionId: 'h-2', hotelName: 'Resort 2', selected: true, totalPrice: 12000, nights: 1 }
+    ],
+    transportOptions: [
+      { optionId: 't-1', mode: 'CAB', title: 'SUV Transfer', selected: true, totalPrice: 5000 }
+    ],
+    activities: [
+      { activityId: 'a-1', dayNumber: 1, name: 'Walk', selected: true, totalPrice: 1000 }
+    ],
+    addOns: [
+      { addonId: 'o-1', name: 'Guide', selected: true, totalPrice: 2000 }
+    ]
+  });
+  const model = buildQuotationPresentationModel(raw);
+
+  const sigBlocks = buildPdfSectionManifest(model, 'signature_luxe');
+  const jrnBlocks = buildPdfSectionManifest(model, 'journey');
+  const dosBlocks = buildPdfSectionManifest(model, 'minimal');
+
+  const sigKinds = sigBlocks.map((b) => b.kind);
+  const jrnKinds = jrnBlocks.map((b) => b.kind);
+  const dosKinds = dosBlocks.map((b) => b.kind);
+
+  // Signature has individual itinerary and experience blocks
+  assert.ok(sigKinds.includes('itinerary'));
+  assert.ok(sigKinds.includes('experience'));
+  assert.ok(sigKinds.includes('closing'));
+
+  // Journey has grouped experiences
+  assert.ok(jrnKinds.includes('experiences-grouped'));
+
+  // Dossier has matrix blocks and no closing page
+  assert.ok(dosKinds.includes('itinerary-matrix'));
+  assert.ok(dosKinds.includes('hotels-matrix'));
+  assert.ok(dosKinds.includes('transport-matrix'));
+  assert.ok(dosKinds.includes('experiences-matrix'));
+  assert.ok(!dosKinds.includes('closing'));
+});
+
+test('hotel and transport media budgets follow content profiles', () => {
+  const hotelWithGallery = {
+    optionId: 'h-1', hotelName: 'Luxury Palace', selected: true, totalPrice: 50000,
+    imageUrl: 'https://example.com/hero.jpg',
+    gallery: [
+      { url: 'https://example.com/hero.jpg' },
+      { url: 'https://example.com/gallery1.jpg' },
+      { url: 'https://example.com/gallery2.jpg' },
+      { url: 'https://example.com/gallery3.jpg' }
+    ]
+  };
+  const transportWithMedia = {
+    optionId: 't-1', mode: 'SUV', title: 'Mountain SUV', selected: true, totalPrice: 15000,
+    vehicleMedia: [
+      { url: 'https://example.com/car1.jpg', isPrimary: true },
+      { url: 'https://example.com/car2.jpg' },
+      { url: 'https://example.com/car3.jpg' }
+    ]
+  };
+  const model = buildQuotationPresentationModel(rawQuotation({
+    hotelOptions: [hotelWithGallery],
+    transportOptions: [transportWithMedia]
+  }));
+
+  const sigModel = buildTemplatePdfModel(model, 'signature_luxe');
+  const jrnModel = buildTemplatePdfModel(model, 'journey');
+  const dosModel = buildTemplatePdfModel(model, 'minimal');
+
+  // Hotel gallery budgets
+  assert.equal(sigModel.hotels[0].gallery.length, 4); // hero + 3 gallery
+  assert.equal(jrnModel.hotels[0].gallery.length, 1); // hero only
+  assert.equal(dosModel.hotels[0].gallery.length, 0); // matrix mode has no gallery
+
+  // Transport media budgets
+  assert.equal(sigModel.transport[0].media.length, 2);
+  assert.equal(jrnModel.transport[0].media.length, 1);
+  assert.equal(dosModel.transport[0].media.length, 0);
+});
+

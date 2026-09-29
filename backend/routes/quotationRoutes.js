@@ -53,7 +53,9 @@ import {
   compareQuotationSourcePlan,
   reviewQuotationCandidate,
   updateQuotationV2,
-  verifyQuotationRecipient
+  verifyQuotationRecipient,
+  getQuotationDocumentPreview,
+  getPublicQuotationDocumentPreview
 } from '../controllers/quotationV2Controller.js';
 import { protect, optionalAuth, adminOnly, operationsOrAdmin, requireRoles } from '../middlewares/authMiddleware.js';
 import { quotationRateLimit } from '../middlewares/quotationRateLimit.js';
@@ -63,6 +65,7 @@ const router = express.Router();
 // ============================================================================
 // PUBLIC CUSTOMER ENDPOINTS (No Authentication Required)
 // ============================================================================
+router.get('/public/v2/:token/documents/:documentId/preview', optionalAuth, quotationRateLimit({ action: 'quotation-doc-preview', limit: 60 }), getPublicQuotationDocumentPreview);
 router.get('/public/v2/:token', optionalAuth, quotationRateLimit({ action: 'quotation-view', limit: 60 }), getPublicQuotationV2);
 router.post('/public/v2/:token/request-verification', quotationRateLimit({ action: 'quotation-request-code', limit: 5 }), requestQuotationVerification);
 router.post('/public/v2/:token/verify', quotationRateLimit({ action: 'quotation-verify-code', limit: 8 }), verifyQuotationRecipient);
@@ -118,6 +121,7 @@ router.post('/:id/v2/candidates/:type/:candidateId/review', requireRoles('super_
 router.post('/:id/v2/duplicate', requireRoles('super_admin', 'admin', 'sales'), duplicateQuotationV2);
 router.post('/:id/v2/attachments', requireRoles('super_admin', 'admin', 'sales'), addQuotationAttachment);
 router.delete('/:id/v2/attachments/:attachmentId', requireRoles('super_admin', 'admin', 'sales'), deleteQuotationAttachment);
+router.get('/:id/v2/documents/:documentId/preview', requireRoles('super_admin', 'admin', 'operations', 'sales'), getQuotationDocumentPreview);
 router.post('/:id/v2/admin-approve', requireRoles('super_admin', 'admin'), adminApproveQuotationV2);
 router.post('/:id/v2/create-booking', requireRoles('super_admin', 'admin', 'operations', 'sales'), createBookingFromQuotationV2);
 

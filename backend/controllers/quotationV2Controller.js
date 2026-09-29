@@ -1376,3 +1376,87 @@ export const createBookingFromQuotationV2 = async (req, res) => {
     return fail(res, error?.name === 'ValidationError' ? 400 : 500, error.message || 'Unable to create booking.');
   }
 };
+
+const findQuotationDocument = (quotation, documentId) => {
+  const all = [
+    ...(quotation.attachments || []),
+    ...(quotation.hotelOptions || []).flatMap((h) => h.documents || []),
+    ...(quotation.transportOptions || []).flatMap((t) => t.documents || []),
+    ...(quotation.activities || []).flatMap((a) => a.attachments || []),
+    ...(quotation.addOns || []).flatMap((o) => o.attachments || [])
+  ];
+  return all.find((item) => String(item.id || item._id) === String(documentId));
+};
+
+async function relayDocumentContent(res, doc) {
+  try {
+    const parsed = new URL(doc.secureUrl);
+    const isCloudinary = parsed.hostname.endsWith('cloudinary.com');
+    const isLocal = ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (!isCloudinary && !isLocal && !parsed.hostname.includes('unsplash.com')) {
+      return fail(res, 403, 'Untrusted document host.');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    const upstream = await fetch(doc.secureUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!upstream.ok) {
+      return fail(res, upstream.status, 'Upstream document fetch failed.');
+    }
+
+    const contentType = upstream.headers.get('content-type') || doc.mimeType || 'application/pdf';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const arrayBuffer = await upstream.arrayBuffer();
+    if (arrayBuffer.byteLength > 15 * 1024 * 1024) {
+      return fail(res, 413, 'Document exceeds maximum relay size.');
+    }
+    return res.send(Buffer.from(arrayBuffer));
+  } catch (fetchErr) {
+    console.error('Relay fetch error:', fetchErr);
+    return fail(res, 502, 'Failed to retrieve document content.');
+  }
+}
+
+export const getQuotationDocumentPreview = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const quotation = await loadAuthorized(req, res);
+    if (!quotation) return;
+    const doc = findQuotationDocument(quotation, req.params.documentId);
+    if (!doc || !doc.secureUrl) return fail(res, 404, 'Document not found.');
+    return relayDocumentContent(res, doc);
+  } catch (error) {
+    console.error('Document preview relay error:', error);
+    return fail(res, 500, 'Unable to preview document.');
+  }
+};
+
+export const getPublicQuotationDocumentPreview = async (req, res) => {
+  try {
+    if (!ensureDatabase(res)) return;
+    const { share, quotation } = await resolveShare(req.params.token);
+    if (!share || !quotation || !share.isActive || share.revokedAt) {
+      return fail(res, 404, 'Document not found.');
+    }
+    const doc = findQuotationDocument(quotation, req.params.documentId);
+    if (!doc || !doc.secureUrl) return fail(res, 404, 'Document not found.');
+
+    const approved = Boolean(quotation.approvedRevisionId);
+    const booked = Boolean(quotation.bookingId);
+    if (doc.visibility === 'INTERNAL_ONLY') return fail(res, 403, 'Access denied.');
+    if (doc.visibility === 'CUSTOMER_VISIBLE_AFTER_APPROVAL' && !approved) return fail(res, 403, 'Access denied.');
+    if (doc.visibility === 'CUSTOMER_VISIBLE_AFTER_BOOKING' && !booked) return fail(res, 403, 'Access denied.');
+    if (doc.pdfDisplayMode === 'HIDDEN') return fail(res, 403, 'Access denied.');
+
+    return relayDocumentContent(res, doc);
+  } catch (error) {
+    console.error('Public document preview relay error:', error);
+    return fail(res, 500, 'Unable to preview document.');
+  }
+};
+

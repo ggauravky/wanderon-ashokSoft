@@ -179,8 +179,10 @@ export const buildMaximumQuotationPayload = ({ actor, quotationNumber, hotelOpti
   const transportOptions = buildTransport(ticketAssets, media);
   const itinerary = buildItinerary(media);
   const visibleInsurance = attachment({ id: 'seed_general_insurance', category: 'INSURANCE', title: 'Demo Travel Insurance Summary', asset: ticketAssets.voucher, mimeType: 'application/pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'LINK_ONLY' });
-  const approvalVoucher = attachment({ id: 'seed_hotel_voucher', category: 'HOTEL_VOUCHER', sectionType: 'HOTEL', sectionId: hotelOptions[0].optionId, title: 'Demo Manali Hotel Voucher', asset: ticketAssets.voucher, mimeType: 'application/pdf', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL', pdfDisplayMode: 'ALWAYS_PREVIEW', bookingReference: 'DEMO-HOTEL-01' });
-  hotelOptions[0].documents = [approvalVoucher];
+  const hotelVoucher = attachment({ id: 'seed_hotel_voucher', category: 'HOTEL_VOUCHER', sectionType: 'HOTEL', sectionId: hotelOptions[0].optionId, title: 'Demo Manali Hotel Voucher', asset: ticketAssets.voucher, mimeType: 'application/pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'ALWAYS_PREVIEW', bookingReference: 'DEMO-HOTEL-01' });
+  const approvalVoucher = attachment({ id: 'seed_approval_voucher', category: 'HOTEL_CONFIRMATION', sectionType: 'HOTEL', sectionId: hotelOptions[1]?.optionId || hotelOptions[0].optionId, title: 'Demo Dharamshala Hotel Confirmation', asset: ticketAssets.voucher, mimeType: 'application/pdf', visibility: 'CUSTOMER_VISIBLE_AFTER_APPROVAL', pdfDisplayMode: 'ALWAYS_PREVIEW', bookingReference: 'DEMO-HOTEL-APPROVAL' });
+  hotelOptions[0].documents = [hotelVoucher];
+  if (hotelOptions[1]) hotelOptions[1].documents = [approvalVoucher];
   const attachments = [
     visibleInsurance,
     attachment({ id: 'seed_preparation_guide', category: 'GENERAL', title: 'Demo Trip Preparation Guide', asset: ticketAssets.voucher, mimeType: 'application/pdf', visibility: 'CUSTOMER_VISIBLE', pdfDisplayMode: 'AUTO' }),

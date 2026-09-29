@@ -1,5 +1,6 @@
 import React, { forwardRef, lazy, Suspense, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { buildQuotationPresentationModel } from './buildQuotationPresentationModel.js';
+import { buildTemplatePdfModel } from './pdfContentProfiles.js';
 import { getQuotationTemplate } from './templateRegistry.js';
 import { CONTENT_BOTTOM_PX, CONTENT_TOP_PX, PAGE_HEIGHT_PX, PAGE_PADDING_X_PX, PAGE_WIDTH_PX } from './pdfLayoutConstants.js';
 
@@ -20,7 +21,8 @@ const QuotationTemplateRenderer = forwardRef(function QuotationTemplateRenderer(
   const [height, setHeight] = useState('auto');
   const chosen = getQuotationTemplate(templateKey || quotation.templateKey || quotation.presentationSettings?.template).key;
   const Template = templateComponents[chosen];
-  const model = useMemo(() => buildQuotationPresentationModel(quotation, { isDraft, isSuperseded }), [isDraft, isSuperseded, quotation]);
+  const baseModel = useMemo(() => buildQuotationPresentationModel(quotation, { isDraft, isSuperseded }), [isDraft, isSuperseded, quotation]);
+  const model = useMemo(() => buildTemplatePdfModel(baseModel, chosen), [baseModel, chosen]);
 
   useImperativeHandle(forwardedRef, () => documentRef.current);
 

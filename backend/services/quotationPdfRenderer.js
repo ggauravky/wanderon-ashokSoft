@@ -18,7 +18,7 @@ export function pdfRenderOrigins() {
   if (process.env.NODE_ENV === 'production' && [frontend, api].some((url) => url.protocol !== 'https:')) {
     throw new Error('PDF render origins must use HTTPS in production.');
   }
-  const mediaHosts = String(process.env.QUOTATION_PDF_MEDIA_HOSTS || 'res.cloudinary.com')
+  const mediaHosts = String(process.env.QUOTATION_PDF_MEDIA_HOSTS || 'res.cloudinary.com,images.unsplash.com,images.pexels.com')
     .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
   return { frontend, allowedOrigins: new Set([frontend.origin, api.origin]), mediaHosts: new Set(mediaHosts) };
 }
@@ -27,7 +27,8 @@ export function isPdfAssetAllowed(rawUrl, { allowedOrigins, mediaHosts }) {
   try {
     const url = new URL(rawUrl);
     if (allowedOrigins.has(url.origin)) return true;
-    return url.protocol === 'https:' && mediaHosts.has(url.hostname.toLowerCase());
+    const hostname = url.hostname.toLowerCase();
+    return url.protocol === 'https:' && (mediaHosts.has(hostname) || hostname.endsWith('.cloudinary.com'));
   } catch { return false; }
 }
 

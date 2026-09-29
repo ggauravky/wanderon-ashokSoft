@@ -1,4 +1,5 @@
 import { resolveAttachmentMediaType } from './attachmentMedia.js';
+import { resolveAttachmentPdfEligibility } from './attachmentEligibility.js';
 
 const numeric = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const text = (value) => typeof value === 'string' ? value.trim() : '';
@@ -24,14 +25,6 @@ const isAiCandidate = (item, type) => item?.sourceKind === 'AI_PLANNER'
 const travelerLabel = (travelers) => [
   ['Adult', travelers.adults], ['Child', travelers.children], ['Infant', travelers.infants], ['Senior', travelers.seniors]
 ].filter(([, count]) => count > 0).map(([label, count]) => `${count} ${label}${count === 1 ? '' : label === 'Child' ? 'ren' : 's'}`).join(' · ');
-
-const attachmentAllowed = (attachment, { approved, booked }) => {
-  const visibility = attachment?.visibility || 'INTERNAL_ONLY';
-  if (visibility === 'CUSTOMER_VISIBLE') return true;
-  if (visibility === 'CUSTOMER_VISIBLE_AFTER_APPROVAL') return approved;
-  if (visibility === 'CUSTOMER_VISIBLE_AFTER_BOOKING') return booked;
-  return false;
-};
 
 const safeAttachment = (item = {}, relation = null) => ({
   id: item.id || item._id || '',
@@ -175,7 +168,8 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
   const allCustomerDocuments = [];
   const seenDocuments = new Set();
   const addDocument = (item, relation, target) => {
-    if (!settings.showAttachments || !attachmentAllowed(item, visibility)) return;
+    const eligibility = resolveAttachmentPdfEligibility({ attachment: item, showAttachments: settings.showAttachments, ...visibility });
+    if (!eligibility.allowedBySecurity || !eligibility.included) return;
     const safe = safeAttachment(item, relation);
     if (safe.pdfDisplayMode === 'HIDDEN') return;
     if (!safe.secureUrl) return;
@@ -238,6 +232,7 @@ export function buildQuotationPresentationModel(quotation = {}, options = {}) {
       issuedAt: quotation.finalizedAt || quotation.manualPricing?.finalizedAt || quotation.createdAt || '',
       isDraft: options.isDraft ?? (!quotation.manualPricing?.finalizedAt && !quotation.pricing?.finalCustomerPrice),
       isApproved: approved,
+      isBooked: booked,
       isSuperseded: Boolean(options.isSuperseded ?? quotation.superseded)
     },
     customer: {

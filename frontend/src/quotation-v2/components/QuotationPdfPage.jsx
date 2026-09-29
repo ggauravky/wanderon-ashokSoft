@@ -22,7 +22,7 @@ export default function QuotationPdfPage({ children, model, templateKey, pageNum
 
   return <section ref={pageRef} data-pdf-page="true" data-template={templateKey} data-page-number={pageNumber} data-page-title={title} className={`quotation-pdf-page quotation-pdf-page--${templateKey} ${cover ? 'quotation-pdf-page--cover' : ''} ${className}`}>
     {!cover && <header className="pdf-running-header"><span>WANDERLUXE</span><span>{title}</span><span>{model.meta.quotationNumber} · v{model.meta.version}</span></header>}
-    {(model.meta.isDraft || model.meta.isSuperseded) && <div className="pdf-watermark" aria-hidden="true">{model.meta.isSuperseded ? 'SUPERSEDED VERSION' : 'DRAFT'}</div>}
+    {(model.meta.isDraft || model.meta.isSuperseded) && <div className="pdf-watermark" aria-hidden="true"><span>{model.meta.isSuperseded ? 'SUPERSEDED VERSION' : 'DRAFT'}</span></div>}
     <div className="pdf-page-content">{children}</div>
     {!cover && <footer className="pdf-running-footer"><span>{statusLabel}</span><span>Valid until {model.meta.validUntil ? new Date(model.meta.validUntil).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'to be confirmed'}</span><span>Page {String(pageNumber).padStart(2, '0')} of {String(pageCount).padStart(2, '0')}</span></footer>}
   </section>;

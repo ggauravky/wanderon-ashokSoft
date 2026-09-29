@@ -32,7 +32,8 @@ const categoryValues = new Set(QUOTATION_ATTACHMENT_CATEGORIES.map((item) => ite
 const visibilityValues = new Set(QUOTATION_ATTACHMENT_VISIBILITIES.map((item) => item.value));
 const pdfDisplayModeValues = new Set(QUOTATION_ATTACHMENT_PDF_DISPLAY_MODES.map((item) => item.value));
 const previewByDefaultCategories = new Set([
-  'FLIGHT_TICKET', 'TRAIN_TICKET', 'BUS_TICKET', 'ACTIVITY_TICKET', 'HOTEL_VOUCHER', 'TRANSPORT_VOUCHER'
+  'FLIGHT_TICKET', 'TRAIN_TICKET', 'BUS_TICKET', 'ACTIVITY_TICKET', 'ACTIVITY_VOUCHER',
+  'HOTEL_VOUCHER', 'HOTEL_CONFIRMATION', 'TRANSPORT_VOUCHER'
 ]);
 const transportTypes = new Set([
   'FLIGHT_TICKET', 'TRAIN_TICKET', 'BUS_TICKET', 'TRANSPORT_VOUCHER',
@@ -55,6 +56,10 @@ const normalizeShared = (item = {}) => ({
 export const defaultPdfDisplayModeForCategory = (category) => previewByDefaultCategories.has(String(category || '').toUpperCase())
   ? 'ALWAYS_PREVIEW'
   : 'AUTO';
+
+export const defaultVisibilityForCategory = (category) => previewByDefaultCategories.has(String(category || '').toUpperCase())
+  ? 'CUSTOMER_VISIBLE'
+  : 'INTERNAL_ONLY';
 
 export const normalizeQuotationAttachmentState = (quotation) => {
   if (!quotation) return quotation;
