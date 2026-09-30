@@ -5,7 +5,10 @@ import { MAX_OPERATIONAL_AMOUNT } from './OperationalCost.js';
 
 export const OPERATIONAL_SETTLEMENT_METHODS = Object.freeze(['BANK_TRANSFER', 'UPI', 'CASH', 'CARD', 'CHEQUE', 'OTHER']);
 export const OPERATIONAL_SETTLEMENT_STATUSES = Object.freeze(['RECORDED', 'VOID']);
-export const createSettlementCode = (date = new Date()) => `SET-${date.getUTCFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+export const createSettlementCode = (date) => {
+  const d = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  return `SET-${d.getUTCFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+};
 
 const operationalSettlementSchema = new mongoose.Schema({
   settlementCode: { type: String, required: true, unique: true, uppercase: true, trim: true, immutable: true, default: createSettlementCode },

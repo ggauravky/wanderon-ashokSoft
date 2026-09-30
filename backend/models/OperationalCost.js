@@ -6,7 +6,10 @@ import { operationsDocumentSchema } from './schemas/operationsDocumentSchema.js'
 export const OPERATIONAL_COST_CATEGORIES = Object.freeze(['HOTEL', 'TRANSPORT', 'ACTIVITY', 'GUIDE', 'PERMIT', 'MEALS', 'INCIDENT', 'MISCELLANEOUS']);
 export const OPERATIONAL_COST_STATUSES = Object.freeze(['DRAFT', 'FINALIZED', 'VOID']);
 export const MAX_OPERATIONAL_AMOUNT = 100000000;
-export const createCostCode = (date = new Date()) => `COST-${date.getUTCFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+export const createCostCode = (date) => {
+  const d = date instanceof Date && !Number.isNaN(date.getTime()) ? date : new Date();
+  return `COST-${d.getUTCFullYear()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+};
 
 const vendorSnapshotSchema = new mongoose.Schema({
   vendorCode: { type: String, default: '', trim: true, maxlength: 80 },

@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import OperationalTrip from '../models/OperationalTrip.js';
 import OperationalService from '../models/OperationalService.js';
 import Vendor from '../models/Vendor.js';
+import { isValidMongoObjectId } from '../utils/mongoId.js';
 import {
   bookingsForOperationalGroup,
   loadOperationalReadModel,
@@ -40,8 +41,9 @@ const contentKey = (type, index, value) => crypto
   .digest('hex')
   .slice(0, 12);
 const stableServiceKey = (type, item, index) => {
-  const identity = item?.optionId || item?.activityId || item?.sectionId || item?.segmentId || contentKey(type, index, item);
-  return `${type.toLowerCase()}:${compactKey(identity)}`;
+  const rawIdentity = item?.optionId || item?.activityId || item?.sectionId || item?.segmentId || '';
+  const keyPart = compactKey(rawIdentity) || contentKey(type, index, item) || `item-${index + 1}`;
+  return `${type.toLowerCase()}:${keyPart}`;
 };
 const asArray = (value) => Array.isArray(value) ? value : (value ? [value] : []);
 const selected = (items) => asArray(items).filter((item) => item && item.selected !== false);
@@ -290,7 +292,7 @@ const sourceForGroup = (readModel, group, booking) => {
   const trip = group.type === 'CATALOG' ? tripForBooking(readModel, booking) : null;
   return {
     tripId: String(booking?.tripId || ''),
-    tripMongoId: trip?._id || null,
+    tripMongoId: isValidMongoObjectId(trip?._id) ? trip._id : null,
     tripSlug: trip?.slug || (!trip && group.type === 'CATALOG' ? String(booking?.tripId || '') : ''),
     batchId: group.type === 'CATALOG' ? String(booking?.batchId || booking?.tripSnapshot?.batchDate || '') : '',
     customBookingId: group.type === 'CUSTOM' ? booking?.bookingId || '' : ''
@@ -327,7 +329,15 @@ export const ensureOperationalTrip = async ({
   if (group.type === 'CUSTOM' && booking) {
     const seeds = buildCustomQuotationServiceSeeds(booking, actor, now);
     if (seeds.length) {
-      await models.OperationalService.bulkWrite(seeds.map((seed) => ({
+      const uniqueSeeds = [];
+      const seenKeys = new Set();
+      for (const seed of seeds) {
+        if (!seenKeys.has(seed.serviceKey)) {
+          seenKeys.add(seed.serviceKey);
+          uniqueSeeds.push(seed);
+        }
+      }
+      await models.OperationalService.bulkWrite(uniqueSeeds.map((seed) => ({
         updateOne: {
           filter: { operationalTripId: operationalTrip._id, serviceKey: seed.serviceKey },
           update: { $setOnInsert: { ...seed, operationalTripId: operationalTrip._id } },

@@ -55,6 +55,7 @@ const handleError = (res, error, fallback = 'Unable to complete the Operations r
   if (!isDbConnected()) return fail(res, 503, 'Database temporarily unavailable.');
   if (error instanceof OperationsDomainError) return fail(res, error.status, error.message, error.code);
   if (error?.name === 'ValidationError') return fail(res, 400, Object.values(error.errors || {})[0]?.message || 'Invalid Operations data.');
+  if (error?.name === 'CastError') return fail(res, 400, `Invalid ${error.path || 'identifier'}.`);
   if (error?.name === 'VersionError') return fail(res, 409, 'This record changed while you were editing it. Refresh and try again.');
   if (error?.code === 11000) return fail(res, 409, 'A record with the same unique identifier already exists.');
   console.error('Operations request error:', error?.message || error);

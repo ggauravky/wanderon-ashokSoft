@@ -9,7 +9,7 @@ export const OPERATIONS_ELIGIBLE_FILTER = Object.freeze({
 });
 
 const SUMMARY_FIELDS = 'bookingId tripId batchId tripSnapshot customer travelers numberOfTravelers occupancy pricing paymentStatus bookingStatus isCustomQuotationBooking quotationSnapshot.tripRequirements createdAt';
-const DETAIL_FIELDS = `${SUMMARY_FIELDS} quotationSnapshot sourceQuotationId sourceQuotationRevisionId updatedAt`;
+const DETAIL_FIELDS = 'bookingId tripId batchId tripSnapshot customer travelers numberOfTravelers occupancy pricing paymentStatus bookingStatus isCustomQuotationBooking quotationSnapshot sourceQuotationId sourceQuotationRevisionId createdAt updatedAt';
 
 const loadTripsForBookings = async (bookings) => {
   const identifiers = [...new Set(bookings
